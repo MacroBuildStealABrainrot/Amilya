@@ -38,6 +38,12 @@ import kotlin.math.abs
 internal object CrashSafeBackendImpl : CrashSafeBackend {
     const val SAMPLE_RATE = 24_000
     const val CHANNELS = 1
+    // In-process rebuilds are not orphaned. The set resets after a process kill,
+    // allowing genuinely interrupted rebuilds to be recovered on the next launch.
+    private val activeRebuilds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    internal fun beginRebuild(dir: File) { activeRebuilds.add(dir.canonicalPath) }
+    internal fun endRebuild(dir: File) { activeRebuilds.remove(dir.canonicalPath) }
+    internal fun isRebuilding(dir: File): Boolean = activeRebuilds.contains(dir.canonicalPath)
 
     override fun start(context: Context, ownerKey: String) {
         SafeRecorderService.starting = true
@@ -75,6 +81,7 @@ internal object CrashSafeBackendImpl : CrashSafeBackend {
         val live = SafeRecorderService.live?.takeIf { it.isCapturing() }?.sessionDirectory
         root.listFiles { f -> f.isDirectory && f.name.startsWith(RetentionRules.SESSION_PREFIX) }.orEmpty().forEach { dir ->
             if (live != null && dir.canonicalFile == live.canonicalFile) return@forEach
+            if (isRebuilding(dir)) return@forEach // normal hand-off rebuild is still running
             if (SessionInfo(dir).read()?.get("status") == "finished") return@forEach // already rebuilt; nothing to do
             runCatching { consolidate(context, dir, interrupted = true) }
         }
@@ -447,8 +454,13 @@ internal class SafeRecorderService : Service() {
         partNumber = finishedPart + 1
         finalName = partNames.last(); sessionDirectory = partDirs.last(); sessionKey = null
         runCatching { SessionInfo(sink.dir).update("elapsedMillis", partMillis.toString()); SessionInfo(sink.dir).update("status", "stopped") }
-        val thread = Thread({ runCatching { CrashSafeBackendImpl.consolidate(this, sink.dir, interrupted = false) } }, "safe-rebuild-part-$finishedPart")
-        rebuilds += thread; thread.start()
+        CrashSafeBackendImpl.beginRebuild(sink.dir)
+        val thread = Thread({
+            try { runCatching { CrashSafeBackendImpl.consolidate(this, sink.dir, interrupted = false) } }
+            finally { CrashSafeBackendImpl.endRebuild(sink.dir) }
+        }, "safe-rebuild-part-$finishedPart")
+        rebuilds += thread
+        try { thread.start() } catch (error: Exception) { CrashSafeBackendImpl.endRebuild(sink.dir); throw error }
         handler.post {
             headsUpShown = false
             RecordingService.state.value = RecordingService.state.value.copy(notice = VisitContinuation.continuedNotice(partNumber))
