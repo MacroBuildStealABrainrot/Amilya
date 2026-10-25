@@ -23,7 +23,8 @@ import java.time.format.DateTimeFormatter
                 s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Resume saved recording ${index+4}")}}
             }
         },
-        savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}.take(4).map { e ->
+        savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}
+            .sortedByDescending { it.str("updated_at") }.take(1).map { e ->
             val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
             val name=s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name").orEmpty()
             SimpleSavedWork(e.str("id"),if(quick || name.isBlank())e.str("title")else name,
