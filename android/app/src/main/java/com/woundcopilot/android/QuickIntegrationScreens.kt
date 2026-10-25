@@ -16,11 +16,25 @@ import java.time.format.DateTimeFormatter
     LaunchedEffect(s.user?.str("id")){s.refreshRecordingJobs()}
     StartScreen(
         recovery={
-            s.recordingJobs.take(3).forEachIndexed{index,job->
-                TextButton({s.resumeRecording(job)},enabled=!s.loading){Text(if(job.str("resume_from")=="REPORT_READY")"Review recovered report ${index+1}"else "${index+1} recording${if(index==0) "" else "s"} not finished")}
+            val pending = s.recordingJobs.filter { it.str("resume_from") != "REPORT_READY" }
+            val reports = s.recordingJobs.filter { it.str("resume_from") == "REPORT_READY" }
+            if (pending.isNotEmpty()) {
+                TextButton({ s.resumeRecording(pending.first()) }, enabled = !s.loading) {
+                    Text("${pending.size} recording${if (pending.size == 1) "" else "s"} not finished")
+                }
+                if (pending.size > 1) DetailDisclosure("Other unfinished recordings", "${pending.size - 1} more") {
+                    pending.drop(1).forEachIndexed { index, job ->
+                        TextButton({ s.resumeRecording(job) }, enabled = !s.loading) { Text("Open unfinished recording ${index + 2}") }
+                    }
+                }
             }
-            if(s.recordingJobs.size>3)DetailDisclosure("More saved recordings","${s.recordingJobs.size-3} more"){
-                s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("${index+4} recording not finished")}}
+            if (reports.isNotEmpty()) {
+                TextButton({ s.resumeRecording(reports.first()) }, enabled = !s.loading) { Text("Review recovered report") }
+                if (reports.size > 1) DetailDisclosure("Other recovered reports", "${reports.size - 1} more") {
+                    reports.drop(1).forEachIndexed { index, job ->
+                        TextButton({ s.resumeRecording(job) }, enabled = !s.loading) { Text("Review recovered report ${index + 2}") }
+                    }
+                }
             }
         },
         savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}
