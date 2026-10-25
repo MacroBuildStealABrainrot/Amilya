@@ -6,6 +6,7 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 
 /** Invoke these methods separately around the external install/force-stop/reboot steps. */
+@Ignore("Requires separate prepare, app update, verify and cleanup installs")
 class UpgradeStorageTest{
     @Test fun prepareMarker(){
         val vault=Vault(InstrumentationRegistry.getInstrumentation().targetContext)
