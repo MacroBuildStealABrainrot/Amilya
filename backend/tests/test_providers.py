@@ -312,6 +312,33 @@ def test_timeout_and_http_failures_are_bounded_and_release_credits(gateway, fail
         assert account.reserved_micros == 0 and account.plan_micros == 10_000_000
 
 
+def test_cancelled_provider_call_releases_hold_and_allows_new_attempt(gateway):
+    started = asyncio.Event()
+
+    async def blocked_provider(_):
+        started.set()
+        await asyncio.Event().wait()
+
+    async def scenario():
+        gateway.http.responses = [blocked_provider]
+        first = asyncio.create_task(providers.extract_text(
+            'Synthetic cancelled request.', 'typed',
+            user=gateway.user, encounter_id='cancelled-visit'))
+        await asyncio.wait_for(started.wait(), timeout=2)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+
+    asyncio.run(scenario())
+    with gateway.sessions() as db:
+        op = db.scalar(select(UsageOperation))
+        account = db.get(BillingAccount, gateway.user.workspace_id)
+        assert op.status == 'released'
+        assert op.charged_micros == 0
+        assert account.reserved_micros == 0
+        assert account.plan_micros == 10_000_000
+
+
 def test_reservation_commits_before_http_and_replay_is_encrypted_and_single_charge(gateway):
     source = 'Synthetic private narrative with wound assessment.'
     def response(_):
