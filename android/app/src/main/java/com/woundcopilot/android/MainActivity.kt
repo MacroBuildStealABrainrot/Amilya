@@ -211,21 +211,20 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             }
         }
         WcpButton("Sign in",{s.screen="login"},Modifier.fillMaxWidth())
-        WcpButton("Explore a sample encounter",{s.startDemo()},Modifier.fillMaxWidth(),secondary=true)
         if(s.config.optBoolean("allow_signup",true))TextButton(onClick={s.screen="signup"},modifier=Modifier.align(Alignment.CenterHorizontally)){Text("Create account")}
-        Text("Sample encounters use fictional data.",Modifier.align(Alignment.CenterHorizontally),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
     }
 }
 
 @Composable fun SavedWorkScreen(s:AppState){
-    var query by rememberSaveable{mutableStateOf("")};var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
+    var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
     Page{
         InstrumentTitle("Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
-        TextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Find a patient or encounter")},leadingIcon={InstrumentIcon("search",tint=c.onSurfaceVariant)},singleLine=true,shape=RoundedCornerShape(18.dp),colors=TextFieldDefaults.colors(focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedContainerColor=c.surfaceContainer,unfocusedContainerColor=c.surfaceContainer))
         Row{TextButton({recovery=false}){Text("Saved")};TextButton({recovery=true}){Text("Recovery & older work")}}
-        val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}.filter{e->(e.str("title")+s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")).contains(query,true)}
-        if(!s.demo&&(s.encounters.size>=500||s.patients.size>=500))Text("Searching the 500 records loaded by this service.",style=MaterialTheme.typography.bodySmall)
-        if(filtered.isEmpty())EmptyState(if(query.isBlank())"No encounters yet" else "No matching encounters","",if(query.isBlank())"New encounter" else null){s.screen="new"}
+        val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
+        if(filtered.isEmpty()) {
+            Text("Nothing saved yet. Start a report from Home.")
+            WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
+        }
         if(!recovery)TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading && filtered.isNotEmpty()){Text("Delete all saved work")}
         filtered.forEach{e->
             val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
