@@ -505,6 +505,9 @@ def verify_stripe_event(raw: bytes, signature: str, secret: str, now: int | None
         raise HTTPException(503, "Webhook signing is not configured")
     if len(raw) > 1024 * 1024:
         raise HTTPException(413, "Webhook exceeds size limit")
+    # Reject malformed non-ASCII headers before signature verification.
+    if not signature.isascii():
+        raise HTTPException(400, "Invalid webhook signature")
     fields = {}
     for part in signature.split(","):
         key, sep, value = part.partition("=")
