@@ -1,0 +1,42 @@
+/* Quiet, short feedback: no looping decoration, delayed actions or layout shifts. */
+:root { --motion-fast: 120ms; --motion-settle: 180ms; --motion-ease: cubic-bezier(.2,.7,.2,1); }
+button { touch-action: manipulation; }
+:is(.button,.account-avatar,.source-launchers>button,.desktop-nav nav button,.mobile-nav button,.encounter-tabs button,.filter-tabs button,.text-link) {
+  transition: transform var(--motion-fast) var(--motion-ease), background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-settle) var(--motion-ease);
+}
+button:active:not(:disabled) { transform: translateY(1px) scale(.98); transition-duration: 65ms; }
+.source-launchers>button:active:not(:disabled) { transform: scale(.985); background: var(--pine-soft); }
+.button[aria-busy=true] { transform: none; }
+.mobile-nav button { border-radius: 8px; }
+.mobile-nav button:active { background: var(--pine-soft); }
+.mobile-nav button svg { transition: transform var(--motion-settle) var(--motion-ease); }
+.mobile-nav button.active svg { transform: translateY(-2px); }
+.encounter-tabs { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+.encounter-tabs button { position: relative; border-bottom-color: transparent; }
+.encounter-tabs button::after { content: ''; position: absolute; bottom: 0; height: 2px; left: 0; right: 0; background: var(--pine); opacity: 0; transform: scaleX(.65); transition: transform var(--motion-settle) var(--motion-ease), opacity var(--motion-fast); }
+.encounter-tabs button.active { border-bottom-color: transparent; }
+.encounter-tabs button.active::after { opacity: 1; transform: scaleX(1); }
+.notebook-work { touch-action: pan-y pinch-zoom; transition: translate var(--motion-settle) var(--motion-ease); }
+.notebook-work[data-swiping] { transition: none; }
+.notebook-work textarea, .notebook-work input, .notebook-work [contenteditable] { touch-action: auto; }
+.modal[open] { animation: surface-enter 180ms var(--motion-ease); }
+.modal[open]::backdrop { animation: backdrop-enter 160ms ease-out; }
+.notice { animation: feedback-enter 160ms var(--motion-ease); }
+@keyframes surface-enter { from { opacity: 0; transform: translateY(8px) scale(.995); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes feedback-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (hover:hover) and (pointer:fine) {
+  .button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 8px #132b2010; }
+  .button.ghost:hover:not(:disabled) { box-shadow: none; }
+  .button:active:not(:disabled) { transform: translateY(1px) scale(.98); box-shadow: none; }
+  .source-launchers>button>svg:first-child { transition: transform var(--motion-settle) var(--motion-ease); }
+  .source-launchers>button:hover>svg:first-child { transform: translateY(-1px); }
+}
+@media (prefers-reduced-motion:reduce) {
+  :root:not([data-motion=subtle]) *,:root:not([data-motion=subtle]) *::before,:root:not([data-motion=subtle]) *::after { animation: none!important; transition: none!important; scroll-behavior: auto!important; }
+  :root:not([data-motion=subtle]) :is(button:active:not(:disabled),.button:hover:not(:disabled),.mobile-nav button.active svg,.source-launchers>button:hover>svg:first-child) { transform: none!important; }
+  :root:not([data-motion=subtle]) .notebook-work { translate: none!important; }
+}
+:root[data-motion=reduce] *,:root[data-motion=reduce] *::before,:root[data-motion=reduce] *::after { animation: none!important; transition: none!important; scroll-behavior: auto!important; }
+:root[data-motion=reduce] :is(button:active:not(:disabled),.button:hover:not(:disabled),.mobile-nav button.active svg,.source-launchers>button:hover>svg:first-child) { transform: none!important; }
+:root[data-motion=reduce] .notebook-work { translate: none!important; }

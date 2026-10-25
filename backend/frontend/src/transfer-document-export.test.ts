@@ -1,0 +1,22 @@
+import {expect,it} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+const {JSDOM}=createRequire(process.cwd()+'/package.json')('jsdom') as {JSDOM:new(html:string,options:Record<string,unknown>)=>{window:Window & typeof globalThis}};
+it('transfer copy, download all and print separate UI labels from clinical text',async()=>{
+ const html=readFileSync('../server/transfer_receiver/index.html','utf8');
+ const js=readFileSync('../server/transfer_receiver/app.js','utf8');
+ const dom=new JSDOM(html,{url:'https://example.test/receive#'+'A'.repeat(43),runScripts:'outside-only'});
+ const w=dom.window;const notes=[{text:'Client denies pain.',status:'draft',template:'nursing',version:1},{text:'Wound cleansed with NS.',status:'signed',template:'soap',version:2}];
+ let copied='';let downloaded='';
+ Object.defineProperty(w.navigator,'clipboard',{value:{writeText:async(text:string)=>{copied=text}}});
+ Object.assign(w,{fetch:async()=>({ok:true,json:async()=>({documents:notes})}),Blob:class{constructor(parts:string[]){downloaded=parts.join('')}}});
+ Object.defineProperty(w.URL,'createObjectURL',{value:()=> 'blob:synthetic'});Object.defineProperty(w.URL,'revokeObjectURL',{value:()=>{}});
+ w.HTMLAnchorElement.prototype.click=()=>{};
+ w.eval(js);(w.document.getElementById('code')as HTMLInputElement).value='1234567';w.document.getElementById('pin-form')!.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ await new Promise(resolve=>setTimeout(resolve,0));
+ expect(w.document.querySelectorAll('.report-card')).toHaveLength(2);
+ (w.document.querySelector('.report-card button')as HTMLButtonElement).click();await new Promise(resolve=>setTimeout(resolve,0));expect(copied).toBe(notes[0].text);
+ (w.document.getElementById('download-all')as HTMLButtonElement).click();expect(downloaded).toContain(notes[0].text);expect(downloaded).toContain(notes[1].text);expect(downloaded).not.toMatch(/DRAFT|SIGNED|REPORT 1|nursing/);
+ expect(w.document.querySelectorAll('.report-card h2.no-print')).toHaveLength(2);expect(w.document.querySelectorAll('.metadata.no-print')).toHaveLength(2);
+ expect(html).toContain('.no-print,footer{display:none!important}');dom.window.close();
+});
