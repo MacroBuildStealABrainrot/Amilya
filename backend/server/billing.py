@@ -845,6 +845,11 @@ def release_stale_hold(db: Session, operation: UsageOperation) -> bool:
     if operation is None or operation.status != "reserved":
         db.rollback()
         return False
+    # Re-check under the account lock: the lease may have been renewed
+    # between the batch scan and this transaction.
+    if not lease_is_stale(operation, time.time(), settings.ai_stale_release_quiet_seconds):
+        db.rollback()
+        return False
     held = operation.reserved_plan_micros + operation.reserved_topup_micros
     plan_return = operation.reserved_plan_micros if operation.cycle_start == account.period_start and account.period_end > int(time.time()) and account.status not in {"canceled", "incomplete_expired"} else 0
     account.plan_micros += plan_return
