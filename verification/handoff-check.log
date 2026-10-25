@@ -1,0 +1,12 @@
+parts=2; framesTotal=2443; per=1500; part1.frames=1500; part1.warning=; part1.visit=visit/1/; part2.frames=944; part2.warning=; part2.visit=visit/2/part1.m4a
+PASS  the visit was split into the expected number of parts (2)   [2443 frames, 1500 per part]
+PASS  part 1 holds exactly its share of frames; every later part starts with one repeated frame   [[1500, 944]]
+PASS  NO SOUND IS MISSING: part 1 + the rest of each later part equals the uncut recording sample for sample   [2501632 vs 2501632 samples; largest difference 0/32767]
+PASS  the repeated start of each later part is only 1024 samples (about 43 ms)
+PASS  part 1: the backend accepts it (format, duration 64.00 s) and the length matches its frame count
+PASS  part 2: the backend accepts it (format, duration 40.28 s) and the length matches its frame count
+PASS  the parts together are at most the visit plus one repeated frame per join (nothing extra)
+PASS  every part names the same visit, its own number, and the part before it   [[['visit', '1', ''], ['visit', '2', 'part1.m4a']]]
+PASS  no part reports missing, damaged or repeated audio
+
+9/9 checks passed

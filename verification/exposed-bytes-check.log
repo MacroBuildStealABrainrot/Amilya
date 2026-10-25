@@ -1,0 +1,7 @@
+--- corrected form (uses the inherited size()) must compile:
+PASS
+--- the old form must be rejected by the compiler:
+/tmp/tmp.zoUSTojxuG/Bad.kt:4:9: error: 'size' hides member of supertype 'ByteArrayOutputStream' and needs an 'override' modifier.
+PASS: rejected with the reviewer's error
+--- no source may extend ByteArrayOutputStream and re-declare one of its methods:
+PASS: none found

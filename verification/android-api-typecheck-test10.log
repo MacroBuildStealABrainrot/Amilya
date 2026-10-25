@@ -1,0 +1,34 @@
+# Kotlin type-check of every app Kotlin file (main incl. the moved crash-resistant recorder + wear-contract) against the REAL
+# Android 36 API (android.jar from github.com/Sable/android-platforms, sha256 d9eb9da824d9e247a352f570f01e1169e725b2954bca9e283a71786c59b59f9a)
+# plus small AndroidX stand-ins (verification/androidx-standins: Compose state, ViewModel, ContextCompat, FileProvider).
+# Kotlin compiler 2.0.21. Compose UI, Play Services (wearable) and Activity Result libraries are NOT available, so screen files
+# still report "unresolved" errors. Same method on the 1.8.5-test8 tree for comparison.
+1.8.5-test8 errors: 5086    1.8.5-test10 errors: 5090
+Files with ZERO errors in test10 (fully type-checked against real Android):
+  AppState.kt: 0 errors
+  ExternalCapture.kt: 0 errors
+  LockPolicy.kt: 0 errors
+  RecordingSafety.kt: 0 errors
+  Api.kt: 0 errors
+  AudioChunks.kt: 0 errors
+  DeviceTools.kt: 0 errors
+  RecordingRecovery.kt: 0 errors
+  SafeRecorderService.kt: 0 errors
+  SealedRecording.kt: 0 errors
+  SealedAudio.kt: 0 errors
+  SafeRecording.kt: 0 errors
+  Mp4Aac.kt: 0 errors
+  SealedPlaceholder.kt: 0 errors
+  VisitContinuation.kt: 0 errors
+  AndroidKeystoreWrapper.kt: 0 errors
+  LocalRetention.kt: 0 errors
+  UnresolvedRetention.kt: 0 errors
+  ProcessingService.kt: 0 errors
+Differences test8 -> test10 (file: error), all in CaptureScreen.kt and all caused by missing Compose/Activity libraries:
+> CaptureScreen.kt: error: cannot infer type for this parameter. Please specify it explicitly.
+> CaptureScreen.kt: error: cannot infer type for this parameter. Please specify it explicitly.
+> CaptureScreen.kt: error: unresolved reference 'MaterialTheme'.
+> CaptureScreen.kt: error: unresolved reference 'Text'.
+< CaptureScreen.kt: error: unresolved reference 'not' for operator '!'.
+> CaptureScreen.kt: error: unresolved reference 'recording'.
+This is NOT an Android build. The GitHub workflow (.github/workflows/amilya-sandbox-ci.yml) does the real build.

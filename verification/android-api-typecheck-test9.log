@@ -1,0 +1,16 @@
+# Kotlin type-check of every app Kotlin file (main + sandbox + wear-contract) against the REAL Android 36 API jar
+# (android.jar from github.com/Sable/android-platforms, sha256 d9eb9da824d9e247a352f570f01e1169e725b2954bca9e283a71786c59b59f9a),
+# Kotlin compiler 2.0.21 from Gradle 8.14.3. AndroidX, Compose and Play Services libraries were NOT available (Google Maven blocked),
+# so files that use them report "unresolved reference" errors. Method: run the same check on the 1.8.5-test8 tree and on this tree,
+# and compare the error lists by file name (line numbers removed).
+1.8.5-test8 errors: 6135
+1.8.5-test9 errors: 6135
+Difference: none (identical error list)
+Files with zero errors (fully type-checked against real Android): Api.kt (changed this round), LockPolicy.kt (new), RecordingRecovery.kt, AudioChunks.kt, the sandbox recorder files, and others.
+Errors by file in the changed files, test8 -> test9:
+  Api.kt: 0 -> 0
+  ExternalCapture.kt: 16 -> 16
+  AppState.kt: 271 -> 271
+  LockPolicy.kt: 0 -> 0
+This is NOT an Android build. It cannot check Compose screens, resources, the manifest, or packaging.
+  (Every remaining error in these files is a missing AndroidX/Compose name; the lists are identical.)

@@ -1,0 +1,8 @@
+Reproduction (JVM Kotlin compiler 2.0.21) of the problem fixed in item 1: an explicit INSTANCE field inside a Kotlin object clashes with the INSTANCE field the compiler generates for every object.
+The test5 candidate contained exactly this declaration, so it would not have compiled.
+
+inst/Clash.kt:2:1: error: platform declaration clash: The following declarations have the same JVM signature (INSTANCELImpl;):
+    val INSTANCE: Impl defined in Impl
+    val INSTANCE: Impl defined in Impl
+internal object Impl : Backend {
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
