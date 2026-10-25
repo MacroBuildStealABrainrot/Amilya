@@ -1,0 +1,159 @@
+# Amilya / WoundCoPilot 1.8.5-test10: build and test on GitHub's machines (they have the Android SDK; the review workspace does not).
+#
+# SAFE BY DESIGN
+#  * Uses NO secrets, NO signing keys, NO AI keys and NO network service of yours. Nothing is deployed. Production, Cloud Run,
+#    clinical data and billing are never touched. The phone tests use the SANDBOX app, which can only reach a throw-away
+#    server started inside this job (fake data, AI off), through the emulator's adb link.
+#  * Put this in a PRIVATE repository. Run it from the Actions tab ("Run workflow") or by pushing.
+#
+# WHAT YOU GET (Actions run page > Artifacts):
+#  * amilya-apks: app-sandbox.apk, app-debug.apk, app-release-unsigned.apk, wear-sandbox.apk
+#  * amilya-build-evidence: Gradle unit-test reports, lint report, build-flag checks, backend test log (SQLite + PostgreSQL)
+#  * amilya-phone-test-evidence: instrumentation (emulator) test reports and logcat
+name: amilya-sandbox-ci
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master, 'test/**' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amilya-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests (SQLite + PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: wcp, POSTGRES_PASSWORD: wcp-ci-only, POSTGRES_DB: wcp_test }
+        ports: [ "55432:5432" ]
+        options: --health-cmd "pg_isready -U wcp" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install ffmpeg and backend packages
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          python -m pip install -r backend/requirements.txt
+      - name: Backend test suite
+        working-directory: backend
+        env:
+          WCP_TEST_POSTGRES_URL: postgresql+psycopg://wcp:wcp-ci-only@127.0.0.1:55432/wcp_test
+        run: |
+          mkdir -p ../ci-out
+          python -m pytest -v -p no:cacheprovider 2>&1 | tee ../ci-out/backend-pytest.log
+          test ${PIPESTATUS[0]} -eq 0
+      - name: Static safety checks
+        run: python -I verification/python_static_checks.py | tee ci-out/python-static-checks.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amilya-backend-evidence
+          path: ci-out/
+          retention-days: 30
+
+  android:
+    name: Android build + unit tests + build-flag checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Android platform 36 and build tools
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build all variants and run unit tests
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace \
+            :app:testSandboxUnitTest :app:testDebugUnitTest :app:testReleaseUnitTest :wear-contract:test \
+            :app:assembleSandbox :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
+            :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
+          test ${PIPESTATUS[0]} -eq 0
+      - name: Lint (sandbox) - report only
+        working-directory: android
+        continue-on-error: true
+        run: ./gradlew --no-daemon :app:lintSandbox
+      - name: Check build flags inside the built apps
+        run: bash ci/verify-build-flags.sh | tee build-flags.log
+      - name: Collect evidence
+        if: always()
+        run: |
+          mkdir -p ci-out/apks ci-out/reports
+          find android -path '*/build/outputs/apk/*' -name '*.apk' -exec cp {} ci-out/apks/ \; || true
+          cp -r android/app/build/reports ci-out/reports/app 2>/dev/null || true
+          cp -r android/wear-contract/build/reports ci-out/reports/wear-contract 2>/dev/null || true
+          cp gradle-build.log build-flags.log ci-out/ 2>/dev/null || true
+          (cd ci-out/apks && sha256sum *.apk > SHA256SUMS.txt) || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amilya-apks
+          path: ci-out/apks/
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amilya-build-evidence
+          path: "ci-out/*.log\nci-out/reports/"
+          retention-days: 30
+
+  phone-tests:
+    name: Sandbox app on an Android emulator (fake server, fake audio)
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [ 35 ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: android-actions/setup-android@v3
+      - name: Android platform 36 and build tools
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Backend packages for the throw-away test servers
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          python -m pip install -r backend/requirements.txt
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Run phone tests on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
+          script: bash ci/run-phone-tests.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amilya-phone-test-evidence-api${{ matrix.api-level }}
+          path: ci-out/
+          retention-days: 30

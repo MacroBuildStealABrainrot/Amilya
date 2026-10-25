@@ -1,0 +1,2450 @@
+{
+  ".github/workflows/amilya-sandbox-ci.yml": {
+    "sha256": "5581d1b5fecd01fcfe21480d09f9497dd5eec48e813d43ec73ecb0751bca0b73",
+    "bytes": 6541
+  },
+  ".gitignore": {
+    "sha256": "147075a3305574443344f72507939818304dea5ea632b7a8a79e61ebccd0be64",
+    "bytes": 262
+  },
+  "AUDIO-ENCRYPTION-DESIGN.md": {
+    "sha256": "17c89cda1b08464f3d9fc8f100aa3da74da016cdcd8de383ff3d46d5b8f3d677",
+    "bytes": 7314
+  },
+  "CANDIDATE-README.md": {
+    "sha256": "ec6d5d524e2bee70134974ee6a89cfc404d2c86c44639f7a9b356fc36e2b36c1",
+    "bytes": 14204
+  },
+  "FINAL-SAMSUNG-CHECKLIST.md": {
+    "sha256": "ffad9b39d7d497b998159699dba01b1cc30a4859c2e7ea6604e69cd4d280bc9d",
+    "bytes": 7898
+  },
+  "GITHUB-BUILD.md": {
+    "sha256": "a08765cf8a9552b995e33269ceee1eb27315f7a90ebb34529d91fc9966adc2e0",
+    "bytes": 3832
+  },
+  "PROTOTYPE-RESULTS.md": {
+    "sha256": "91c487402c7db9c35760d9bfec867e51925b4186c0a0892c8c98c6d06a4fe32a",
+    "bytes": 8677
+  },
+  "RESTORE-README.md": {
+    "sha256": "8d0b7dcc8feab909afad45126f96fe41075da394e2f5b8195f01c2c538203f8c",
+    "bytes": 4625
+  },
+  "REVIEW-AND-TEST-REPORT-test10.md": {
+    "sha256": "7147db8cf6d1ef83c923ac5fbae7aeddc3a22c4772fa730a070d331ba23a1e50",
+    "bytes": 8785
+  },
+  "REVIEW-AND-TEST-REPORT-test9.md": {
+    "sha256": "baa3b30a99a53fe655b2272b43a7d65564bdd7a6182b3cb5dc1e6e3e2c167110",
+    "bytes": 17546
+  },
+  "REVIEW-AND-TEST-REPORT.md": {
+    "sha256": "deb24156e9e51491a625df9a166f16d97a3957eec338a671a63ece19c9ab68c5",
+    "bytes": 11489
+  },
+  "RUN-ON-YOUR-PC.md": {
+    "sha256": "32f461608f292249fb009a951e73d2f19699476f2806b61fe83b2038fe384b71",
+    "bytes": 14251
+  },
+  "SAMSUNG-TEST-GUIDE.md": {
+    "sha256": "f6a4d4651b85258c8cfda3a95790516024506dc456397a55c1394e56f777356f",
+    "bytes": 17155
+  },
+  "STUCK-REQUEST-LEASE-PLAN.md": {
+    "sha256": "7984b7fd93e39bdabddb4a27e09a44c24770f3e0d4437869602b86db3527ddb7",
+    "bytes": 11028
+  },
+  "android/.gitignore": {
+    "sha256": "ee24f4a56d2d4943d0feecf2f75a0433bd0c3333b0b098f60de9575308c09584",
+    "bytes": 60
+  },
+  "android/INTERFACE.md": {
+    "sha256": "8470b01dc5c24edff0a9d591fab2641789560a9c09021d537908015995c9c953",
+    "bytes": 4653
+  },
+  "android/Open-AndroidStudio.ps1": {
+    "sha256": "0911dd2889fed7c1a1270bd76b8b5c5995a152a48881e586fb014455737607f6",
+    "bytes": 477
+  },
+  "android/README.md": {
+    "sha256": "72ae6fc17a89fdbd5630c4dc1db4564aa5810ccdf30667dab3a64b843f8b3a2f",
+    "bytes": 7674
+  },
+  "android/WEAR_OS.md": {
+    "sha256": "bbcf73c7669f6ed236029acef9b52e3c170059f95deb81e0ef214c9289fbd8ac",
+    "bytes": 17646
+  },
+  "android/app/build.gradle.kts": {
+    "sha256": "85e7b05bce3f0137e2183a55a90f2c18b3ef9822c3ba51b23370177afb806b8d",
+    "bytes": 5044
+  },
+  "android/app/src/androidTest/assets/reliability-5-minute.m4a": {
+    "sha256": "8de2a61d5ee95fd373c138b35d576983ce72bb4c5c694f3722dd769c60f5ae51",
+    "bytes": 57482
+  },
+  "android/app/src/androidTest/assets/speech-1500.m4a": {
+    "sha256": "709b5bd48b2a1fffc9b527c5ae7f4d9f992e629c90183726385d7836cf4ab091",
+    "bytes": 5968596
+  },
+  "android/app/src/androidTest/assets/speech-300.m4a": {
+    "sha256": "167313d799f650cf63cd77eb5a8a481387579fb3856f24d6063886be8faf3159",
+    "bytes": 1196032
+  },
+  "android/app/src/androidTest/assets/speech-45.m4a": {
+    "sha256": "b19f5ada23f32cc693350602697f3b7eb65c74aa04a4a105feaa955be3f17d2c",
+    "bytes": 181505
+  },
+  "android/app/src/androidTest/assets/synthetic-60-minute.m4a": {
+    "sha256": "d1076fdb10b8f45d05cea3c6cd6b0a7e6635d030b8a4c28c11a8b77c829535b4",
+    "bytes": 680756
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/BackendContractTest.kt": {
+    "sha256": "852eeff9c495f9df2139b5415f5f794260889bb4af08022b8b19da07eb6a16bc",
+    "bytes": 4271
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/CaptureIntegrityTest.kt": {
+    "sha256": "b4f42865105c6c9be39d1a5673136efa66b70ede8648ba39656aca0daec2dddc",
+    "bytes": 14805
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/CaptureNavigationTest.kt": {
+    "sha256": "7b30d4d7b36e9bb091654f2a8401951539333004e064fca64ec301209bca1d32",
+    "bytes": 6454
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/ConnectedDeliveryTest.kt": {
+    "sha256": "6776cbf0f56f85fb9c84053ef6e0271aaa5eeb946443a990b58c3a1c35050ed4",
+    "bytes": 5111
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/CorePrioritiesTest.kt": {
+    "sha256": "f39e26ad2ac608b112effb3c8c94523a744d5d0092a6ca63461616fdf543947a",
+    "bytes": 3444
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/CsrfAfterOfflineStartTest.kt": {
+    "sha256": "cb99e909ff1d0783c432216041aa8893b58547068562b33e5bcb4fcc4d3299c3",
+    "bytes": 3977
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/DeveloperDiagnosticsTest.kt": {
+    "sha256": "a29ea5b2eeb31b64daa5c9533d88d04d586935362eeffb870007fd511d2806dc",
+    "bytes": 4152
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/ErrorFeedbackTest.kt": {
+    "sha256": "08469c6d0965ca1eca8bd22a4db4a53a7c61d6c5bb410c20d5273af463383330",
+    "bytes": 2518
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/LocalSecurityTest.kt": {
+    "sha256": "4afa6f35e1cbc6fa7f67019f810675f94a3045b649d402e13cf633f1bd1254a4",
+    "bytes": 2413
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/NativeStopBenchmarkTest.kt": {
+    "sha256": "1a56d3ec4ea6b3abf470baa53754c3a689ee8e73846d466e2616918c17ee4afe",
+    "bytes": 3609
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/PerformanceBenchmarkTest.kt": {
+    "sha256": "e1a96c3845d9795d27faa352607636fb5b4116898b9b209dd6aac40515c5e161",
+    "bytes": 4771
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/PhoneSharingTest.kt": {
+    "sha256": "f5b513a59ba4b09bfa42a7907118c33e0462112674e6e148c5178773fe6d87a7",
+    "bytes": 2287
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/PhotoLifecycleTest.kt": {
+    "sha256": "f33b21c2a8bbb3ba568e8c3619d0b4a31fd4e84b2e267007f2538cbb40fcdef2",
+    "bytes": 15170
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/PhotoRecoveryTest.kt": {
+    "sha256": "94f77a4c147d7f7f221e4add35894b55c8359fa8cf690950e7722d5827b47898",
+    "bytes": 6175
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/QuickWorkflowTest.kt": {
+    "sha256": "8d8dd68f4a589db11ff68bf0cdf9233377af390e283d500e3b689e2aa6d01d0f",
+    "bytes": 15747
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/RecordingCheckpointTest.kt": {
+    "sha256": "de42a84b55322360ba2c7deed1bfcee5131274234bd864d4d36018597e964694",
+    "bytes": 3838
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/RecordingDurabilityTest.kt": {
+    "sha256": "708b6c9b038e86ae5cbfe38f7b04efe23160b164845c21550cd364fa9c4cff36",
+    "bytes": 2521
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/RecordingServiceStartTest.kt": {
+    "sha256": "51da7193187edc391deb7ec94107f5085a0cd0d0cfa3b2a215d104563b7c77c0",
+    "bytes": 2808
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/RecordingWorkflowTest.kt": {
+    "sha256": "405dc0d75d9d658ab2dc75486468b7f6234f6ca118551ab96617c0e2955e8d7c",
+    "bytes": 7338
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/RedTeamTest.kt": {
+    "sha256": "58772e10a9a3a535bafdb281d3f49f490a201f6f8b73912956b52afe0a748828",
+    "bytes": 2824
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/ReliabilityPassTest.kt": {
+    "sha256": "96c6da8c0175ef4dc35343c2cd09e71677d241082bcce94b7b704997c7e03f91",
+    "bytes": 12621
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/SimpleScreensTest.kt": {
+    "sha256": "588b1c9572474d8a2010f412a740bdd07b5d40c36be02560f0e9603769aed47b",
+    "bytes": 10510
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/UpgradeStorageTest.kt": {
+    "sha256": "e6328e714d723dfed533019101b595813814d9f0ec06f238b1981246976f90e8",
+    "bytes": 1014
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/WearBridgeTest.kt": {
+    "sha256": "01038a17767e03291efe870ad434c07b774a19e80b8c86a03949d33f87bd486e",
+    "bytes": 12411
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/WorkflowReliabilityTest.kt": {
+    "sha256": "b6f46dd70af4cdb185b7423454dd5a6bc2fc199c390a76a1b6727585fb62407d",
+    "bytes": 4872
+  },
+  "android/app/src/androidTest/java/com/woundcopilot/android/WorkflowTest.kt": {
+    "sha256": "13abbe8499379b0e14ca7b776b4069fdf5862c9dc5021f1f96dc63af18889dc0",
+    "bytes": 17772
+  },
+  "android/app/src/androidTestSandbox/assets/fixtures/speech-flite-synthetic.aac": {
+    "sha256": "fd3ce3a2ef19b9e699ba923d74204027ed9acac9869b5273295999c617e008e8",
+    "bytes": 437445
+  },
+  "android/app/src/androidTestSandbox/assets/fixtures/speech-flite-synthetic.txt": {
+    "sha256": "beaa7c7bcefdb43b276514f4a25d14b9da41992b59897104065e9897e24601dc",
+    "bytes": 498
+  },
+  "android/app/src/androidTestSandbox/assets/fixtures/speech-speko-cartesia-synthetic-7s.aac": {
+    "sha256": "212633e34a26be80a278e8028f7ee6a421ab17ce55b55efbaf77d9d3dafc681b",
+    "bytes": 30290
+  },
+  "android/app/src/androidTestSandbox/assets/fixtures/tone-visit-60s.aac": {
+    "sha256": "fcb7675cf23180fdf83e6c122d499fb79cf4119c54d1e706270825f432d95d12",
+    "bytes": 260785
+  },
+  "android/app/src/androidTestSandbox/java/com/woundcopilot/android/CrashSafeRecordingTest.kt": {
+    "sha256": "3fb2d43f34b03c097d37322ff0157d06eada56ceaf61a41f38c1dcf766da70e6",
+    "bytes": 12609
+  },
+  "android/app/src/androidTestSandbox/java/com/woundcopilot/android/ExistingWorkCompatibilityTest.kt": {
+    "sha256": "63057d31c274eeef36f51e6cc79a92e2fc0368f639a8f39ac0903e2295be1381",
+    "bytes": 4159
+  },
+  "android/app/src/debug/AndroidManifest.xml": {
+    "sha256": "48c99ee7c1eba0b2cbce34c5616e82734822524c929249bb4855088f71beb8ec",
+    "bytes": 146
+  },
+  "android/app/src/debug/res/xml/debug_network.xml": {
+    "sha256": "bd3792939342d9260dc069f44446e36c49d7987d2f1d268b6207cb91026d6b99",
+    "bytes": 268
+  },
+  "android/app/src/main/AndroidManifest.xml": {
+    "sha256": "0a5e460e9c2eede970b084d40b4e44609878d8eac275fdc1eb28e81d91646344",
+    "bytes": 3298
+  },
+  "android/app/src/main/java/com/woundcopilot/android/AndroidKeystoreWrapper.kt": {
+    "sha256": "1f44cf0000396dc911dbfa0146c7dd0981c6055717ca1a1e3a007ff5fcb17f1a",
+    "bytes": 2181
+  },
+  "android/app/src/main/java/com/woundcopilot/android/Api.kt": {
+    "sha256": "9a5e5aa0e1415822dcd50c74c9cb0001f0cc3cb1c3f2a6ffd710dfc4802367e3",
+    "bytes": 19098
+  },
+  "android/app/src/main/java/com/woundcopilot/android/AppLock.kt": {
+    "sha256": "338212ab39e1ab6dc747f449a41ccea377a66b3e75be2fdb403449e6c36b3685",
+    "bytes": 6034
+  },
+  "android/app/src/main/java/com/woundcopilot/android/AppState.kt": {
+    "sha256": "ba4bf0f7777b4b3903ae8915e8a6926b1c29125ae3a0083966e68757743eb9f9",
+    "bytes": 76929
+  },
+  "android/app/src/main/java/com/woundcopilot/android/AudioChunks.kt": {
+    "sha256": "3d905b34cd6f56dc737f9fc4bd4dbdf4a50b4d717655cc5313d375bc128ef2d6",
+    "bytes": 9704
+  },
+  "android/app/src/main/java/com/woundcopilot/android/CapturePolicy.kt": {
+    "sha256": "91736f172cdb567cc394a98ac8bcf5238183c86bbb4827bcf7413ea58dd4d42c",
+    "bytes": 851
+  },
+  "android/app/src/main/java/com/woundcopilot/android/CaptureScreen.kt": {
+    "sha256": "03cb3545bd951c4d34edf99668d1cd928f37e82ddcf713cafa1a7070f1bc1aae",
+    "bytes": 27419
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ClinicalScreens.kt": {
+    "sha256": "c802ae3551459651fc1d1f7d93bec216545877f03542e4763a1ff4f495084498",
+    "bytes": 16019
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ClinicianFeedback.kt": {
+    "sha256": "67ef5e550f480968a1f04d9d843ba8a6fa280673f498818782d123e937140604",
+    "bytes": 7240
+  },
+  "android/app/src/main/java/com/woundcopilot/android/DemoData.kt": {
+    "sha256": "d089e9886268b85be2a57868d21b2e57211a50e5b65d03b73a922e4a5b0d94e8",
+    "bytes": 5290
+  },
+  "android/app/src/main/java/com/woundcopilot/android/DeveloperDiagnostics.kt": {
+    "sha256": "9d1eb8da1919f18b7a7a099987ce2065f9329e4cfd04d3227192d6893a622aca",
+    "bytes": 12880
+  },
+  "android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt": {
+    "sha256": "5981fb80893326ce05a68e0f6177eb21032afa55ddeb3e4b2a12a230e642c3e0",
+    "bytes": 31551
+  },
+  "android/app/src/main/java/com/woundcopilot/android/DocumentControls.kt": {
+    "sha256": "16088abda8baf605512031e7fca3a23e76252643f1019c5cbbbb7799aee6d2ff",
+    "bytes": 2659
+  },
+  "android/app/src/main/java/com/woundcopilot/android/DocumentSample.kt": {
+    "sha256": "e2a5030f2a1e6d0977839c455668834fb15c9cdd8e5b2e6966bd610016e26039",
+    "bytes": 2778
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ExternalCapture.kt": {
+    "sha256": "bcf2d79d8d750fbd48052cdbc3f2eb6e5260fdfbc0dd0f88f341a56db2ad6a4e",
+    "bytes": 11083
+  },
+  "android/app/src/main/java/com/woundcopilot/android/LocalRetention.kt": {
+    "sha256": "a42a074d658de482d26fdcfd7ef701d5a704d8fd8c3fa47fc1341f98dca8f9b1",
+    "bytes": 5136
+  },
+  "android/app/src/main/java/com/woundcopilot/android/LocalTime.kt": {
+    "sha256": "53c9046a3123e30b46db7073fad17167ed4535fd216da6aee12dfa18642349f6",
+    "bytes": 1155
+  },
+  "android/app/src/main/java/com/woundcopilot/android/LockPolicy.kt": {
+    "sha256": "d5c8690ad770635051a967b230867864276b270aeacedeff178752da708fc5cd",
+    "bytes": 2483
+  },
+  "android/app/src/main/java/com/woundcopilot/android/MainActivity.kt": {
+    "sha256": "c1a6142f9a748f1e93b787b7f99f0158368f94b4728b3869aaba9befee2253aa",
+    "bytes": 26054
+  },
+  "android/app/src/main/java/com/woundcopilot/android/Mp4Aac.kt": {
+    "sha256": "847d114f15db5874df8690fa70a1c4aed3804339fb74ccf49314d204c368ce0d",
+    "bytes": 8195
+  },
+  "android/app/src/main/java/com/woundcopilot/android/Performance.kt": {
+    "sha256": "f84cb7c3f9cf7f47992e6776ceb15df7fc3c59669aefdf1893e799f29e8367a2",
+    "bytes": 1285
+  },
+  "android/app/src/main/java/com/woundcopilot/android/PhoneSharing.kt": {
+    "sha256": "202b8f0ba7a915fdb0a63b9ab54c093d812e4046061d7dcaff75813959f324f7",
+    "bytes": 8497
+  },
+  "android/app/src/main/java/com/woundcopilot/android/PhotoCollectionScreen.kt": {
+    "sha256": "799207c445f4ee40013ead34029d65c9d22b857ba5571a6f3d51cb8da13ef54e",
+    "bytes": 5460
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ProcessingService.kt": {
+    "sha256": "988f545bdb25af11abc0eae355617b67d10a50a69f34670988caad674c12cebf",
+    "bytes": 1774
+  },
+  "android/app/src/main/java/com/woundcopilot/android/QuickIntegrationScreens.kt": {
+    "sha256": "1c34e3eb091c1746f8742a1c7ffd2bccc338440d5b9571af7f2b5e409bc3826e",
+    "bytes": 5699
+  },
+  "android/app/src/main/java/com/woundcopilot/android/QuickReportScreen.kt": {
+    "sha256": "99ae853ae50a6ba5b881724c3905984779a938f0171f38b2a808dc071803a13e",
+    "bytes": 12476
+  },
+  "android/app/src/main/java/com/woundcopilot/android/RecordingRecovery.kt": {
+    "sha256": "73b1bcc75f66018ea84daea5139767df160bb43b6a51202cc9783da1fa1b544e",
+    "bytes": 2940
+  },
+  "android/app/src/main/java/com/woundcopilot/android/RecordingSafety.kt": {
+    "sha256": "6d0d4d70f63bb8889d09b6030da08615f4289e47156bc5c533781238447baf15",
+    "bytes": 3955
+  },
+  "android/app/src/main/java/com/woundcopilot/android/RetentionRules.kt": {
+    "sha256": "07ca2032ec6de28c8eca7a63b4808a332e73dcf7b1fb570fc2892d20316773e2",
+    "bytes": 4775
+  },
+  "android/app/src/main/java/com/woundcopilot/android/SafeRecorderService.kt": {
+    "sha256": "8ee917468bf64973f05eead5285cee48ec9536ee5d97e84f70e7529615b86236",
+    "bytes": 39616
+  },
+  "android/app/src/main/java/com/woundcopilot/android/SafeRecording.kt": {
+    "sha256": "efa590c192a82ac947c9940f935d96735827f7bc3e3ac72933a27d261dbad42a",
+    "bytes": 20976
+  },
+  "android/app/src/main/java/com/woundcopilot/android/SealedAudio.kt": {
+    "sha256": "174ab6d6bb149744b2d3ca76994c2169cc0aecb4142d2e8ad0c2ef8d35a8e559",
+    "bytes": 6067
+  },
+  "android/app/src/main/java/com/woundcopilot/android/SealedPlaceholder.kt": {
+    "sha256": "5e288e6b3cd999c55156b96545b9e577249d61b0d5fd5160900665bc316da0ff",
+    "bytes": 1988
+  },
+  "android/app/src/main/java/com/woundcopilot/android/SealedRecording.kt": {
+    "sha256": "ac4ac898eb18fa743ff87e2f6ba828a8c892ded1c66ecf207186157979e2316c",
+    "bytes": 4485
+  },
+  "android/app/src/main/java/com/woundcopilot/android/SimpleScreens.kt": {
+    "sha256": "1cd0b1ae76f1dbf78a85098dd7af5d6a9e95831c55a85f1b8149e1226c58f5e6",
+    "bytes": 25467
+  },
+  "android/app/src/main/java/com/woundcopilot/android/UnresolvedReminder.kt": {
+    "sha256": "86331d7877abd08986b31dbc411717c35809ecf00c2155c5fc6ecaa3c1d03375",
+    "bytes": 2049
+  },
+  "android/app/src/main/java/com/woundcopilot/android/UnresolvedRetention.kt": {
+    "sha256": "4e601a5660780fefe8ee606d1f12a38819198220d79ba2c29719b2f39c327035",
+    "bytes": 9565
+  },
+  "android/app/src/main/java/com/woundcopilot/android/VisitContinuation.kt": {
+    "sha256": "7de0ba7c4440d40ebb3661451801a380c5dd9c640b3db6df12f1df16fb09ca36",
+    "bytes": 8649
+  },
+  "android/app/src/main/java/com/woundcopilot/android/VoiceCommands.kt": {
+    "sha256": "38d1adfe42dc975fbddcb3c7fa27cc2a8f1bac5e1754aa27ed2182a466154d0b",
+    "bytes": 11130
+  },
+  "android/app/src/main/java/com/woundcopilot/android/WearPhoneBridge.kt": {
+    "sha256": "3eb6769f4e278734e26681572c1f1ecfc8d8e209ed11c2c9c6f196472a792853",
+    "bytes": 17200
+  },
+  "android/app/src/main/java/com/woundcopilot/android/WorkPrivacyDialogs.kt": {
+    "sha256": "d54958bac7b148692131469465912d13fe79dccd39c387034b96cdaedf4a6ec4",
+    "bytes": 1436
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/AccountScreens.kt": {
+    "sha256": "2c541655f245e5b573b58d4573360272ac5645f48f33d4ce9375b2e97f2dca7f",
+    "bytes": 29772
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/AdminScreen.kt": {
+    "sha256": "48714d5c3f01f364edf8d5a432900fedd8e91cf91d55de5f6d64e29f8f9dbbee",
+    "bytes": 18700
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/AudioVerificationDialog.kt": {
+    "sha256": "db237786f8806da71e68a52fb539c4bdbd4c3996b6e18bb502a8d8f3a90b6a15",
+    "bytes": 31768
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/CreateEncounterScreen.kt": {
+    "sha256": "5b19afea1af18c30bfb872cf151219db06a8daa7673936bbdc398dcac14a6676",
+    "bytes": 22947
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/DesignSystem.kt": {
+    "sha256": "ed5e21a0e461759a9b66455822efebad2293a2316ee6bb3e1654540df046e50d",
+    "bytes": 20099
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/EvidenceForm.kt": {
+    "sha256": "79fd66b265ad4b2eae360a322214ee3affe0f1f0f8fe75508c797f03c2622e02",
+    "bytes": 22574
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/FindingCorrection.kt": {
+    "sha256": "e4029cd772857f0eddb67d6e5c45f509b9acab2fbb9744a1e2dc734f59855573",
+    "bytes": 11186
+  },
+  "android/app/src/main/java/com/woundcopilot/android/ui/InstrumentUI.kt": {
+    "sha256": "f19e8f3fc007c8a7aeeaf1deda84a9270178abb380178bf7216cecf7a994d464",
+    "bytes": 13682
+  },
+  "android/app/src/main/res/drawable/app_icon.xml": {
+    "sha256": "3b13b958e423d22de6de4ca2f6e623e61b11715e3abb480b9a94147387da0500",
+    "bytes": 470
+  },
+  "android/app/src/main/res/values/styles.xml": {
+    "sha256": "49d65a1e4861d3bab8086a5ecf8f66a6c343f945ef62a6f92ae312f5bf70cf94",
+    "bytes": 362
+  },
+  "android/app/src/main/res/values/wear.xml": {
+    "sha256": "de2924ed8ed570e45182219495b0e0712c88a98fdb91733974ca7afa2ae9c14c",
+    "bytes": 117
+  },
+  "android/app/src/main/res/xml/data_extraction_rules.xml": {
+    "sha256": "f50148eab9e607a1d41b41ab1a6832353af0cb98c5fb4e2ca6364942cfea5969",
+    "bytes": 481
+  },
+  "android/app/src/main/res/xml/file_paths.xml": {
+    "sha256": "047297db941ea875e5015b817fb2f17ff7ae89815fa767e9bd30a29c4945c328",
+    "bytes": 106
+  },
+  "android/app/src/sandbox/AndroidManifest.xml": {
+    "sha256": "6fdd9c0b2f202b833948a3c063bb9bc5881e19dcc50411c2ae22ece7c6ac9adb",
+    "bytes": 564
+  },
+  "android/app/src/sandbox/res/xml/sandbox_network.xml": {
+    "sha256": "bd3792939342d9260dc069f44446e36c49d7987d2f1d268b6207cb91026d6b99",
+    "bytes": 268
+  },
+  "android/app/src/test/java/com/woundcopilot/android/ApiOriginGuardTest.kt": {
+    "sha256": "ce27fe542396d1043f84162385c48d40fa4e078c3d3366985ed2a1d224d9fbf8",
+    "bytes": 1555
+  },
+  "android/app/src/test/java/com/woundcopilot/android/CsrfBootstrapTest.kt": {
+    "sha256": "4db22cca27ca5dad1e3a298ec5451c3ae7bdcbc549622e6fc3da2357e57463df",
+    "bytes": 1893
+  },
+  "android/app/src/test/java/com/woundcopilot/android/CsrfRecoveryTest.kt": {
+    "sha256": "aa8260563365b821d383a18fb59ed7c2f436d04c5ce343c2288ff1d6913b62a3",
+    "bytes": 2298
+  },
+  "android/app/src/test/java/com/woundcopilot/android/LockPolicyTest.kt": {
+    "sha256": "eea94db0ffa967e071476a074fdc4a59be96aabdc4f114c7f09634429c382059",
+    "bytes": 3416
+  },
+  "android/app/src/test/java/com/woundcopilot/android/RecordingSafetyTest.kt": {
+    "sha256": "becde62c40c188182b07dbde202305c1fddd28b1353506aebe15ce03f0e1cf92",
+    "bytes": 2586
+  },
+  "android/app/src/testDebug/java/com/woundcopilot/android/DebugSafetyFlagsTest.kt": {
+    "sha256": "8673dd9f15fe1b676445f7c1090dd325efb29eeedf84e7bf8b64cff3abe1f5f6",
+    "bytes": 506
+  },
+  "android/app/src/testRelease/java/com/woundcopilot/android/ReleaseSafetyFlagsTest.kt": {
+    "sha256": "25560361837a9e34795ba001b497da72d7137b0d7e0fd898820f669c5eeba40f",
+    "bytes": 896
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/BackendInstanceTest.kt": {
+    "sha256": "478919729d5c7ac54df642b5e13fe1055c0e266465c76461e30b23627f99b9a5",
+    "bytes": 2593
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/InMemoryRecordingTest.kt": {
+    "sha256": "d6b1b39d57cd1de19a6f08d028d111be4cb8945200ee29aec4bb75766a03be97",
+    "bytes": 10043
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/KeyHandlingTest.kt": {
+    "sha256": "5bdefc1085feeb8181333db264561520d3851eb5ca68d25f56c033ad3a8e6249",
+    "bytes": 5901
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/RealFixtureTest.kt": {
+    "sha256": "8c6dd75be950c6d6fa85e38ae4adf54cee7b3e2e0b37d068c9802a622f88cfc7",
+    "bytes": 2801
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/RetentionRulesTest.kt": {
+    "sha256": "17cad077064a9576ede8c324a4ae3758c3c1b5474852a5ae5f52bad7733cd659",
+    "bytes": 3749
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/SafeRecordingTest.kt": {
+    "sha256": "854329a07407754c8844cf2ba1285fdd4f17a260fbe793e48f37f339ee3fa4a9",
+    "bytes": 16081
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/SandboxSafetyFlagsTest.kt": {
+    "sha256": "a7dce5d3e772cbd83691239c8902e11b029a100f668e233b6697448224c40265",
+    "bytes": 745
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/SealedAudioTest.kt": {
+    "sha256": "27a343fa30e7ffbff031f807c19530f141ecf625e208ceddd18f189bda0728be",
+    "bytes": 9356
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/StorageFullTest.kt": {
+    "sha256": "63f3dedfa0b58ba211e73cedaaf3dc81d45665f6da5f2411e05663825cd850ed",
+    "bytes": 2618
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/TestSupport.kt": {
+    "sha256": "a4b76e1b1fdcb9bbda50e1d71a2460b673f9c33fe6121b09bff06a410ba83cbd",
+    "bytes": 1720
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/UnresolvedRetentionTest.kt": {
+    "sha256": "a3c621063e7ab807326604d841587c082545758c5b4385aa107282ba4a0f60db",
+    "bytes": 15176
+  },
+  "android/app/src/testSandbox/java/com/woundcopilot/android/VisitContinuationTest.kt": {
+    "sha256": "9d928da9e61febdc60db8dc348cb5a794f59f41a4168e1a33417ff3cfad3251d",
+    "bytes": 13857
+  },
+  "android/build.gradle.kts": {
+    "sha256": "484f3d9c8ac3672608b1c7a16ceb96432169856abc481d22ec2eeda68d7b56e5",
+    "bytes": 212
+  },
+  "android/gradle.properties": {
+    "sha256": "f36eb4825f12cb1892b70c34ecf6e2b2b0d1953f6bc87c63936ebea5795d21ac",
+    "bytes": 103
+  },
+  "android/gradle/gradle-daemon-jvm.properties": {
+    "sha256": "231649d2f8e8dc24310f18c921e3ae33fd2715b7f48a7ddcaf27a85003e0729a",
+    "bytes": 1138
+  },
+  "android/gradle/wrapper/gradle-wrapper.jar": {
+    "sha256": "76805e32c009c0cf0dd5d206bddc9fb22ea42e84db904b764f3047de095493f3",
+    "bytes": 45457
+  },
+  "android/gradle/wrapper/gradle-wrapper.properties": {
+    "sha256": "944a8c58b219fbbcb6076cada0adaf69c96193c52ab9364ef4be90a3b456599d",
+    "bytes": 378
+  },
+  "android/gradlew": {
+    "sha256": "3238afb2aed5cb16eb7d6718077e7138059108f007b54179e9cc157c5a6e0e89",
+    "bytes": 8728
+  },
+  "android/gradlew.bat": {
+    "sha256": "1d297e00bd21de3ace22b4d7f2de1f9dfa858883d66bbf7c1ccbecccec8f4f3b",
+    "bytes": 2937
+  },
+  "android/settings.gradle.kts": {
+    "sha256": "4af41fba3a83dfdc77648578250ad0457477613074b6dc0d6a9259c2b1784ac9",
+    "bytes": 305
+  },
+  "android/tools/local_contract_server.py": {
+    "sha256": "f63db9c36b0666d20253770b99e3753a44c7cd56bfbe0836a000043f94fa3b2a",
+    "bytes": 1588
+  },
+  "android/tools/sign_release.py": {
+    "sha256": "0469bcccf80fd67c0c3a68b3ef674b12eccd8777cfd8ab0df5653cca7b555f34",
+    "bytes": 1274
+  },
+  "android/wear-contract/build.gradle.kts": {
+    "sha256": "c3aeb341fe056651b80433e0b3b3e438ddf22b430ca4168924d7514744e4ea63",
+    "bytes": 321
+  },
+  "android/wear-contract/src/main/java/com/woundcopilot/wear/contract/ConnectionEpoch.kt": {
+    "sha256": "975e89af5d101b01ba1a6c9c0b70e57fcacffccc1395cfe82f193b4edfc93913",
+    "bytes": 865
+  },
+  "android/wear-contract/src/main/java/com/woundcopilot/wear/contract/WearProtocol.kt": {
+    "sha256": "d9741a1d1241b05b604b562f2cba344386a918eb1feceef27d8c7be698f5e90a",
+    "bytes": 5459
+  },
+  "android/wear-contract/src/test/java/com/woundcopilot/wear/contract/ConnectionEpochTest.kt": {
+    "sha256": "500548cce61801b3973fe038bfc6ff4b39e64f89b82fe8d5f23677f78116ec1b",
+    "bytes": 1427
+  },
+  "android/wear-contract/src/test/java/com/woundcopilot/wear/contract/WearProtocolTest.kt": {
+    "sha256": "a57e7be7474b9bdcdf35d2c38b0f7cfc8980d1ea0b6fd5c7f7d78ee63b71dd29",
+    "bytes": 5713
+  },
+  "android/wear/build.gradle.kts": {
+    "sha256": "cbaa21dce75860321f4be4d59b964876f3ca7536ca30e6aa60fb95888d7fa2d4",
+    "bytes": 1512
+  },
+  "android/wear/src/main/AndroidManifest.xml": {
+    "sha256": "419d4b8b5381931a774dc1484ec1ca74f82bf53a348af4b3226d4a1faa2a8307",
+    "bytes": 799
+  },
+  "android/wear/src/main/java/com/woundcopilot/wear/WearActivity.kt": {
+    "sha256": "4f969b8b9340b5c0736aae4fbc28d144b7ca49558b6e96b94b6c7387ceb01ba3",
+    "bytes": 9219
+  },
+  "android/wear/src/main/java/com/woundcopilot/wear/WearViewModel.kt": {
+    "sha256": "59e92a032f97f48665652ecaca790e73d44df1f483afa175cda40651ef6bfa4c",
+    "bytes": 7436
+  },
+  "android/wear/src/main/res/drawable/watch_icon.xml": {
+    "sha256": "f8924da1b157c4bd777212f5b3031412c5e1af11335a703384a283a7e603642f",
+    "bytes": 352
+  },
+  "android/wear/src/main/res/values/wear.xml": {
+    "sha256": "c383664cd95827328c80b814d633b8c7a2d1a0d05ae35ff189d121d11da68bd0",
+    "bytes": 117
+  },
+  "android/wear/src/main/res/xml/data_extraction_rules.xml": {
+    "sha256": "f50148eab9e607a1d41b41ab1a6832353af0cb98c5fb4e2ca6364942cfea5969",
+    "bytes": 481
+  },
+  "backend/.dockerignore": {
+    "sha256": "54fdf61d4e7975f338fa5fd303b37f4bf9db69a1e179ca6774d15ea134c89838",
+    "bytes": 226
+  },
+  "backend/.env.example": {
+    "sha256": "2e9c20ddc5f72e2e6c33ac57e62821dd7f78bf7745497a6343453e79ec9fad90",
+    "bytes": 1703
+  },
+  "backend/.gcloudignore": {
+    "sha256": "d411a8843d78c73b93124d3f2d382877b086a68df08abbc922b035b609221342",
+    "bytes": 228
+  },
+  "backend/.gitattributes": {
+    "sha256": "57c3c1e3dfe96f5c516b40ea04d50a9fcea8d626fb70b2e85472d51f933f6e2c",
+    "bytes": 72
+  },
+  "backend/.gitignore": {
+    "sha256": "aef6aad79758ba404f9eeab13f944aa6b248df3e13aa399694d9658e4be2c7f0",
+    "bytes": 181
+  },
+  "backend/.pytest_cache/.gitignore": {
+    "sha256": "3ed731b65d06150c138e2dadb0be0697550888a6b47eb8c45ecc9adba8b8e9bd",
+    "bytes": 37
+  },
+  "backend/.pytest_cache/CACHEDIR.TAG": {
+    "sha256": "37dc88ef9a0abeddbe81053a6dd8fdfb13afb613045ea1eb4a5c815a74a3bde4",
+    "bytes": 191
+  },
+  "backend/.pytest_cache/README.md": {
+    "sha256": "73fd6fccdd802c419a6b2d983d6c3173b7da97558ac4b589edec2dfe443db9ad",
+    "bytes": 302
+  },
+  "backend/.pytest_cache/v/cache/nodeids": {
+    "sha256": "ed8bf86ac607ef7b50d7011d343d63b0fb0afe1f596d30482626f75ea504ee15",
+    "bytes": 82324
+  },
+  "backend/CONTRACT.md": {
+    "sha256": "d474339ccff787ff9cbcaf18db7a2b2d1205f344c1e97f721a3a4ac30ad1a648",
+    "bytes": 8699
+  },
+  "backend/Dockerfile": {
+    "sha256": "b84e6951d39f6eedd32369ae64428a48957f91209670d6fa688ead10ad764562",
+    "bytes": 1081
+  },
+  "backend/README.md": {
+    "sha256": "9bfc11b8b9801f1d41eef0a16e7961904c9fe3bd3372663f2115a904bed36175",
+    "bytes": 6950
+  },
+  "backend/Start-Local.ps1": {
+    "sha256": "4cbc4871b444352468cb56b2373087f102918bcd5e89d79378fc9d22db062afd",
+    "bytes": 2081
+  },
+  "backend/alembic.ini": {
+    "sha256": "d20ee7ca33b5eb2bdaad5638f2008f094285c10d024f62502412787d53cd9fa7",
+    "bytes": 526
+  },
+  "backend/cloudbuild.yaml": {
+    "sha256": "d4fc154e6bc72f064a480f0b5a22cd141fa34d6b76a02cb1e61bb4f3190f7c6a",
+    "bytes": 642
+  },
+  "backend/compose.yaml": {
+    "sha256": "61461cbeeaa490d167acb7cfe4231332af975dcf05fd65d6c9deef79a289c541",
+    "bytes": 814
+  },
+  "backend/deployment/.gitignore": {
+    "sha256": "9e78a587bf767669a1809f29204d67bc39f8a3e5d61a61ec47c0bee3846d35c3",
+    "bytes": 55
+  },
+  "backend/deployment/Get-GcpPreflight.ps1": {
+    "sha256": "e6215d4176a65cdbaca2374e6c4bc07c2239b6ea4df67d96e0cf40be2d060192",
+    "bytes": 4929
+  },
+  "backend/deployment/Measure-Registry.ps1": {
+    "sha256": "a9a73595e5d0678fe53506e1766b04487d19735330294be7604b089ce31912c7",
+    "bytes": 978
+  },
+  "backend/deployment/backup-application-schema.sh": {
+    "sha256": "9e34a97da5086d10546a6cd7e99d2c7448d1d4ce805df8d12a5d44a000dcb541",
+    "bytes": 2121
+  },
+  "backend/deployment/backup-to-gcs.sh": {
+    "sha256": "64a46b5f8e2bda919a11d5ab2404ee6b52ed3298a911fc96058cf531b165b20b",
+    "bytes": 3027
+  },
+  "backend/deployment/backup_capacity.py": {
+    "sha256": "426787067ea68b9e3a262ce70658d440dfca44922ce053fd67e260f79f1f958c",
+    "bytes": 1244
+  },
+  "backend/deployment/bootstrap-runtime-role.sh": {
+    "sha256": "f3077936e3053de291c6b343b6d578f5ac8a8610c2f6659162c5bcc27a132fc8",
+    "bytes": 2173
+  },
+  "backend/deployment/harden_runtime.py": {
+    "sha256": "8eb0e132c6d08ac6064a4934ca7acaabc315e9a690b48bee7440874ed6027a77",
+    "bytes": 5674
+  },
+  "backend/deployment/initialize-new-disk.sh": {
+    "sha256": "f8766f29a5dad01adabee5b270065ce2c6b05847e14dea60e5a78257c985ac7a",
+    "bytes": 510
+  },
+  "backend/deployment/install-backup.sh": {
+    "sha256": "05be4733784b53860d8d920bfb4966f833ae4d60953d1546914cecc9ccf32724",
+    "bytes": 1061
+  },
+  "backend/deployment/install-maintenance.sh": {
+    "sha256": "f3503755e14d5f765c3ffb272e3171c9e19acc58bfb770f9a28b1664ceba8143",
+    "bytes": 807
+  },
+  "backend/deployment/maintenance.sh": {
+    "sha256": "7e48896ffea0cf9ad8e24482ee39cb439d348bd841a50fe8913be90d3089d611",
+    "bytes": 962
+  },
+  "backend/deployment/mirror-postgres.yaml": {
+    "sha256": "f87d78c0c8346499162bc979bdd261804e98a9cfc22e906afe269553f5b27bd6",
+    "bytes": 428
+  },
+  "backend/deployment/pg_hba.conf": {
+    "sha256": "7915844d43c427421944252355b4f5bb3c38d6ccc5e0ec0ddc8bac99fba4fbe8",
+    "bytes": 494
+  },
+  "backend/deployment/pg_ident.conf": {
+    "sha256": "1341e6b3eb8f48ebadecaba376c622d9a2e4ccad18a4b04af2e27bd240f03884",
+    "bytes": 94
+  },
+  "backend/deployment/plan.json": {
+    "sha256": "ac49c5c27d5b5b0b3a1c9b69fbb78c2082d3c3e64d43c23c7d58270be9be61fc",
+    "bytes": 10477
+  },
+  "backend/deployment/postgres-image.txt": {
+    "sha256": "5a8ada853242144d1cc212d4695bcde91ed816b55a28e7a6879a523ca0cb2f98",
+    "bytes": 134
+  },
+  "backend/deployment/postgres-startup.sh": {
+    "sha256": "bac925ae2cbcaaae4dd208a8eaa24a37953500f2ecbf1ea7061578a7590fd78a",
+    "bytes": 4546
+  },
+  "backend/deployment/postgresql.conf": {
+    "sha256": "56afa7e34489b8759151bbd651780051ddf0f1f61d24bd883a70a7c965591ff5",
+    "bytes": 741
+  },
+  "backend/deployment/prepare_backup_key.py": {
+    "sha256": "2940402e73958f28edb80596746dfcae54644849053a14c86dc491a5d4dd4929",
+    "bytes": 2316
+  },
+  "backend/deployment/prepare_migration_url.py": {
+    "sha256": "54150b68f654052f0bce2457da09419c55f4c9328b6ed264fb3e22fd92af4755",
+    "bytes": 1394
+  },
+  "backend/deployment/probe_database.py": {
+    "sha256": "2956613ea3f24d8d7300cd4cfdf2fd6ff6cc5a87ccd0ad05a22ca8d79468e31f",
+    "bytes": 3816
+  },
+  "backend/deployment/recreate-db-container.sh": {
+    "sha256": "53aca0ea1bed883d8bcd1fd700930adf8b82c3e005b6bd12869e2d8c0cd1ebc2",
+    "bytes": 815
+  },
+  "backend/deployment/render_plan.py": {
+    "sha256": "5ab41791bed7630a2bbda02d31cbea9d34f00cf450e1b9cddaebbc48bdc929b7",
+    "bytes": 7930
+  },
+  "backend/deployment/restore-drill.sh": {
+    "sha256": "6c9770ffc8e4ff4899494238094efd13f03be1c8dcd49bd983b07a86bb4ef39e",
+    "bytes": 1331
+  },
+  "backend/deployment/restore_off_vm.py": {
+    "sha256": "a92c28f4e857b030f7183afc715bab15d2012e322d6843e06ee8ff253a344f68",
+    "bytes": 4980
+  },
+  "backend/deployment/stage-db-files.sh": {
+    "sha256": "c83ddd0744109bceea910d10384735f387200143ca0d25818f577e3da40b1001",
+    "bytes": 810
+  },
+  "backend/deployment/test_backup_capacity.py": {
+    "sha256": "502b959c398c425703db6bb3e1719477d82052a7b65fd40d64f529718b48131c",
+    "bytes": 622
+  },
+  "backend/deployment/test_plan.py": {
+    "sha256": "1f878257e6f610689e2066a66409dd5ffe77a7a44e407405456174ef200c1cad",
+    "bytes": 1928
+  },
+  "backend/deployment/verify_persistence.py": {
+    "sha256": "0943b259ec949c7c6a1049846e1939742e07035ac23e38ed38fcc1e6c31e99a5",
+    "bytes": 2862
+  },
+  "backend/docs/ARCHITECTURE.md": {
+    "sha256": "f22e64ed1a016ff366a9ecb51386a5f022d7846035e89f0f4a809b0310204414",
+    "bytes": 5268
+  },
+  "backend/docs/AUDIO_VERIFICATION.md": {
+    "sha256": "876b855e29f54f0732fc7081f45683025b3f09745b35322ad600ad9fba07689b",
+    "bytes": 5951
+  },
+  "backend/docs/BACKUP_RECOVERY.md": {
+    "sha256": "a9956be8712bdcb41f2da44da13a3027c0c3b3b82494c7850d7c6b209295191e",
+    "bytes": 6335
+  },
+  "backend/docs/CLINICAL_VALIDATION.md": {
+    "sha256": "9c469238a912ebf583f32f53534fd0a670652b30b2ca1875078f263057d154d3",
+    "bytes": 6979
+  },
+  "backend/docs/CLOUD_EXECUTION.md": {
+    "sha256": "3332fbc4afd5808aa65711223414617e8c4958794719e1fe2a7258d8d45be431",
+    "bytes": 8960
+  },
+  "backend/docs/DEPLOYMENT.md": {
+    "sha256": "da595618d4b1e3370dd7fca36723ba39a641425cac3715ff1434f8d61e70cb0f",
+    "bytes": 17489
+  },
+  "backend/docs/DEPLOYMENT_PREFLIGHT.md": {
+    "sha256": "f391dd9d5d1ee84722a850391bc785490bc9ec4dcf34712d17deebe777ac643c",
+    "bytes": 2784
+  },
+  "backend/docs/DESIGN.md": {
+    "sha256": "0df5375fa4e016703a56d88d85a8aaba8ad7b316a72c11c72defcb627fab3ddf",
+    "bytes": 9951
+  },
+  "backend/docs/DEVELOPER_DIAGNOSTICS.md": {
+    "sha256": "dfa752c734ed98ae26e17d9c4e53e675f09459b632343c8166b963ef6e3efe1f",
+    "bytes": 2733
+  },
+  "backend/docs/LEGAL_REVIEW.md": {
+    "sha256": "efbb3f8e297c98441eb4cfa919b78b135305a2918ae707010be572ad8007649f",
+    "bytes": 4659
+  },
+  "backend/docs/LOAD_TEST.md": {
+    "sha256": "ac0bbd1e3cc20db5211353b7103376dc8242c3774f74972f45d1b882a8770b78",
+    "bytes": 3747
+  },
+  "backend/docs/MODEL_REGISTRY.json": {
+    "sha256": "953df33f9e64e8a122151f7d76fccab8fb1803d15f6006bdc200f47968a83214",
+    "bytes": 3124
+  },
+  "backend/docs/MOTION_REVIEW.md": {
+    "sha256": "d8c408a54c3febf077cafcb1d8330af37654c7b9bd5324c9d3a25e673c27d628",
+    "bytes": 2556
+  },
+  "backend/docs/PRIVACY.md": {
+    "sha256": "994079eb06cd022ffeada12ef8e12b60be847bbe1da97d1db9652fa963deaf02",
+    "bytes": 7073
+  },
+  "backend/docs/PRODUCT_DESIGN_REVIEW.md": {
+    "sha256": "48d55bcdcc4cf67ade6a1abfc7cc3532a0ff9eb1d98874884a6ca1ce6e6be66e",
+    "bytes": 5909
+  },
+  "backend/docs/RELEASE_REVIEW.md": {
+    "sha256": "e83c9acfe4191d5d870d203a8642423b01d405be2a3ed5f65bf909d9bc5e8269",
+    "bytes": 6994
+  },
+  "backend/docs/SECURITY.md": {
+    "sha256": "c2d7fe2d755f53bbf29164deef1c36d4ccb2829c28536c367646347bda6b3855",
+    "bytes": 4028
+  },
+  "backend/docs/TERMS.md": {
+    "sha256": "215ede16decaf35c8f559a6dbe87e8f40d75d564f1796c7fed7d7bbd3697293f",
+    "bytes": 6776
+  },
+  "backend/docs/UNLIMITED_CREDITS.md": {
+    "sha256": "2222ab93b71ddd319b1eaa019dc072ea1fedeac6b41df799beb9b6a20af74773",
+    "bytes": 1739
+  },
+  "backend/docs/VALIDATION.md": {
+    "sha256": "ac837d83f1d2d8a2e995d4200d3146b253031f5c8e40fe72eb6e07ba21a8fb33",
+    "bytes": 11725
+  },
+  "backend/docs/report-transfer.md": {
+    "sha256": "c31dbbdaf5240098f5b146d01507d621c473d807ea7b5832823359403a867c5f",
+    "bytes": 4212
+  },
+  "backend/frontend/eslint.config.js": {
+    "sha256": "e04b7705a8653f92d3bc8936345177e14321a9b30021501a244b52bd7f388bf0",
+    "bytes": 562
+  },
+  "backend/frontend/index.html": {
+    "sha256": "ff3491cd3973369517bd589bcb1ca0cf0bb47e30bc377782cb1edc97ec35769d",
+    "bytes": 549
+  },
+  "backend/frontend/package-lock.json": {
+    "sha256": "a6fee8f2dbcbf4b7a824ab185fb110686d2caa67a8a1b1fc15d4c7655d65b114",
+    "bytes": 146944
+  },
+  "backend/frontend/package.json": {
+    "sha256": "2e0d904ac03151e9fda6b1b49a5c15af9d31a214fec32ab5cd49c82c09620e42",
+    "bytes": 929
+  },
+  "backend/frontend/public/fonts/OFL.txt": {
+    "sha256": "40b12494366ea515cc612a84cd75fba61e31cf2ddade62146ee38de1a2a1f6b9",
+    "bytes": 4549
+  },
+  "backend/frontend/public/fonts/ibm-plex-sans-400.woff2": {
+    "sha256": "a8c2566fa9ee63fac7b981a04c6c032968e2e7f076c19776418c40c0b1b66ca3",
+    "bytes": 27748
+  },
+  "backend/frontend/public/fonts/ibm-plex-sans-500.woff2": {
+    "sha256": "986045cfef4fd1568e42d5a37338d0fc84a9362f313832ba41e41a9156b1a90e",
+    "bytes": 30672
+  },
+  "backend/frontend/public/fonts/ibm-plex-sans-600.woff2": {
+    "sha256": "b886c3f282b87e85942d4defbed9294252aaacc01b68e68c1ffdcc7df2724b8e",
+    "bytes": 30560
+  },
+  "backend/frontend/public/fonts/ibm-plex-sans-700.woff2": {
+    "sha256": "003bd5736c13e790b3f095d778107cbc9c82978aaf2abef135774db27209e35f",
+    "bytes": 28600
+  },
+  "backend/frontend/public/icon.svg": {
+    "sha256": "3295ff7d77fa860670c30ac94241b8cff51bfe90fcc393e11319785a3be6a701",
+    "bytes": 229
+  },
+  "backend/frontend/public/manifest.webmanifest": {
+    "sha256": "d089099e54a897a70e9f6e078e6ecd0da0923e84a772da2a2636bf28e8ce8837",
+    "bytes": 257
+  },
+  "backend/frontend/public/sw.js": {
+    "sha256": "6642cfc3094053933f9f496fba5b9d8c5d4317adb4e2340f724c59248e458245",
+    "bytes": 1138
+  },
+  "backend/frontend/src/App.tsx": {
+    "sha256": "5ca9f04d65f3b21095dfc73b84e4cb3c82fc5c096c79395b1246d204a80898ee",
+    "bytes": 20614
+  },
+  "backend/frontend/src/AudioVerificationPanel.tsx": {
+    "sha256": "a4b23503f2a553d8e3affbafaa3e5340006f38efd75363712d9d5a855535b9c7",
+    "bytes": 10402
+  },
+  "backend/frontend/src/EncounterIdentity.tsx": {
+    "sha256": "21f00259ce10710135be6d61d2e8a6340a78c7fa3708116f0b6398a7e1236af9",
+    "bytes": 3516
+  },
+  "backend/frontend/src/ErrorBoundary.tsx": {
+    "sha256": "f7c72cd0188beb1cc3b45d5d25d069589ebb4b55d7507e24d58462e343338389",
+    "bytes": 839
+  },
+  "backend/frontend/src/EvidencePanel.tsx": {
+    "sha256": "7725413a9749547995248c124dfa3b8683be8e71c6eb10cff679b1da7f1eca30",
+    "bytes": 21112
+  },
+  "backend/frontend/src/HomePage.tsx": {
+    "sha256": "85b5a3093105bb1404615f476291b02c54a0acce2f1792563a161355a472e7f9",
+    "bytes": 3494
+  },
+  "backend/frontend/src/MicrophoneWaveform.tsx": {
+    "sha256": "d5d929fea7ed029739e46dc4fc9921c93e7013b0fbebe102cf15b1c4673296b7",
+    "bytes": 1753
+  },
+  "backend/frontend/src/Notebook.tsx": {
+    "sha256": "6bdb91012549ec151addb0d8a3d61e741767fa1a0ad9588e2c72c17086ec6a06",
+    "bytes": 31354
+  },
+  "backend/frontend/src/Pages.tsx": {
+    "sha256": "e96dc088a7b709f0fe13fe7821a4ce088228ce0aeae9ce85694e17f9273d2d34",
+    "bytes": 24235
+  },
+  "backend/frontend/src/accessibility.test.tsx": {
+    "sha256": "bbaa19a47aa93a1150a06e88949b8096acc728c5b3f09cb054514fb918236e0f",
+    "bytes": 951
+  },
+  "backend/frontend/src/api.ts": {
+    "sha256": "8ff540511c0b76becf91fd6910238f89b5ccfc2aa3e1c41294d4e8e55e80759b",
+    "bytes": 1785
+  },
+  "backend/frontend/src/clinical.test.tsx": {
+    "sha256": "bcedeec23714fdb73310bf31b4f4ca60afa034b9c55f4f8ccd70a4ea6d99967f",
+    "bytes": 8175
+  },
+  "backend/frontend/src/components.tsx": {
+    "sha256": "9fbb344552267d8fd5e29f5317a965f125645072163cdf2f9cebf3d82b4245df",
+    "bytes": 3091
+  },
+  "backend/frontend/src/demo.ts": {
+    "sha256": "37beb7f941b2e49edc6834cc151718092f04dc971e0af2f2a55a254a08174cb3",
+    "bytes": 6891
+  },
+  "backend/frontend/src/device.ts": {
+    "sha256": "6a79161071377a8947cd839a082334a4564ed87c21e0a980478c5f1e38db25e5",
+    "bytes": 1091
+  },
+  "backend/frontend/src/documentation-contract.test.tsx": {
+    "sha256": "7f662bcc5e06e5de3c4b7ec9f09e4e449d71ce17d4867691ce640bdb0ca8e966",
+    "bytes": 4306
+  },
+  "backend/frontend/src/generation.test.tsx": {
+    "sha256": "14d42959339ee15405006722fb38ca12f0c015306aed8fd8507c76702a73cb71",
+    "bytes": 2690
+  },
+  "backend/frontend/src/main.tsx": {
+    "sha256": "c55fd3e4b43576f3470c684756c22c31dcf09d9906d7043daa2749ddb8bd82e3",
+    "bytes": 279
+  },
+  "backend/frontend/src/motion.css": {
+    "sha256": "eecb013865e180db93df4587cfb18d8326e2d74338299787f8e3e8d0e2dce872",
+    "bytes": 3951
+  },
+  "backend/frontend/src/photoQuality.test.ts": {
+    "sha256": "d1d7249602c1e9c6ba67887ffe87a253261ff562bbfa9e37b58636b1cd50f074",
+    "bytes": 1365
+  },
+  "backend/frontend/src/photoQuality.ts": {
+    "sha256": "f1d85417b824aa146d3728db44fc3774f7dd1dca2d59101b815e25784adb1ace",
+    "bytes": 3697
+  },
+  "backend/frontend/src/product.css": {
+    "sha256": "1cd7be6c48022d93c6267ffd15034004d9d9046d0cf9821001f7e2766ae15826",
+    "bytes": 27252
+  },
+  "backend/frontend/src/product.test.tsx": {
+    "sha256": "06a81b4dbee57dbb41ef652bc23b7dd997eb50d18b0f406c585f29e2f6fe2d98",
+    "bytes": 3605
+  },
+  "backend/frontend/src/recordingLimits.test.ts": {
+    "sha256": "aadc73f5ca1153344f066be3d1a7244e3c49d27dc5441c34e332bbfed5546b51",
+    "bytes": 757
+  },
+  "backend/frontend/src/recordingLimits.ts": {
+    "sha256": "2571d833a9f4ea45a5eef3be4d32d3477521e594502c267ffc066f92a9465ae7",
+    "bytes": 679
+  },
+  "backend/frontend/src/recovery.test.ts": {
+    "sha256": "876fd8db90084e64fef77e184a9972c73ded6e7a1d614e90ab10c636b519bc03",
+    "bytes": 5562
+  },
+  "backend/frontend/src/recovery.ts": {
+    "sha256": "b2ca81d3880bb77871bd8dc907685bb0224133b9d8eb2ecfe983a477bdfbe2b1",
+    "bytes": 6579
+  },
+  "backend/frontend/src/styles.css": {
+    "sha256": "8ff98d7a8d0d2011de962ad75893f131fc2a87f78829beefc3a0a0e03a2aca29",
+    "bytes": 34850
+  },
+  "backend/frontend/src/swipeTabs.test.tsx": {
+    "sha256": "20bef39f0eefe078b74aceac83343bc27d9e16e6247130a4519912ed829918ed",
+    "bytes": 3850
+  },
+  "backend/frontend/src/test-setup.ts": {
+    "sha256": "9deb4506bfd9fbb73c4a38164804911eb27bc3a456526f119a5c932bd418b37c",
+    "bytes": 400
+  },
+  "backend/frontend/src/transfer-document-export.test.ts": {
+    "sha256": "66c2b727e41dbaeb636595c7ab7eff0f5aecb6db56f07374550cc36d33409e77",
+    "bytes": 2252
+  },
+  "backend/frontend/src/types.ts": {
+    "sha256": "59a53cecbc8af574f81ce73a70a81f5f7ece1a4968065a5ce9673c30bbf59b00",
+    "bytes": 3722
+  },
+  "backend/frontend/src/useSwipeTabs.ts": {
+    "sha256": "76fb72c35465248db86d4235d1333f7cd7c91d25eae7a36fb6e86d4d1c5f05a6",
+    "bytes": 3248
+  },
+  "backend/frontend/src/workflow-additions.test.tsx": {
+    "sha256": "f8292c4f5cee43b1116b56320e5fd2ce6ad13f9b8639a10f21094861f06ba963",
+    "bytes": 12379
+  },
+  "backend/frontend/src/workspace.ts": {
+    "sha256": "c0758c90a7eae1e991b960df83ffa1270be0bca854f1ccca89d56b127163928b",
+    "bytes": 7018
+  },
+  "backend/frontend/tsconfig.json": {
+    "sha256": "492059cf2c22a0ea3a00f72f34b155c2f6ba39e4116705a77af124c8f95d0b83",
+    "bytes": 441
+  },
+  "backend/frontend/vite.config.ts": {
+    "sha256": "649d6336a39d57fb7f4d05ae0abe79cea0aaed85ebc8652741f3e963756e8808",
+    "bytes": 290
+  },
+  "backend/migrations/env.py": {
+    "sha256": "0fcc455928709e7a4a3fbe4409267480ab085bce59d181e98c10b18217763c3c",
+    "bytes": 877
+  },
+  "backend/migrations/script.py.mako": {
+    "sha256": "279902f4984e843cac28e91694c671bc8cb084f245d9a5b9ca940de9df2de063",
+    "bytes": 421
+  },
+  "backend/migrations/versions/0001_initial_immutable_clinical_and_commerce_.py": {
+    "sha256": "f732fea31964cee7e06f39fe7e73cedfbad431a9beede2d6e7600d05d5228029",
+    "bytes": 32487
+  },
+  "backend/migrations/versions/0002_audit_timestamp_integrity.py": {
+    "sha256": "82157b53086c1ceeb20bcf592f6bd5ec0c662b9890eb11dd52a55dc8e3b170e7",
+    "bytes": 456
+  },
+  "backend/migrations/versions/0003_custom_report_layout.py": {
+    "sha256": "c52dcbe4fd188f4b3bdce216b6d4437afee64d81e306847e4d934d13a976d7d7",
+    "bytes": 410
+  },
+  "backend/migrations/versions/0004_one_time_report_transfers.py": {
+    "sha256": "1438f19767f0dd5a64d12fee27dcb64846a209ee58fd76287f807f531ed1bad4",
+    "bytes": 1374
+  },
+  "backend/migrations/versions/0005_mobile_sessions.py": {
+    "sha256": "f4a68d6609312a88bc96748fdc218d83eecc2f8259253d4171316c3764b5c9ba",
+    "bytes": 677
+  },
+  "backend/migrations/versions/0006_scoped_privacy_erasure.py": {
+    "sha256": "e94b4ef3e18e15ae62ac161dc6277bbacf270489774c6e937f0753fa5d8229d0",
+    "bytes": 2530
+  },
+  "backend/migrations/versions/0007_targeted_transfer_revocation.py": {
+    "sha256": "fdb460236663bd7ec763c9884548fcbfff239f1c7284bd8f72ee5ac78b93f39f",
+    "bytes": 830
+  },
+  "backend/migrations/versions/0008_developer_diagnostics.py": {
+    "sha256": "b90496050b1dbda7e1e871e3f05ca4d224e31e029730dd983325db314782f9a1",
+    "bytes": 466
+  },
+  "backend/migrations/versions/__pycache__/0004_one_time_report_transfers.cpython-313.pyc": {
+    "sha256": "402664d61b00112e968b77b744f272184263c1c869823e571c81e745c361bf00",
+    "bytes": 2671
+  },
+  "backend/pyproject.toml": {
+    "sha256": "4ab104eff4953739ba036f4b6f809709139d70471401cae889b828615c5109ea",
+    "bytes": 193
+  },
+  "backend/requirements.txt": {
+    "sha256": "51361e8ddcaa2691d4b526e37ed289a7fdffe35fbfc9c535b6b2a64cec197eff",
+    "bytes": 267
+  },
+  "backend/scripts/bootstrap_owner.py": {
+    "sha256": "8ee944c91f25c9281da702fdac2bb41850133f6cdeebb4348ca998654e6fb7d9",
+    "bytes": 528
+  },
+  "backend/scripts/load_probe.py": {
+    "sha256": "686f7e679871d1c1112c0e3f109ea6e270c1c7b0d62f4d77a922db3f0a0bfa74",
+    "bytes": 11677
+  },
+  "backend/scripts/maintenance.py": {
+    "sha256": "ae373ec0d02f1a061bfeb8f4e7d31a6338c9543e38e285f32fba78affdf18a18",
+    "bytes": 1219
+  },
+  "backend/scripts/release_stale_holds.py": {
+    "sha256": "e929c1a2e7c572eaa538b1696e6d4ea55b586560f73787c157c0ce2298a0849a",
+    "bytes": 886
+  },
+  "backend/server/__init__.py": {
+    "sha256": "c433a9b198a3a9971182aab53c14e4b5bd2d9997a08f693d7ddb00cca8c30073",
+    "bytes": 67
+  },
+  "backend/server/__pycache__/__init__.cpython-313.pyc": {
+    "sha256": "685ed19cb8b2836b2f0f1877daef538aac7e32421b07d0494c48cd48ba18faf1",
+    "bytes": 258
+  },
+  "backend/server/__pycache__/audio_overlap.cpython-313.pyc": {
+    "sha256": "267bba5f1bce401a76e54bb9909626037fe572e00934aded096825cb022399fc",
+    "bytes": 6780
+  },
+  "backend/server/__pycache__/audio_parts.cpython-313.pyc": {
+    "sha256": "9fc46c825e2e077a76dc4753a4c8a98ecfe4efe03c983d83f6927c59e5238af7",
+    "bytes": 12980
+  },
+  "backend/server/__pycache__/audio_verification.cpython-313.pyc": {
+    "sha256": "184d3e8a07eca68acfb7a9a6dcadcd72c7133f6b3d9ae6e11a54ba6f2a11f54b",
+    "bytes": 23378
+  },
+  "backend/server/__pycache__/audit.cpython-313.pyc": {
+    "sha256": "b0ec74b80f81e9b2596efd7a89b839c35568ec48d0dfa23a53277de238bff19c",
+    "bytes": 6597
+  },
+  "backend/server/__pycache__/billing.cpython-313.pyc": {
+    "sha256": "c0c739ff8550aa679f15dadcb23ba04685df01b48e04aea2c239e6baa4a904c3",
+    "bytes": 73170
+  },
+  "backend/server/__pycache__/billing_models.cpython-313.pyc": {
+    "sha256": "aff117592629cc75ba4966724431acb2461db295c803c40f5dda6fe7f71efb87",
+    "bytes": 10691
+  },
+  "backend/server/__pycache__/clinical.cpython-313.pyc": {
+    "sha256": "eee90e7129f7b3ec5f12690ceb247a7469f86ce2757910ddc2a9f89964717e6f",
+    "bytes": 78692
+  },
+  "backend/server/__pycache__/clinical_models.cpython-313.pyc": {
+    "sha256": "7c04351579239bcdf17643b5bab35aeab2d49a1051607721427418fc4deadd5f",
+    "bytes": 11224
+  },
+  "backend/server/__pycache__/contact.cpython-313.pyc": {
+    "sha256": "abe1289d730bce56bff726999677e214cfd19b899793b461d2fdbe89ec705753",
+    "bytes": 12043
+  },
+  "backend/server/__pycache__/core.cpython-313.pyc": {
+    "sha256": "cee7bf22c7fe1fc2aaaee799b6abb94174c5603fb37cc79ae634e8f9c20a7ed1",
+    "bytes": 6877
+  },
+  "backend/server/__pycache__/db.cpython-313.pyc": {
+    "sha256": "5a2f9356148c550915135020aa71634e0ea1185f2b36463712b40657b69fabbf",
+    "bytes": 3352
+  },
+  "backend/server/__pycache__/diagnostics.cpython-313.pyc": {
+    "sha256": "107b51c85253b984c029ee44638e2ced96b0f62a942108abee4d7a62eabae597",
+    "bytes": 36752
+  },
+  "backend/server/__pycache__/documentation.cpython-313.pyc": {
+    "sha256": "374130d49468b8c1247438f56d57495b3c8f26156ee898dac336fd3dbb5c4343",
+    "bytes": 23642
+  },
+  "backend/server/__pycache__/documentation_layers.cpython-313.pyc": {
+    "sha256": "8bbe4bddeb930d72396b566cd6a3730244278b7640bdfdda8f0e90fe216f2ce3",
+    "bytes": 2834
+  },
+  "backend/server/__pycache__/error_feedback.cpython-313.pyc": {
+    "sha256": "2f36229ac67ec54be4bdb9c13ca1ae0113c75c4892ef4f8cefc40f1290c1944a",
+    "bytes": 4767
+  },
+  "backend/server/__pycache__/identity.cpython-313.pyc": {
+    "sha256": "d33c5023cddb7d58c4a3a09811d83b817bbe230e9ecc9eb0833e4c685ba0308d",
+    "bytes": 31676
+  },
+  "backend/server/__pycache__/kosmo.cpython-313.pyc": {
+    "sha256": "a35cea9108a35181caccafa2a3eb4113895fafc35f19064c5d07d608e08361a1",
+    "bytes": 4793
+  },
+  "backend/server/__pycache__/main.cpython-313.pyc": {
+    "sha256": "6762606632a95efe4657b461726168023e3e7a6d033efc18bf81fd69155e1e07",
+    "bytes": 13344
+  },
+  "backend/server/__pycache__/media_review.cpython-313.pyc": {
+    "sha256": "9f5d0f1997fa18444004a172a970ac922199b6ef993ea0b35cfb7f9b26630c0a",
+    "bytes": 4288
+  },
+  "backend/server/__pycache__/performance.cpython-313.pyc": {
+    "sha256": "1409c988c5727059eae129b829a29a9fa1575633b3f6d3e4664ae060787abb0d",
+    "bytes": 2753
+  },
+  "backend/server/__pycache__/photo_collection.cpython-313.pyc": {
+    "sha256": "60c400eab973c69f84b9e09d7f1973c0446b0e83cc6b1b7f6dc3b97e8d681fb1",
+    "bytes": 8163
+  },
+  "backend/server/__pycache__/provider_models.cpython-313.pyc": {
+    "sha256": "be3ad60b3a903d63e88941cb344be582eb116f6b8cf004ceb301b830c8477894",
+    "bytes": 1641
+  },
+  "backend/server/__pycache__/providers.cpython-313.pyc": {
+    "sha256": "30367112808747d7192ad48dbd57dfe4a9abd08869c6fbae85210f64e59fe52a",
+    "bytes": 91742
+  },
+  "backend/server/__pycache__/quick_report_repair.cpython-313.pyc": {
+    "sha256": "f97a9238a9bc3a77e4f32f6f8f9727c308d9dabbb34a0ea4d3fa2d2ef96e36cf",
+    "bytes": 4428
+  },
+  "backend/server/__pycache__/quick_workflows.cpython-313.pyc": {
+    "sha256": "48fc18759d9f89706ecd471bdb9b2cd367030f6bd8701488ae0742794755dc5c",
+    "bytes": 29603
+  },
+  "backend/server/__pycache__/schemas.cpython-313.pyc": {
+    "sha256": "0cbcb1d9d6d3487d33884d77292bcb6558141de277072761ef475d9b63c837e4",
+    "bytes": 15139
+  },
+  "backend/server/__pycache__/transfer_models.cpython-313.pyc": {
+    "sha256": "42d2581585ddf3c10f925dca73a978ebee4d4caf38fe2f672ecda565615efbce",
+    "bytes": 2057
+  },
+  "backend/server/__pycache__/transfers.cpython-313.pyc": {
+    "sha256": "417b5d94e881574e75936d7b5f4649461234e059639c7dfaacf8f2c46ee84a49",
+    "bytes": 16134
+  },
+  "backend/server/__pycache__/work_privacy.cpython-313.pyc": {
+    "sha256": "351af0209bd1b5bdcd3934ee5cf46564f8b4e56d9059bb647c4331bcd5ac13ac",
+    "bytes": 14755
+  },
+  "backend/server/audio_overlap.py": {
+    "sha256": "d34f1a283616d814768e8e3aa75db019a7eea053ca8ab5f1d07ab58dd95af848",
+    "bytes": 4569
+  },
+  "backend/server/audio_parts.py": {
+    "sha256": "ea16793a7559e27aa77c1830674d58e5ee5823b03b0c6773b0f6ce78b7cf7a9d",
+    "bytes": 7636
+  },
+  "backend/server/audio_verification.py": {
+    "sha256": "fc2f8c702de18c8c987207a12d7e079ee5f288ab4066bfff87b82f79476da2d9",
+    "bytes": 16672
+  },
+  "backend/server/audit.py": {
+    "sha256": "eb8dfe5f11d5bfa4f39d1b78a8efa5752caa5a841709eefb9370b68659f89013",
+    "bytes": 3683
+  },
+  "backend/server/billing.py": {
+    "sha256": "69a8871ee0282ca752c018860f6ad62e6470b24d6451b0e59b469348a2fe690f",
+    "bytes": 55130
+  },
+  "backend/server/billing_models.py": {
+    "sha256": "235f1d03ec89699aff247c7b464bfeaeaf5b7f63ed956526f985330d686eaec9",
+    "bytes": 8430
+  },
+  "backend/server/clinical.py": {
+    "sha256": "65aed790b8c5f330287aff6b6e102d291117622d483fc4b35c6b0bbd2216cb4d",
+    "bytes": 53861
+  },
+  "backend/server/clinical_models.py": {
+    "sha256": "064cf30fc2e718c2d3c65348e130cd62522a12abdac1ea7885eb36bb195cf1a0",
+    "bytes": 8332
+  },
+  "backend/server/contact.py": {
+    "sha256": "07c649af2f8d5b5bcb6e13841c4149b58c32b187ca71fe9e1cee97208de161b8",
+    "bytes": 7003
+  },
+  "backend/server/core.py": {
+    "sha256": "3f95308f6f47c9922b71853426719cdfa8d3ce8a943db80c871cabf805956c1e",
+    "bytes": 4526
+  },
+  "backend/server/db.py": {
+    "sha256": "7bda38ff2ddf84b8e36406ff4b8930ce71e7de44a4394e9272d3397714aed3fd",
+    "bytes": 1521
+  },
+  "backend/server/diagnostics.py": {
+    "sha256": "4d9ec54646162a7566c1fb9ef61eab59db99d32c8aebc4c1428e3138b71426a1",
+    "bytes": 20592
+  },
+  "backend/server/documentation.py": {
+    "sha256": "8f1dd2d43040f1c149334916fffb3954be9b16fc8cb3408b18531df68323d15e",
+    "bytes": 14908
+  },
+  "backend/server/documentation_layers.py": {
+    "sha256": "f6314fbec5aa51529b93ba3c05171d6c42d32e10e9a77fa4013fb4cdaa26931c",
+    "bytes": 1627
+  },
+  "backend/server/error_feedback.py": {
+    "sha256": "b38b68dcc0b7216c3264d6ec7eadbfd04880237d524f42ffa6bfdfac97220dec",
+    "bytes": 4127
+  },
+  "backend/server/identity.py": {
+    "sha256": "78de610539503e47c9eac0998de0a96e533a77a2e8891d1dc55a55f7490a56ee",
+    "bytes": 17514
+  },
+  "backend/server/kosmo.py": {
+    "sha256": "3405631677a75d6df395d2a91bd27c80c86358f6d1a43a2f8673c87b63bbe3ca",
+    "bytes": 3357
+  },
+  "backend/server/main.py": {
+    "sha256": "539a9abf3489dad05613c420819f110ae9ca0a935597b3ab5540bc232e13e707",
+    "bytes": 8472
+  },
+  "backend/server/media_review.py": {
+    "sha256": "fb445f6b357e477a1ddb5fec8ead642977064a037f01aa372bd7ad0608b3ac23",
+    "bytes": 2503
+  },
+  "backend/server/pdf_extract.py": {
+    "sha256": "edc895d395ce6d2605c083cb6b9ef4745ce040369b5480baaf39526a55c17b47",
+    "bytes": 1016
+  },
+  "backend/server/performance.py": {
+    "sha256": "309e5026df3e17a498d30fda83b1e8b89c2989934782b9dd65be176049098d26",
+    "bytes": 1257
+  },
+  "backend/server/photo_collection.py": {
+    "sha256": "a8afed499dba310ee6cc5f31d7aab0d0bb967352e66e2448ae21527a365381fc",
+    "bytes": 4067
+  },
+  "backend/server/prompts/00_healthcare_boundary.system.md": {
+    "sha256": "13ffeb5b1c74b1fa90c0edb0ee42f0d7d60b873003b9b923fd24b5144735e9b0",
+    "bytes": 2010
+  },
+  "backend/server/prompts/05_scope_guard.system.md": {
+    "sha256": "df4a627ef978be02e0b30da22e32d3f600cac9696d911b5ec7e7b99ff1b8f229",
+    "bytes": 429
+  },
+  "backend/server/prompts/06_documentation_rules.system.md": {
+    "sha256": "67e5fc19667930bce80be22310e4f09788d7cb07946bb97537462a10941857c2",
+    "bytes": 7198
+  },
+  "backend/server/prompts/10_task_router.system.md": {
+    "sha256": "464da884526eef6827b806a8ecaa49c3cd5d57c711ea75b1f070894e41ab0345",
+    "bytes": 1040
+  },
+  "backend/server/prompts/20_clinical_fact_extraction.system.md": {
+    "sha256": "e5dbcc73ffb6e2d018423eead364e1063e2efa06f1942d33c6749a40515b0344",
+    "bytes": 1385
+  },
+  "backend/server/prompts/25_document_extraction.system.md": {
+    "sha256": "8b6409698bdd73952094dd9da5a3f61ffcb8f476d99974b78e8b3813908666a7",
+    "bytes": 747
+  },
+  "backend/server/prompts/30_transcript_verification.system.md": {
+    "sha256": "d22d82cd51b297a3aa3f7ceb20712f90663cf9d27cb3594cc99d7ab1dca25f43",
+    "bytes": 930
+  },
+  "backend/server/prompts/40_wound_image_assessment.system.md": {
+    "sha256": "edf35273d93abd9c86a58da62b77f5197e5ddafcb5ca048fa0eb7bf9a48c9f18",
+    "bytes": 2244
+  },
+  "backend/server/prompts/50_clinical_review.system.md": {
+    "sha256": "9e7c71926c2561fc1da2e2644967140a7f00d01a8fa687e1c03af52bf15364ed",
+    "bytes": 1060
+  },
+  "backend/server/prompts/55_holistic_wound_review.system.md": {
+    "sha256": "5f2f986d16dfb0f6d84637b76fc572bbea845b82da96c59e23f27ee9d3a0ebd9",
+    "bytes": 809
+  },
+  "backend/server/prompts/60_targeted_escalation.system.md": {
+    "sha256": "a9bf150b955a4c4dca9a3a9df9efbe7842dc8b2f18f9a58d0e6965fb5da98976",
+    "bytes": 518
+  },
+  "backend/server/prompts/65_independent_challenge.system.md": {
+    "sha256": "9230effd00eb750c7e4e57d3ae2f83528fc8d6ae6eb2f8e10cdbf9f84d642324",
+    "bytes": 578
+  },
+  "backend/server/prompts/70_reconciliation.system.md": {
+    "sha256": "8e5534ba44bebe0ecfd0afcf30a7a5d0695a7e288855ebc86dd31f7acbf13eda",
+    "bytes": 507
+  },
+  "backend/server/prompts/80_documentation_generation.system.md": {
+    "sha256": "ed82ae210169356bfdf0ef994aa98a3bd5fd836b4129d4f3dd32c1ba6c70dbbf",
+    "bytes": 159
+  },
+  "backend/server/prompts/81_quick_documentation.system.md": {
+    "sha256": "b06c20f2e59cef1c6eb207ced08fed7f107739177af4577f9d00462dcd3226e2",
+    "bytes": 295
+  },
+  "backend/server/prompts/82_quick_refinement.system.md": {
+    "sha256": "c61acaa646ecb1b399a96afa19df6e29fc8830a0c37d99e576974b08e8c85989",
+    "bytes": 352
+  },
+  "backend/server/prompts/83_quick_report_repair.system.md": {
+    "sha256": "17c4ec1f3bbf2126ff5d6232d4a6107f7e385c44ce5aedad0c4c1e7e1ba888f7",
+    "bytes": 1430
+  },
+  "backend/server/prompts/84_improve_report.system.md": {
+    "sha256": "6eb4ccdce312c18580bb8e4194a67b20e5945cedff469d2539921d5b0cd59926",
+    "bytes": 591
+  },
+  "backend/server/prompts/85_documentation_qa.system.md": {
+    "sha256": "53ae3731f8dd4e0f4d3a134ba54335707bed1c3f50883fede777d10b8c6633d9",
+    "bytes": 2045
+  },
+  "backend/server/prompts/86_quick_documentation_qa.system.md": {
+    "sha256": "5c6b5985f19409f79bd874d716248bc840916ca322c64a00490697368efca123",
+    "bytes": 3278
+  },
+  "backend/server/prompts/90_contextual_clinical_assistant.system.md": {
+    "sha256": "0a05553d5ff7c4e402b5daccde44856c5e4e96a2672d2ac0538e739d8e1901f6",
+    "bytes": 1491
+  },
+  "backend/server/prompts/91_wound_consultant.system.md": {
+    "sha256": "1340882ccb9a2c163666d7f58faa8f82e9c49fb3caed00cc220de2c4bfd02ede",
+    "bytes": 5400
+  },
+  "backend/server/prompts/92_improve_assessment.system.md": {
+    "sha256": "0f5cc446b895826b239f072efe9cce0d4edcd25e76a3de6b29a7ca3c01201314",
+    "bytes": 591
+  },
+  "backend/server/prompts/documentation/clinical_style_v1.md": {
+    "sha256": "732830c158171a3852b3dfbf1e01f9e10a4306d958b0e80202731db20b19115e",
+    "bytes": 382
+  },
+  "backend/server/prompts/documentation/community_nursing_v1.md": {
+    "sha256": "091e52aed4d88a98a848dc503c7b432c16c187ec3f260abc394f4494d987ecf3",
+    "bytes": 1983
+  },
+  "backend/server/prompts/documentation/formats/custom_v1.md": {
+    "sha256": "1921aadb020f6666cd98455c4bedbeacf6de8c27f4e4aced6b168021eb4541f4",
+    "bytes": 348
+  },
+  "backend/server/prompts/documentation/formats/handoff_v1.md": {
+    "sha256": "956bd2ffb87ff8f6403b787deaf19bfc33a2b4d2bb8576efdeb38e3844fc663f",
+    "bytes": 261
+  },
+  "backend/server/prompts/documentation/formats/nursing_v1.md": {
+    "sha256": "b9baba732ac840886a7a844b602875c496657db956b8519e51c24c39c51cb4d2",
+    "bytes": 500
+  },
+  "backend/server/prompts/documentation/formats/physician_update_v1.md": {
+    "sha256": "6dee93ac97bfbfe4b1dd40e5e1f9864257dcc6265e0d9fbcdbd34eee4417c762",
+    "bytes": 370
+  },
+  "backend/server/prompts/documentation/formats/referral_letter_v1.md": {
+    "sha256": "5ee40cae7bee68e613647e3775f054ae09f8a66ebd5c47ac8db53e272d0d2b25",
+    "bytes": 393
+  },
+  "backend/server/prompts/documentation/formats/sbar_v1.md": {
+    "sha256": "3f86b17fa1f086061795e51da81eeab15f5e1389270b87cc968a95da6e6c0b27",
+    "bytes": 435
+  },
+  "backend/server/prompts/documentation/formats/soap_v1.md": {
+    "sha256": "7cfa50ded7e9b4265f1efbd4d7a50b7d5c3b7203154fb51182a3708f5cc98153",
+    "bytes": 503
+  },
+  "backend/server/prompts/documentation/roles/nurse_practitioner_v1.md": {
+    "sha256": "4ce9acfad59fe0ccd0fe6daaa1de5eae02255931c844e757d8b68f7eb5b9e370",
+    "bytes": 365
+  },
+  "backend/server/prompts/documentation/roles/nurse_v1.md": {
+    "sha256": "4b060c5b26000f20ee240447df38e36ca23ba8cdcbdade7c998e362655a60ad6",
+    "bytes": 449
+  },
+  "backend/server/prompts/documentation/roles/other_clinician_v1.md": {
+    "sha256": "ad1c76ec23dc2cc39cd4d70702d8220567f600394f2443451816c4528ebf31ac",
+    "bytes": 347
+  },
+  "backend/server/prompts/documentation/roles/physician_v1.md": {
+    "sha256": "ec67d7695703e7c9acf2431aa842fa82ba5dd12d5f148cdde8d0ef619ba5f803",
+    "bytes": 375
+  },
+  "backend/server/prompts/manifest.json": {
+    "sha256": "1396f78a073ff6cf7fad8ca1eb0128ae7086c4e42f9b5af1654a06da3ff7dcd3",
+    "bytes": 4290
+  },
+  "backend/server/prompts/speech_primer.txt": {
+    "sha256": "ffc8cb33248d8bce3faabfd61394d59282d2a8c1fb352d26662a41c6a84478f2",
+    "bytes": 675
+  },
+  "backend/server/provider_models.py": {
+    "sha256": "e42cff6a134b1ab2bba4071f3e12409fe4a937a4feea3542be689a1ed5351f64",
+    "bytes": 888
+  },
+  "backend/server/providers.py": {
+    "sha256": "4a1e42fc7e0c33f908ff529d9eb15aa66aa64ea7a2afd033e10938e2af51faa2",
+    "bytes": 70321
+  },
+  "backend/server/quick_report_repair.py": {
+    "sha256": "12e9a7b14134a9eca9357e923db794dd1b64da026f8ee9d96a07572842ede041",
+    "bytes": 3240
+  },
+  "backend/server/quick_workflows.py": {
+    "sha256": "6092065e2b7a92288cf13098e94b25ae025ee5d27443a205e9963af8db6e7238",
+    "bytes": 19992
+  },
+  "backend/server/schemas.py": {
+    "sha256": "9c15bde98986a657212f0d530a0d67dab155600d45b7e849813f4f3e91c4b9f5",
+    "bytes": 8629
+  },
+  "backend/server/transfer_models.py": {
+    "sha256": "35b1e46156934a960509c46888025fef228110f28031a65b9548745ede0e236e",
+    "bytes": 1295
+  },
+  "backend/server/transfer_receiver/app.js": {
+    "sha256": "943b5db970c8411602cfe65fd403219b547b8341d796bebc7fcde4c070ea232b",
+    "bytes": 5245
+  },
+  "backend/server/transfer_receiver/index.html": {
+    "sha256": "612453cee03493bff3ef37fdfa44ab26109434009a4b42d083f62328356c921f",
+    "bytes": 4271
+  },
+  "backend/server/transfers.py": {
+    "sha256": "65a4dd6c693d1db783530874f2cad60067c95c0727ad916fc1379c013904eab4",
+    "bytes": 9101
+  },
+  "backend/server/work_privacy.py": {
+    "sha256": "6104b0d6c1a30b7c40daeb1ea4795ce06bddd4593e4a40d32ced39987468ca0a",
+    "bytes": 7591
+  },
+  "backend/tests/__pycache__/test_android_contract.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "dd765349b1e64539b7ae547f69e134dd598190bc75386bc372556899657ee3e6",
+    "bytes": 3186
+  },
+  "backend/tests/__pycache__/test_android_routes.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "b766206885f9da632bbc6c44f1561e69197b88a1a5855fda7f4e9005eae33c2f",
+    "bytes": 16033
+  },
+  "backend/tests/__pycache__/test_audio_event_loop.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "41abd138d3bef920aa187d6330c4a136dbf39f5c6f26ff9cf159d39355d16b9c",
+    "bytes": 17033
+  },
+  "backend/tests/__pycache__/test_audio_overlap_and_visits.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "477218d8d10acdf2832bc016ffa53b527fa6239f24f0ce25ae41182cca631eb4",
+    "bytes": 54723
+  },
+  "backend/tests/__pycache__/test_audio_parts.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "d2afdd7449f771cfb456f89db084bafa15fab26c9d6283dd51d10832e0bbf397",
+    "bytes": 21020
+  },
+  "backend/tests/__pycache__/test_audio_verification.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "85c8b29c5322372c4b0511de8e934c4bed4f441e88a41ed4bce14281b9dd59ff",
+    "bytes": 87319
+  },
+  "backend/tests/__pycache__/test_avoided_wording.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "94a04c39d5f162eb672657fd5226d5f13e6fd7a7d7ded5fc2909d760e58e90b6",
+    "bytes": 14777
+  },
+  "backend/tests/__pycache__/test_billing.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "4ff7624d0518d4affbb100fc2346b400f2c18ce5578a989204db569a02044fe3",
+    "bytes": 173069
+  },
+  "backend/tests/__pycache__/test_clinical.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "58637e37a728280499c784723b2c209c44ac4f4eae07968d00978628210a5f7a",
+    "bytes": 154546
+  },
+  "backend/tests/__pycache__/test_consultant_voice.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "90f14bc79fed92cd4fc401093c16fff55c15e29d781858bda4a9a1aab1907a67",
+    "bytes": 42515
+  },
+  "backend/tests/__pycache__/test_developer_diagnostics.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "11dfbf19b58f8d80399cd3f2fc97d58296c51bed0bcc7dd9402edd0caf7204df",
+    "bytes": 74395
+  },
+  "backend/tests/__pycache__/test_documentation_contract.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "2965ae8de10047f5948d65be6111fa2eee67a9e1e77fb0d689f42d05e9f83102",
+    "bytes": 52230
+  },
+  "backend/tests/__pycache__/test_documentation_layers.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "e7e83767aeccbd64f86b5a98456e1de108668392258730f6bafb64c0e3315bcf",
+    "bytes": 14841
+  },
+  "backend/tests/__pycache__/test_documentation_refinement.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "2b70f957e28379246d721d0fe9323c31aa9b7af2320887506770a9187e96697c",
+    "bytes": 16944
+  },
+  "backend/tests/__pycache__/test_error_feedback.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "a2dfce92159bab0476f266af539d0f48820856faeeed987c3189ea644ff791ca",
+    "bytes": 19784
+  },
+  "backend/tests/__pycache__/test_extraction_error_route.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "5a4fed13d8fcfb33a8fd7e846cb1c9c824483cbb88c0e1fecfda6b65f84c74b0",
+    "bytes": 7889
+  },
+  "backend/tests/__pycache__/test_identity.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "5a6f9a95985dcdf9b179b1d9970ca2afe116728afd02b7cf2e34d3a321300661",
+    "bytes": 30318
+  },
+  "backend/tests/__pycache__/test_kosmo.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "bc2f93777a1458cd55cca5824941e1d94a6f914c1fc286609811650c54fc0486",
+    "bytes": 3909
+  },
+  "backend/tests/__pycache__/test_media_review.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "b63d4a194322623becba9c38ec46d409f2ced3fcd51502943152556f626d5ab1",
+    "bytes": 14712
+  },
+  "backend/tests/__pycache__/test_mobile_session.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "2b85407e459ced5cba65a3fba997ed5b224b8880de5cbf4a565d3ef761bc31aa",
+    "bytes": 18856
+  },
+  "backend/tests/__pycache__/test_performance_privacy.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "2a199efc506b37405fd119275151c29c91314cff615004e020ab2a982d1685a6",
+    "bytes": 10029
+  },
+  "backend/tests/__pycache__/test_photo_collection.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "9f7a508cd0661829e8946258e421bb0413d96259b83c0d717e97cd54ef0fb877",
+    "bytes": 16939
+  },
+  "backend/tests/__pycache__/test_photo_metadata_privacy.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "7508909bb8c7038c8b5eb59ccd447fdfea7b593e4522b4e4090957b48c67ce2b",
+    "bytes": 8035
+  },
+  "backend/tests/__pycache__/test_photo_quality_retry.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "abb5f047a3d08339b151c5868035478e80c0205e7943c5f9ef010408581dc656",
+    "bytes": 52250
+  },
+  "backend/tests/__pycache__/test_photo_recovery.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "468fb0bfca0eb4114c545718468b3c7404e1fe6dce04c6bdc75a9f2925df247c",
+    "bytes": 23666
+  },
+  "backend/tests/__pycache__/test_pipeline_recovery.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "acf068a2bda9fabd050a862a917d0efabf138d2567d99428c3b514284bdd2d26",
+    "bytes": 30027
+  },
+  "backend/tests/__pycache__/test_providers.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "33331324f8bb823ff2d04f81dc29f62b8393ebd92fdea0e0a03df7bb1afc6e4b",
+    "bytes": 174353
+  },
+  "backend/tests/__pycache__/test_quick_report_repair.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "1ec89f4d8562c857cff650853c086c19d5e588560801d33c240cd71e87f3b9df",
+    "bytes": 65282
+  },
+  "backend/tests/__pycache__/test_quick_workflows.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "1f238184f267f3d12b38d6d4fdf74d7cae2a919ca7d4b5cb9a3780e7b95c8c57",
+    "bytes": 76312
+  },
+  "backend/tests/__pycache__/test_redteam.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "5a7e2ca4dba085addecd86c7df404a323b2c2752f8ea0adb64a32803568b0fd1",
+    "bytes": 5947
+  },
+  "backend/tests/__pycache__/test_report_retry_after_failure.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "2b4f777443094989c6bfcb7d61e506f8d94d908ee25e63ec72813f5c681fcb54",
+    "bytes": 14881
+  },
+  "backend/tests/__pycache__/test_retry_after_propagation.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "16528aaed6e3f652f73931023b29e83a918e7d077660a4c880c0fd3be54e7b62",
+    "bytes": 33508
+  },
+  "backend/tests/__pycache__/test_speech_loops.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "19775a73b6354d68b52dbc5f04afc8948fbaf77ac9c8a6cca514d0e20e359efd",
+    "bytes": 18546
+  },
+  "backend/tests/__pycache__/test_stuck_credit_recovery.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "4e9d3b06b368daa099d214b3067f0070a42409deabaef7bdb90e36ce29856997",
+    "bytes": 68440
+  },
+  "backend/tests/__pycache__/test_targeted_work_erasure.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "619525cb8fdf5e12a028696df1d60c08b60f9d27767050a0cd813a837000d21f",
+    "bytes": 8847
+  },
+  "backend/tests/__pycache__/test_transfers.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "9a340a27808eaf79170a8340e8dbc410341208142311c8d02439c46c8c770031",
+    "bytes": 88987
+  },
+  "backend/tests/__pycache__/test_work_privacy.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "0bfe3f542ed74dadd7d2b199a6734a23b15a6907833dc4c79bd04db4b3c21f99",
+    "bytes": 16515
+  },
+  "backend/tests/__pycache__/test_workflow_credit_refund.cpython-313-pytest-9.0.2.pyc": {
+    "sha256": "e4c72e3b8a7609530311224f444dbbab1ffefbdb8f43c43588399745c4ddf7f1",
+    "bytes": 13059
+  },
+  "backend/tests/clinical_corpus.json": {
+    "sha256": "19ec86bb7be9467ea994526e295cfb2a1054453050ee8fd7d75bff9e8d8cb740",
+    "bytes": 2087
+  },
+  "backend/tests/fixtures/documentation_layers_synthetic.json": {
+    "sha256": "7f8c150666aa511895e877c378a26244033721a3ac7bc11b67795fbbc5b9f73a",
+    "bytes": 5418
+  },
+  "backend/tests/test_android_contract.py": {
+    "sha256": "5fbcebe546a5e0ff40e189839911d507ecd1bd50ce071071908ae3042217d36a",
+    "bytes": 912
+  },
+  "backend/tests/test_android_routes.py": {
+    "sha256": "6e88e0d3103f75a78fbe31990f1cddba51e28a6dde798a00d3563e1390a2e74d",
+    "bytes": 4651
+  },
+  "backend/tests/test_audio_event_loop.py": {
+    "sha256": "8689f6f0d7026f92717e6d182a020717e23cd19f678ba6e7e8d164082c4ad046",
+    "bytes": 4710
+  },
+  "backend/tests/test_audio_overlap_and_visits.py": {
+    "sha256": "f37cfcd5855caeae9f2e8f7ff77d8fb99fe34f5845fff2052666a228d253d7fe",
+    "bytes": 9728
+  },
+  "backend/tests/test_audio_parts.py": {
+    "sha256": "e769e8a253de19849328e6d351ec206f65bc833974f4fa724aa80758b8a99b8e",
+    "bytes": 2976
+  },
+  "backend/tests/test_audio_verification.py": {
+    "sha256": "1ba413a6fec63f02376c622b14ef48d6ed8591732461c8240caf7452bd3c6a51",
+    "bytes": 15343
+  },
+  "backend/tests/test_avoided_wording.py": {
+    "sha256": "edef2e46b5194cf5d653d3c8cf65863f83b26fa6b29362887fc49e2f29a6aa03",
+    "bytes": 2667
+  },
+  "backend/tests/test_billing.py": {
+    "sha256": "35e7a585afbc9793a9709f850a849bb20291b6c5ebcaa923e6516b44460cb1d2",
+    "bytes": 30805
+  },
+  "backend/tests/test_clinical.py": {
+    "sha256": "ae753926eea9fb353bb10bfec8d9c7d4cfc5501b38870de1987e2e87d43cf54d",
+    "bytes": 39294
+  },
+  "backend/tests/test_consultant_voice.py": {
+    "sha256": "64f80ee4889d2591553f02169113d9e8be5dc97ef1d43d3ea7f12342ff0e7bb5",
+    "bytes": 9745
+  },
+  "backend/tests/test_developer_diagnostics.py": {
+    "sha256": "cb04c76aa67f935496b26102a3ab4bbcbc3315e2f82b7d26e8169d3cfd281b62",
+    "bytes": 13805
+  },
+  "backend/tests/test_documentation_contract.py": {
+    "sha256": "c4f092cc703574b9572a79455e61c4215f60fc815673a07706351387ed889554",
+    "bytes": 11748
+  },
+  "backend/tests/test_documentation_layers.py": {
+    "sha256": "721c1f15be5fbd2ef412612b3e26073b25de08409311042b7bbadac70acb7be5",
+    "bytes": 3181
+  },
+  "backend/tests/test_documentation_refinement.py": {
+    "sha256": "43f2f0c645049b514ef168d708911ee09575ee5c84304bc02e0ba6cbc7b6ee67",
+    "bytes": 4702
+  },
+  "backend/tests/test_error_feedback.py": {
+    "sha256": "5f048d4178ced033d2665d1854f9d623a2f76cc703da91a4f0858ce382050d72",
+    "bytes": 3327
+  },
+  "backend/tests/test_extraction_error_route.py": {
+    "sha256": "fd2430caebdb8e7f198a93f3b37f8b9e01b00661925ad54e05161e9cf2037a47",
+    "bytes": 1506
+  },
+  "backend/tests/test_identity.py": {
+    "sha256": "ff85075be9c2ca8d1531f5fe864c62f9b99b30228a2aa3d992991951cccc0beb",
+    "bytes": 5330
+  },
+  "backend/tests/test_kosmo.py": {
+    "sha256": "14d9545ad89eb9056debcc053479d901ec74c1e6bc291c23c12d658701bae956",
+    "bytes": 1635
+  },
+  "backend/tests/test_media_review.py": {
+    "sha256": "d99f45b0ef211e8fef5046e3737b6faf82c862b32730d2b554893afe29e2fff3",
+    "bytes": 2373
+  },
+  "backend/tests/test_mobile_session.py": {
+    "sha256": "0d8183b8be9620eb97362652b499e74c3e64f58d77d70ecf5c08eb069c21ad63",
+    "bytes": 2314
+  },
+  "backend/tests/test_performance_privacy.py": {
+    "sha256": "5b37b2f64b2de22d5cc49592944e37908e2f740a98ce5e61b0ac42af35526f5b",
+    "bytes": 1764
+  },
+  "backend/tests/test_photo_collection.py": {
+    "sha256": "082fe9bf1428c9045bd5f0f34f9927a87e29a9cb16d5f421ff36f7b25b29ae80",
+    "bytes": 2255
+  },
+  "backend/tests/test_photo_metadata_privacy.py": {
+    "sha256": "456e4a8b4d60a9636967526fde387ddbb3e6c4f61320ba0b6a47a21112b1f7d9",
+    "bytes": 1370
+  },
+  "backend/tests/test_photo_quality_retry.py": {
+    "sha256": "64325b07f25e7aac10f01dd4519705be84740a61eda0f5584f4ed3baa3a416c9",
+    "bytes": 9003
+  },
+  "backend/tests/test_photo_recovery.py": {
+    "sha256": "e2204c43e286147926e673a14a911bb70b83631b07a830a166fd04a684e482a5",
+    "bytes": 4382
+  },
+  "backend/tests/test_pipeline_recovery.py": {
+    "sha256": "7ae2e9e41e780044dbc81763796e4873c6ebbbdf580ef12a3c8c34dee585249d",
+    "bytes": 5819
+  },
+  "backend/tests/test_providers.py": {
+    "sha256": "80fa3b85f29e7ac8f0fcca6f26eafe661f347258c1b5533f4acfa529977d6296",
+    "bytes": 37362
+  },
+  "backend/tests/test_quick_report_repair.py": {
+    "sha256": "eebaf9c1ae6731cb35f00a2ef2a1f974d5424313faae0fe48eb895c7741a21cb",
+    "bytes": 12669
+  },
+  "backend/tests/test_quick_workflows.py": {
+    "sha256": "70558ab872b1cc77c1433a39b1af061ab977d0473cfea39977fafb699618be2b",
+    "bytes": 17019
+  },
+  "backend/tests/test_redteam.py": {
+    "sha256": "34a6bba43df13510cdd0e34c43c0d17d9bfc6e899e7e73fced52e5571ddf3272",
+    "bytes": 1943
+  },
+  "backend/tests/test_report_retry_after_failure.py": {
+    "sha256": "32877a3479a4bf6d347432fae00b9ab514fa9683be98c777446488c55c115a4d",
+    "bytes": 3287
+  },
+  "backend/tests/test_retry_after_propagation.py": {
+    "sha256": "457cf925c443c5c50b70e7557a3e5affdda4b12f37b5bed8901db9cfbaff7a1c",
+    "bytes": 4606
+  },
+  "backend/tests/test_speech_loops.py": {
+    "sha256": "33cb113b383bb2c8e1970e5f71b7e3a2ed4e7caa6663e0c0b81213a5aa4a7f1f",
+    "bytes": 4079
+  },
+  "backend/tests/test_stuck_credit_recovery.py": {
+    "sha256": "cd7c7c92f1b577605dbdcd81ce11bac9ca33de4d9fb5ba6a9d95a83181ca4a87",
+    "bytes": 12974
+  },
+  "backend/tests/test_targeted_work_erasure.py": {
+    "sha256": "42a723d5374b5727a8c05162b090dd209c5b4b3afa9e2f12f77359810010f958",
+    "bytes": 1385
+  },
+  "backend/tests/test_transfers.py": {
+    "sha256": "7a67a4aee204bbb0a326ff4e963c33d9a51aa7430f6c151fb65dd16c5eec47be",
+    "bytes": 13188
+  },
+  "backend/tests/test_work_privacy.py": {
+    "sha256": "0558c19cd69cf1f6d46f19d09779b2beb5335f49c1f9de20748e130a9f8310cc",
+    "bytes": 2727
+  },
+  "backend/tests/test_workflow_credit_refund.py": {
+    "sha256": "b9734089a48f08fff77adeedcd11e10ea86d15e841b033021485e76505cf6447",
+    "bytes": 1460
+  },
+  "ci/run-phone-tests.sh": {
+    "sha256": "411444454db15fd2b7778d900663b4519569279065148391c53adcdb46ed84d7",
+    "bytes": 4290
+  },
+  "ci/verify-build-flags.sh": {
+    "sha256": "5e9a5ad907c6eb4d569a91098cd11b25b6a2d751f4c8ed9cc282d6d690abeef4",
+    "bytes": 1400
+  },
+  "release-artifacts/delivery.json": {
+    "sha256": "108ae84d0125af520c074de3c8addd6d491b915059dc21477f0a55f64a8bda9a",
+    "bytes": 1587
+  },
+  "release-artifacts/pipeline-recovery-report.md": {
+    "sha256": "19b7e29a204278da050ca844a4ed6d50754d56505f4413620bc2c9e5bbe4cc30",
+    "bytes": 7150
+  },
+  "sandbox/.gitignore": {
+    "sha256": "d1ac0fbbb11795a0793d3000c9023a8dcb4e814052774eb457eccdba58226e82",
+    "bytes": 24
+  },
+  "sandbox/Go-Offline.ps1": {
+    "sha256": "dd57319b5586a727fdd64e08073c957cebe5874888204df460c0c8b0380fab78",
+    "bytes": 315
+  },
+  "sandbox/Go-Online.ps1": {
+    "sha256": "cd9e0e8da8b8b139ee188874e1ccfd7561c682320b23d165bef7bb7c12089757",
+    "bytes": 189
+  },
+  "sandbox/Level3-CreateTestOwner.ps1": {
+    "sha256": "85ddda8d03e7047aea3e067e90b17fbdd3c00aadefe103a23b3b8d9969629b3d",
+    "bytes": 351
+  },
+  "sandbox/Run-KillRecordingTest.ps1": {
+    "sha256": "336a915221f0f1897fcf69176a2b21e739436d3cb3125f3a18304cc510a59744",
+    "bytes": 1394
+  },
+  "sandbox/Run-Level1-LocalAuth.ps1": {
+    "sha256": "867ab4ad6bb9fcfa9f22b049e3dc4c81641c36b707b7e8e51c29985ab25e0cb6",
+    "bytes": 445
+  },
+  "sandbox/Run-Level2-SimulatedPipeline.ps1": {
+    "sha256": "feb0d6e0533a73e1ecbd4e516bd2ce9d77a2636e6ab962ac572cc8e64bf69ce5",
+    "bytes": 581
+  },
+  "sandbox/Run-Level3-RealAI-SyntheticOnly.ps1": {
+    "sha256": "d740186ffd15e099560e3828d88101401c28caf98b0e4e854f039229f5798b22",
+    "bytes": 965
+  },
+  "sandbox/Setup-Sandbox.ps1": {
+    "sha256": "e9f39d6080a85e9d9e5afb09671c8f697bb4575b2be7cf503f3c6f279123485f",
+    "bytes": 1165
+  },
+  "sandbox/_common.ps1": {
+    "sha256": "5437ccf5809eae4ce71c746bf115e1dae76fbf99e83ecfcea4b28d16460d9f46",
+    "bytes": 1506
+  },
+  "sandbox/_level3_env.ps1": {
+    "sha256": "6faa2f46ca64164101b77cad458b8277158c32b67019a734cd083e0506355ba4",
+    "bytes": 1766
+  },
+  "sandbox/level3.env.example": {
+    "sha256": "413eff96cd00367620a27a790470747b68af7b32a3ce1f65343e991272b0cfb7",
+    "bytes": 411
+  },
+  "source-changes/1.8.5-test10/0900-test10-decisions-and-corrections.patch": {
+    "sha256": "207366d7f19be325a8a3d441529eb9a237ed4d7f5493e1a320071c0b0f5dcdfc",
+    "bytes": 486422
+  },
+  "source-changes/1.8.5-test2/0002-offline-startup-auth.patch": {
+    "sha256": "93e73ef51597015349c439a4e43882adafd00a544e3b15bf9419a8b8e91d2423",
+    "bytes": 6717
+  },
+  "source-changes/1.8.5-test2/0002b-csrf-rejection-recovery.patch": {
+    "sha256": "0cde215fb92225643c8fa8ed893f7f4c4c65e1074d4a05cf2216f91cc839853d",
+    "bytes": 9031
+  },
+  "source-changes/1.8.5-test2/0003-recording-service-startup.patch": {
+    "sha256": "b1c1ba61ac2287e2cde5b7d17aa78ebf775d1f374ca50044f59e88ea3e72cc8c",
+    "bytes": 5860
+  },
+  "source-changes/1.8.5-test2/0007-audio-probes-off-event-loop.patch": {
+    "sha256": "de572b4126a528b87672654dd7942151646eddfef503c25b747a067de1b12cd3",
+    "bytes": 7564
+  },
+  "source-changes/1.8.5-test2/0100-version-1.8.5-test2.patch": {
+    "sha256": "a8c55d85c68130d544681987073c32224cc3bc0a96d2402a229742ce933b8f98",
+    "bytes": 1131
+  },
+  "source-changes/1.8.5-test2/0101-fix-csrf-integration-test.patch": {
+    "sha256": "3f7f98cb578a6cee4d6fbfc1a8ae42f3c79d691a50e10cd61f1cb1d7323ade9b",
+    "bytes": 2378
+  },
+  "source-changes/1.8.5-test3/0200-sandbox-build-and-test-setup.patch": {
+    "sha256": "403efe4627011b6d0001716b1013297b91c76f3484b7eccfab42e0d8abb922b8",
+    "bytes": 19678
+  },
+  "source-changes/1.8.5-test4/0300-review-fixes-and-verification.patch": {
+    "sha256": "cbe44a17d917f7938da26d67adf3379fb6b33cb8efe1329f116226d77048ddef",
+    "bytes": 11174
+  },
+  "source-changes/1.8.5-test5/0400-crash-safe-recording-prototype-and-lease-plan.patch": {
+    "sha256": "ed947c9322bf496fe92f6c9ea242b9861b4776fd8b3a148c66c733373bcc4fb1",
+    "bytes": 66178
+  },
+  "source-changes/1.8.5-test6/0500-encrypted-recording-retention-and-recovery-fixes.patch": {
+    "sha256": "6c7848dab69415ddd9de5166cce284bb55b4bd9317c707e59bf1c73cba8623d8",
+    "bytes": 262780
+  },
+  "source-changes/1.8.5-test7/0600-sealed-recording-retention-and-lease-v2.patch": {
+    "sha256": "e50eead83ac294658f9558aed842734eeb68f4e8f1d1013775508e9b745b9712",
+    "bytes": 657507
+  },
+  "source-changes/1.8.5-test8/0700-sandbox-visit-continuation-draft-retention-lease-v3.patch": {
+    "sha256": "ee3294b1d9c645aebbc25349f753ffdbf9bd86f323eb8c060c3fbee917d38f05",
+    "bytes": 89676
+  },
+  "source-changes/1.8.5-test9/0800-test9-report-retry-wording-speech-loops-pin-loop.patch": {
+    "sha256": "843ebf6ecd85f1880ba032d9fa84fb70d82f7fde0fe4da54ee0abf7b5ea7520b",
+    "bytes": 172068
+  },
+  "source-changes/Pipeline-recovery-1.8.5-test1.patch": {
+    "sha256": "a1b27c84e14a2dd8cab1199747adb7a03bdefb9b84692986aa6a5d983c074339",
+    "bytes": 23920
+  },
+  "test-tools/controlled_pipeline_api.py": {
+    "sha256": "801d97813c19ac386a92943ebe1a0130ea5e060f5463e728082706f83da36cd3",
+    "bytes": 7627
+  },
+  "verification/android-api-typecheck-test10.log": {
+    "sha256": "fda7f291e41a31928a26b2670c98f4d31e7301994abe173f0f66e81ea18a1a58",
+    "bytes": 1979
+  },
+  "verification/android-api-typecheck-test9.log": {
+    "sha256": "107b75c7e218a79f7654822ffaff0a9fc1526b3ad3861f1210e97f65b0b8b780",
+    "bytes": 1216
+  },
+  "verification/android-stubs/MainStandIns.kt": {
+    "sha256": "7cb41cab6a82393af1d8f91b61c15ff36cf01cef4740a72315be51e15ea33058",
+    "bytes": 2835
+  },
+  "verification/android-stubs/README.md": {
+    "sha256": "eca3d00d4ecc537f3c21db18ab9eb1532441ec34808a993495785fff87d816eb",
+    "bytes": 683
+  },
+  "verification/android-stubs/extract_real.py": {
+    "sha256": "82d0712e5e455c318edd6944ae09667e6459c50987800a4cc12b1d3f203b82bc",
+    "bytes": 1708
+  },
+  "verification/android-stubs/java/android/Manifest.java": {
+    "sha256": "2ea5641c9064964b25ab67521fb207a95ace3c807d268d6452135d662f87ced4",
+    "bytes": 162
+  },
+  "verification/android-stubs/java/android/R.java": {
+    "sha256": "2ba09b3759d3e718cfed0c1f99aaac45d1d28ada61bd855f3b48ae44fe122094",
+    "bytes": 180
+  },
+  "verification/android-stubs/java/android/app/Notification.java": {
+    "sha256": "7b2bfc4781de381e4807cb8be3301b2e430d8b538f94a5044d48cd9ee8eb0779",
+    "bytes": 1389
+  },
+  "verification/android-stubs/java/android/app/NotificationChannel.java": {
+    "sha256": "73b6af5dec4e00b3016f2ff46e861ea080ee6c111e0af20879d179e6237b9b20",
+    "bytes": 427
+  },
+  "verification/android-stubs/java/android/app/NotificationManager.java": {
+    "sha256": "1bf2a0fd31b2be2d50a581e66d2ea3d721a378e2d3d7a4d8de24d3fc5453c6c2",
+    "bytes": 353
+  },
+  "verification/android-stubs/java/android/app/PendingIntent.java": {
+    "sha256": "87d8ec811c54799330b3ad9de5804cc7f518873d0eb5fa7f3e21ca55833ef633",
+    "bytes": 424
+  },
+  "verification/android-stubs/java/android/app/Service.java": {
+    "sha256": "d48cd59132b579f38423f1c3e46aab98dd3943fbbb471b3210099b3e7aca9e05",
+    "bytes": 658
+  },
+  "verification/android-stubs/java/android/app/job/JobInfo.java": {
+    "sha256": "9f2d868870cc0778b293c6f6374bb357b47983a8e343bbfae976f166e6b8991e",
+    "bytes": 313
+  },
+  "verification/android-stubs/java/android/app/job/JobParameters.java": {
+    "sha256": "b04cec471570c523e0506cf39204899dcf7f0419f7d823086665f587c556f707",
+    "bytes": 58
+  },
+  "verification/android-stubs/java/android/app/job/JobScheduler.java": {
+    "sha256": "fc0b1325b7e2eb0cfa63cca84ec575ace61c277ee56ff9c841ed55b0df36d6d3",
+    "bytes": 104
+  },
+  "verification/android-stubs/java/android/app/job/JobService.java": {
+    "sha256": "95968f8552028d8506ff31877fe68cff3db264fc7fe8b63670d4b6b0c9ab37c8",
+    "bytes": 351
+  },
+  "verification/android-stubs/java/android/content/ComponentName.java": {
+    "sha256": "f0d819601caebd6b888e4fd65252e64dd11d50a40ba5bd0b8f1662533a3e3ee4",
+    "bytes": 106
+  },
+  "verification/android-stubs/java/android/content/Context.java": {
+    "sha256": "d9ffd8bfed49f414927b3377241e682436603d87ca51f692b84c32d8b2653040",
+    "bytes": 591
+  },
+  "verification/android-stubs/java/android/content/ContextWrapper.java": {
+    "sha256": "0a188b6685bea2a9dd2837b22e19d34e5086607eb42c576b57553eabb4336470",
+    "bytes": 712
+  },
+  "verification/android-stubs/java/android/content/Intent.java": {
+    "sha256": "ba777e026eec5a783a0fdea7950a01f1785ac0af2071dec96e4529c64d911e54",
+    "bytes": 326
+  },
+  "verification/android-stubs/java/android/content/pm/PackageManager.java": {
+    "sha256": "ca1ca131cf72dd072c0630ad90546ebeae945b78ee7bef7482da1ec7b011f022",
+    "bytes": 207
+  },
+  "verification/android-stubs/java/android/content/pm/ServiceInfo.java": {
+    "sha256": "f68a38bd9a7cdbb54162a4687db43b4dcd88c82e3929219912f3ef23df3b5ff6",
+    "bytes": 124
+  },
+  "verification/android-stubs/java/android/graphics/drawable/Icon.java": {
+    "sha256": "5cce6829383d6da8c35242af45f26721bb56269d2648040afa86c5f579451060",
+    "bytes": 59
+  },
+  "verification/android-stubs/java/android/media/AudioFormat.java": {
+    "sha256": "45a97563c3fb91b7691450b190d5e444bb487ce943ec5790c107a460ab68787e",
+    "bytes": 147
+  },
+  "verification/android-stubs/java/android/media/AudioRecord.java": {
+    "sha256": "e71a77ee9760d735224d63d3683465ad297e7b884a8510ccbf6184cf856a4370",
+    "bytes": 570
+  },
+  "verification/android-stubs/java/android/media/AudioRecordingConfiguration.java": {
+    "sha256": "e3729ff31cc00e7d9931c9bf3ef3e85b8bad3e3c7e2c165146ed9c7c6796414a",
+    "bytes": 121
+  },
+  "verification/android-stubs/java/android/media/MediaCodec.java": {
+    "sha256": "f9baa628ff17865d86e2409fbd018a97dc67e3cff957d010c81c9c19e84d54fd",
+    "bytes": 1137
+  },
+  "verification/android-stubs/java/android/media/MediaCodecInfo.java": {
+    "sha256": "2b7c5bb257339a096da601372663e218d04bf4fc5c7300d5f2d288707a4d09d2",
+    "bytes": 145
+  },
+  "verification/android-stubs/java/android/media/MediaDataSource.java": {
+    "sha256": "e81075be1c540a5c8308ed1e31af3397dab154d152684b2822628ea46efc5cd8",
+    "bytes": 262
+  },
+  "verification/android-stubs/java/android/media/MediaExtractor.java": {
+    "sha256": "89bd09792f532cc012eddc07dd9b32053827961e4339953d4a3d20eaa2edfacd",
+    "bytes": 658
+  },
+  "verification/android-stubs/java/android/media/MediaFormat.java": {
+    "sha256": "9fc90cac876ee5c6f33ef5a4fab797f16ac20879f4d74545957cda9e5c07c7e7",
+    "bytes": 606
+  },
+  "verification/android-stubs/java/android/media/MediaMetadataRetriever.java": {
+    "sha256": "e9caaf64187e4ff2b1279728f1b1762d189ffceb599d1c048f08e22801ba9c6c",
+    "bytes": 285
+  },
+  "verification/android-stubs/java/android/media/MediaMuxer.java": {
+    "sha256": "d8c4c254753e041779b22b6f095fa342988b8954da0870d83945f032154ec7d2",
+    "bytes": 428
+  },
+  "verification/android-stubs/java/android/media/MediaPlayer.java": {
+    "sha256": "570ae7fd273ab5f52f82f1eefab2e27199db64ed386e91aefd60e76c6a63a4c2",
+    "bytes": 195
+  },
+  "verification/android-stubs/java/android/media/MediaRecorder.java": {
+    "sha256": "f1652342540f85b55a79ff6c9b59dabc9f7018fee364edcc3c069a31adba1321",
+    "bytes": 130
+  },
+  "verification/android-stubs/java/android/net/Uri.java": {
+    "sha256": "3cb2d99bb8a117b8951f8e6fb83a14918be0d23bd8a2cb6cdc05adbdc63265ab",
+    "bytes": 44
+  },
+  "verification/android-stubs/java/android/os/Build.java": {
+    "sha256": "1870b39b4eb3d653110165e56214813d8d04cb2f358f8a7142830e02c25a3f98",
+    "bytes": 313
+  },
+  "verification/android-stubs/java/android/os/Handler.java": {
+    "sha256": "8d9b9c9d415e49d6a1af3af3cd6200e635f89f000e2b96f6e902f2a7bac87d57",
+    "bytes": 314
+  },
+  "verification/android-stubs/java/android/os/IBinder.java": {
+    "sha256": "139e11fd510cdae3b1f8925d5ddebcedcd6d2535c8bbf7d192b8a55a34796ca4",
+    "bytes": 51
+  },
+  "verification/android-stubs/java/android/os/Looper.java": {
+    "sha256": "3c82ccdad908d572d177b3bc4685cb177ee8de5813eee5459004b3a7213dc8db",
+    "bytes": 99
+  },
+  "verification/android-stubs/java/android/os/StatFs.java": {
+    "sha256": "93afdf1fad7d548ab7e079ca468a2f7a468b9402a2dc155cd1b784a35a7263ee",
+    "bytes": 165
+  },
+  "verification/android-stubs/java/android/os/SystemClock.java": {
+    "sha256": "3f832b4f39728744624762730d4ae47f1623522e0d5c3ea9e2b7c075c4e7bc3c",
+    "bytes": 101
+  },
+  "verification/android-stubs/java/android/security/keystore/KeyGenParameterSpec.java": {
+    "sha256": "d093ed3a48317c9621f87df3b007871e0f1e33700eeaf38212429254ef7a8e17",
+    "bytes": 686
+  },
+  "verification/android-stubs/java/android/security/keystore/KeyProperties.java": {
+    "sha256": "d1b33108251cecc02dfae8c181836ca56dd1feb0e1ca1ff1b96c2af46db6aeec",
+    "bytes": 329
+  },
+  "verification/android-stubs/java/android/util/AtomicFile.java": {
+    "sha256": "c0210a3f1b6c8d9976a54c2f840618b15e206c012668658346b651fae0199a05",
+    "bytes": 410
+  },
+  "verification/android-stubs/java/android/view/Surface.java": {
+    "sha256": "c4ba4cc6c547bb44d9ed70e0c10078f6c32b55d3f25957827928875b6efa9375",
+    "bytes": 49
+  },
+  "verification/android-stubs/java/com/woundcopilot/android/BuildConfig.java": {
+    "sha256": "3c510119c8192a544df22878e4defc5be975d6bc6efc7c818cbb82210ffbadf9",
+    "bytes": 271
+  },
+  "verification/android-stubs/java/org/json/JSONArray.java": {
+    "sha256": "018ce91a58adb406b08a2d5266ed1c9c899372cb34c3965e4f6be252f79a6a84",
+    "bytes": 400
+  },
+  "verification/android-stubs/java/org/json/JSONException.java": {
+    "sha256": "c30024d2618d9b91c5ff8aec8eabd221578150944dae39de0c529c8e3d667f90",
+    "bytes": 113
+  },
+  "verification/android-stubs/java/org/json/JSONObject.java": {
+    "sha256": "765497ef3b326ce88443647ad881e742f2c0c7e0a3322596b1a1ff2f021110e3",
+    "bytes": 1129
+  },
+  "verification/android-stubs/make_stubs.py": {
+    "sha256": "ca8ff2f3fbf41b14e3a791ec19e0a748b859c4924017735d825dec00750c4eb3",
+    "bytes": 15712
+  },
+  "verification/androidx-standins/AndroidxStandIns.kt": {
+    "sha256": "1aee393a0d7d1ae575cfca1b61ea48397e9542d73b50245eb56528c81c2a5758",
+    "bytes": 1454
+  },
+  "verification/androidx-standins/CoreStandIns.kt": {
+    "sha256": "116ffdf48695d6eace8685d7d9ee2b6906673a64ae8ae208859bc51501025da5",
+    "bytes": 1320
+  },
+  "verification/androidx-standins/LifecycleStandIns.kt": {
+    "sha256": "d1b22c37e61df0d50d58833ba3bc2d446cece1136536b64182e8fc0e8e8cc349",
+    "bytes": 416
+  },
+  "verification/backend-pytest-test10.log": {
+    "sha256": "2a0b36d773bb2a0c9cf5025502836732528c5d2648d9a9a223b71d97510e8010",
+    "bytes": 90449
+  },
+  "verification/backend-pytest-test9.log": {
+    "sha256": "6a460934880e22d0531eeb57f0eaa2e628a2fffec4284a8fdb4aa634ff2ef4bf",
+    "bytes": 86640
+  },
+  "verification/exposed-bytes-check.log": {
+    "sha256": "a48fc1c8fea1e21100a652554ea6abbec047129be2e3ec978a177ffb8be974ed",
+    "bytes": 387
+  },
+  "verification/extract_pure_kotlin.py": {
+    "sha256": "9c938ba32c2ce02046a0261f05ed853d58848915a986153d8158a7874f837205",
+    "bytes": 1075
+  },
+  "verification/handoff-check.log": {
+    "sha256": "8869a9d487e00baea4884f75b64a10e19a2d8715d03d3380d17c851d80c7c0f5",
+    "bytes": 1122
+  },
+  "verification/instance-clash-reproduction.log": {
+    "sha256": "e442ae928c847a775f7576f02450d7b2bd80bcd36c9b192ba21c674a0a43834f",
+    "bytes": 556
+  },
+  "verification/kill-experiment.log": {
+    "sha256": "2ab411f56ac8c16b6b3fb4d4972908c5d73ca7219b417cb844667917d593121c",
+    "bytes": 390
+  },
+  "verification/kotlin-logic-tests-test10.log": {
+    "sha256": "e91fa4b0e0945c05198d5df0a847fa749a35e16baf77ac1e2effad3bc53c6dbc",
+    "bytes": 5072
+  },
+  "verification/kotlin-logic-tests-test9.log": {
+    "sha256": "608cc7ea786985b8a1eae600b6b029c311976ed3635caf06786a40fb8aaaf302",
+    "bytes": 5058
+  },
+  "verification/kotlin-logic-tests.log": {
+    "sha256": "8c58ceeafa7decde72591eee2e8972ea030c844f6162aca1e11833fb0539ea01",
+    "bytes": 318
+  },
+  "verification/kotlin-syntax-check.log": {
+    "sha256": "9d5a0684f37f6acdddcf504580a749bc1afe0a369b230e9e8fb3e34da288bd37",
+    "bytes": 320
+  },
+  "verification/lease_pg.log": {
+    "sha256": "6d20e31661cd85b20b5f425e4574dfab5560523ea9aa3e1763c3c93ff26e248c",
+    "bytes": 5644
+  },
+  "verification/make_fixtures.sh": {
+    "sha256": "8667ce80c40b5ff6577fbb1a1cc6b89a99a819bd441df70a0a46a9a16d3bceba",
+    "bytes": 1444
+  },
+  "verification/mutation-checks.log": {
+    "sha256": "3d1ed3d012dd01908398e4ca1f5471ad39a57fba6afea974b84939673ecf0f0b",
+    "bytes": 1943
+  },
+  "verification/pdf-reader-event-loop-check.log": {
+    "sha256": "7ccc468ba9988c4374b108ca757f7b12a90bae6cebd8f0e2fd50709ea197c3e4",
+    "bytes": 306
+  },
+  "verification/prototype/HandoffPipeline.kt": {
+    "sha256": "456be8a7629d4ebbf9e3e0858392f4d379e9a92e8cf7201627e9c34fb633a402",
+    "bytes": 2947
+  },
+  "verification/prototype/KillExperiment.kt": {
+    "sha256": "00cbda8c25c91382d2bc434c144332275d1a4ab74dbfefc11bbb77fd8d9c3869",
+    "bytes": 8721
+  },
+  "verification/prototype/RealAudioPipeline.kt": {
+    "sha256": "115ad77814028d9ec297e6b4eba682b071e2305a65cd2cf82e95df4952327323",
+    "bytes": 2940
+  },
+  "verification/prototype/SealedUploadPipeline.kt": {
+    "sha256": "2a01ec0cfabf1322210f29b1faa0743e119737052d6551854fbebedc9a11720e",
+    "bytes": 3560
+  },
+  "verification/prototype/handoff_check.py": {
+    "sha256": "dd5bb039d25c15a32b170d378bdda36a6dcbf27464fee533d51a0a977a94458f",
+    "bytes": 4259
+  },
+  "verification/prototype/lease_pg_test.py": {
+    "sha256": "afdaf69284056346ab9c896afc8c28a783c51f9ce3f3345ac489aeb5dd752939",
+    "bytes": 19636
+  },
+  "verification/prototype/lease_schema.sql": {
+    "sha256": "bd9fe08d9f89b788d078a4cd29ea317f07e56605f62b657c9d0aa3379b06d19a",
+    "bytes": 13522
+  },
+  "verification/prototype/real_audio_check.py": {
+    "sha256": "601fe1483117126170a13b571fd7b283fa5d23dcfafc36d46e28131c104ce9ee",
+    "bytes": 10545
+  },
+  "verification/prototype/sealed_upload_check.py": {
+    "sha256": "53ee262415e8bb499196e8bae61aeb412ddb9aa532e4e933ca9a3dd753842e7c",
+    "bytes": 8821
+  },
+  "verification/prototype/superseded-lease-v1/README.md": {
+    "sha256": "8afbf06aaf4d952649dec9252315c2bffa46c1c33efd437d9aa363a51e9ddb4f",
+    "bytes": 614
+  },
+  "verification/prototype/superseded-lease-v1/lease_pg.log": {
+    "sha256": "2b8ccdfe758f0ae495647b78f2b9efc210dd22726fab27ad97ad21b4bd74311c",
+    "bytes": 2143
+  },
+  "verification/prototype/superseded-lease-v1/lease_pg_test.py": {
+    "sha256": "2da896bb803c2b4c43c9c0586f4295d3e3b911d0ce146797c4c5623c95a39306",
+    "bytes": 11112
+  },
+  "verification/prototype/superseded-lease-v1/lease_schema.sql": {
+    "sha256": "6f30ef51ad793fc2da6c53377c23f6779c3fccda095f5f13477503f62989d642",
+    "bytes": 7182
+  },
+  "verification/prototype/superseded-lease-v1/lease_sim.log": {
+    "sha256": "d0187914120322edd0867a9f9da3f0eb6ef14a15cf2eb0231f8713931235f1e5",
+    "bytes": 1033
+  },
+  "verification/prototype/superseded-lease-v1/lease_sim.py": {
+    "sha256": "e350010725a56f34eafd0da704f46bc5fe3bd753f7b6c8806a5e34b69a4a5567",
+    "bytes": 12112
+  },
+  "verification/python-guard-catches-old-bug.log": {
+    "sha256": "11b53b61e1408b743c4fdd1aedb7051c5fc021bf94638081cca625e1c4990ea6",
+    "bytes": 147
+  },
+  "verification/python-static-checks-test10.log": {
+    "sha256": "110992c794fc83b6dfed106b9011b2ac6b708b4a55eb0be879149b2c00ccda78",
+    "bytes": 100
+  },
+  "verification/python-static-checks.log": {
+    "sha256": "9e296441165f3d16fa87e79b10843a10c9b1f7fec1d9db173b6dae7e3148dd60",
+    "bytes": 100
+  },
+  "verification/python_static_checks.py": {
+    "sha256": "c193cbdf966db91c75dbc50986bc38cb5ee31b72fdd03dbe67e4e6ed43b4a350",
+    "bytes": 1354
+  },
+  "verification/real-audio-check.log": {
+    "sha256": "4d7e5c0832a1171eb714345242964314b3976f18db6f4c076ed44af21f25c61a",
+    "bytes": 2629
+  },
+  "verification/run_android_api_typecheck.sh": {
+    "sha256": "a1d7593db403729da48afc751e1bc3b4a3fb55d50adc5146a87fad2092e6b0ac",
+    "bytes": 1868
+  },
+  "verification/run_exposed_bytes_check.sh": {
+    "sha256": "fd02d311e2c8c7cfc2e6307c303ebe763778000610839c958109fd77273fe2d1",
+    "bytes": 3295
+  },
+  "verification/run_handoff_check.sh": {
+    "sha256": "70cc34b39e4afd4ae2ef0b6c9e3f58f7b71decf6fae7f08b9885561d2e921572",
+    "bytes": 1379
+  },
+  "verification/run_kill_experiment.sh": {
+    "sha256": "4ecf5f611eadd114e4388a10cca59715205f2f8c610fa5c2684fc37d61fda207",
+    "bytes": 1058
+  },
+  "verification/run_kotlin_logic_tests.sh": {
+    "sha256": "4872d7d79c083932ff79249b64a63cd63abef522524e69511f98928965908b97",
+    "bytes": 3375
+  },
+  "verification/run_kotlin_syntax_check.sh": {
+    "sha256": "38517bb1fc5ad2423266dc7a7387e4e5fbbd423500ae9fc954f5cb4609a68611",
+    "bytes": 1478
+  },
+  "verification/run_lease_pg_test.sh": {
+    "sha256": "8fdaa7de380814c21eaa794cf5a4893f6c91d815146ec935a40166a69ebd15bd",
+    "bytes": 1216
+  },
+  "verification/run_real_audio_check.sh": {
+    "sha256": "2bd01cab9502da5d6f2a5475a609cb682f875f4a6344dbbea7617e2b02a6631a",
+    "bytes": 1459
+  },
+  "verification/run_sealed_upload_check.sh": {
+    "sha256": "70066cc030766b3447c700b99cb39e40b6d139a4a638c4aae9e3708eedb668c6",
+    "bytes": 1417
+  },
+  "verification/run_standin_compile.sh": {
+    "sha256": "14eaf8eb7633f5234c8d5d661276f2394ecab6c916e3cd3ba32096620ff413ca",
+    "bytes": 1832
+  },
+  "verification/run_storage_full_check.sh": {
+    "sha256": "0619f7c2418ac43a812db49a138248bd7b586c9e3cf4dc7753fc45a845c87a06",
+    "bytes": 593
+  },
+  "verification/sealed-upload-check.log": {
+    "sha256": "3238afd58f151abad1c06a16e58178b3c597e7d0e012487f872e2e4269cb1278",
+    "bytes": 2043
+  },
+  "verification/sealed-upload-speech.log": {
+    "sha256": "9056b3923e01321aa2b3b080d9e91b6ff04a42e372356c6057a0a416f7df3528",
+    "bytes": 2045
+  },
+  "verification/sealed-upload-speko-voice.log": {
+    "sha256": "608417ec29b3748e00e2d771db4f000295c2132e7d46ece8905ba6ff6f086822",
+    "bytes": 2027
+  },
+  "verification/speko-transcription-test.log": {
+    "sha256": "39e015e2d4e9a345f4b9cd18956cf0b17b7880db1e5af5da69045eaa9b319112",
+    "bytes": 1018
+  },
+  "verification/standin-compile-test10.log": {
+    "sha256": "59d8b1157b91eff974aef2aa581d31fed70746ba587ca63c90d8d922294e821d",
+    "bytes": 67
+  },
+  "verification/standin-compile-test9.log": {
+    "sha256": "59d8b1157b91eff974aef2aa581d31fed70746ba587ca63c90d8d922294e821d",
+    "bytes": 67
+  },
+  "verification/standin-compile.log": {
+    "sha256": "59d8b1157b91eff974aef2aa581d31fed70746ba587ca63c90d8d922294e821d",
+    "bytes": 67
+  },
+  "verification/storage-full-check.log": {
+    "sha256": "94b9f0ff389d5e64ab251fe6e0cdfc36863b9759c2ee892d3d371bc9b485e2eb",
+    "bytes": 255
+  },
+  "verification/stuck-credit-sqlite-and-postgres-test10.log": {
+    "sha256": "61452e8941a9c8a573c72b2ef2322f47ca16bb1c76ef3c1bc82f906dc3abf3e6",
+    "bytes": 2681
+  },
+  "verification/test10-tests-against-test9-code.log": {
+    "sha256": "d898dafe2a72e0ae84327868a8b785304053f4e230c4a34f53ece4f00b5dd6cb",
+    "bytes": 1437
+  },
+  "verification/test9-tests-against-old-code.log": {
+    "sha256": "16a0822a006cced4d86e1b4f18edb3407c1a567a30c4cd8452a0d05c19468c92",
+    "bytes": 2500
+  }
+}
