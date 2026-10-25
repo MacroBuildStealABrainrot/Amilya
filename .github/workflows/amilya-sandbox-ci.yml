@@ -180,6 +180,8 @@ jobs:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: google_apis
+          # Limit the test emulator's userdata partition to fit on the runner's available disk.
+          disk-size: 2048M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
           script: bash ci/run-phone-tests.sh
