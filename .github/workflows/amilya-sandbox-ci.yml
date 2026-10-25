@@ -98,7 +98,7 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
             :app:testSandboxUnitTest :wear-contract:test \
-            :app:assembleSandbox :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
+            :app:assembleSandbox :app:assemblePilot :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
       - name: Lint (sandbox) - report only
