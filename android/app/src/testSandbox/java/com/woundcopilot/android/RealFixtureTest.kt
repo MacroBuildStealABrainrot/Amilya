@@ -19,7 +19,7 @@ class RealFixtureTest {
     private val rate = 24000
     private val channels = 1
     private val original: ByteArray by lazy {
-        val dir = System.getProperty("fixture.dir") ?: error("Set -Dfixture.dir to the fixtures folder")
+        val dir = System.getProperty("fixture.dir")?.takeIf { it.isNotBlank() } ?: "src/androidTestSandbox/assets/fixtures"
         File(dir, "tone-visit-60s.aac").readBytes()
     }
     private val payloads by lazy { AdtsFile.payloads(original, rate, channels) }

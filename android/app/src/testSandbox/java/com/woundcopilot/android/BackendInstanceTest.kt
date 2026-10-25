@@ -6,6 +6,7 @@ import org.junit.Test
 
 /** Item 1: the way the app finds the experimental recorder by name must work with a Kotlin `object` and no hand-made INSTANCE field. */
 class BackendInstanceTest {
+    private companion object { const val RECORDER_SOURCE = "src/main/java/com/woundcopilot/android/SafeRecorderService.kt" }
     @Test fun anObjectIsFoundByNameThroughItsOwnGeneratedInstanceField() {
         val found = Class.forName("com.woundcopilot.android.FakeBackendObject").getField("INSTANCE").get(null)
         assertSame(FakeBackendObject, found)
@@ -13,7 +14,7 @@ class BackendInstanceTest {
     }
 
     @Test fun theSandboxRecorderSourceHasNoHandWrittenInstanceField() {
-        val source = java.io.File(System.getProperty("sandbox.src") ?: "android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt").readText()
+        val source = moduleFile("sandbox.src", RECORDER_SOURCE).readText()
         assertTrue("no explicit INSTANCE declaration may remain", !Regex("""(val|var)\s+INSTANCE\b""").containsMatchIn(source))
     }
 
@@ -22,7 +23,7 @@ class BackendInstanceTest {
      * The sandbox recorder no longer needs such a class; this keeps the pattern from coming back anywhere in the sandbox sources.
      */
     @Test fun noSandboxClassHidesAnInheritedByteArrayOutputStreamMethod() {
-        val folder = java.io.File(System.getProperty("sandbox.src") ?: "android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt").parentFile
+        val folder = moduleFile("sandbox.src", RECORDER_SOURCE).parentFile
         val files = folder.listFiles { f -> f.extension == "kt" }.orEmpty()
         assertTrue("sandbox sources must be found", files.size >= 5)
         for (file in files) {

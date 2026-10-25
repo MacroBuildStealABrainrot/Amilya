@@ -1,10 +1,15 @@
 package com.woundcopilot.android
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
+
+/** Resolves checked-in test fixtures and source relative to Gradle's app module, with optional override. */
+internal fun moduleFile(property: String, relativeToModule: String): File =
+    System.getProperty(property)?.takeIf { it.isNotBlank() }?.let(::File) ?: File(relativeToModule)
 
 /** Stand-in for the Android Keystore on a PC: locks small keys with a fixed test key. NOT used on the phone. */
 internal class TestKeyWrapper(private val kek: ByteArray = ByteArray(32) { (it * 7 + 3).toByte() }) : KeyWrapper {

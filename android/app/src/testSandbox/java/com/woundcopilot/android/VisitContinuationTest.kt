@@ -127,7 +127,7 @@ class VisitContinuationTest {
     }
 
     @Test fun theRecorderServiceUsesTheRouterAndEveryHandOverPathIsWired() {
-        val src = File(System.getProperty("sandbox.src") ?: "").readText()
+        val src = moduleFile("sandbox.src", "src/main/java/com/woundcopilot/android/SafeRecorderService.kt").readText()
         for (needle in listOf("HandoffRouter(", "openNextPart(", "registerRecording(", "VisitContinuation.note(", "VisitContinuation.failedToContinue(", "partOffsetMillis", "nextName"))
             assertTrue("SafeRecorderService.kt must contain $needle", src.contains(needle))
         assertFalse("capture loop must write through the router, not a single SegmentWriter", Regex("""captureLoop\([^)]*SegmentWriter""").containsMatchIn(src))

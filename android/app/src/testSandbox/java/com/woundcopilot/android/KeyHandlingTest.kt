@@ -76,7 +76,7 @@ class KeyHandlingTest {
     }
 
     @Test fun noSandboxOrWatchLogLineNotificationOrMessageMentionsAKey() {
-        val src = File(System.getProperty("sandbox.src") ?: "").parentFile
+        val src = moduleFile("sandbox.src", "src/main/java/com/woundcopilot/android/SafeRecorderService.kt").parentFile
         val roots = listOfNotNull(src.takeIf { it.isDirectory }, File(src, "../../../main/java/com/woundcopilot/android").takeIf { it.isDirectory })
         assertTrue("source folders not found", roots.isNotEmpty())
         val risky = Regex("""(Log\.[a-z]\(|println\(|setContentText\(|setContentTitle\(|Toast\.makeText|\.message\s*=|setProgress\()""")
