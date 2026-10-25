@@ -79,10 +79,10 @@ fi
 adb logcat -c || true
 P="com.woundcopilot.android"
 
-run_group recorder "$P.CrashSafeRecordingTest,$P.ExistingWorkCompatibilityTest" || failed=1
+run_group recorder "$P.CrashSafeRecordingTest,$P.ExistingWorkCompatibilityTest,$P.RecordingRecoveryActionsTest" || failed=1
 
 if start_server "$ROOT/android/tools/local_contract_server.py" level1; then
-  run_group level1 "$P.BackendContractTest,$P.CsrfAfterOfflineStartTest,$P.RecordingServiceStartTest" || failed=1
+  run_group level1 "$P.BackendContractTest,$P.CsrfAfterOfflineStartTest,$P.RecordingServiceStartTest,$P.SimpleScreensTest" || failed=1
   stop_server
 else
   echo 'level1: SKIPPED — required local server failed' | tee -a "$OUT/summary.txt"

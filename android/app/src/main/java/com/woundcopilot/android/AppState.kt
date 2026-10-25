@@ -80,6 +80,22 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(quickMode=="document" && !voiceCorrection && !voiceMessage)case?.let{vault.write("recording-context-$owner",obj("owner" to user?.str("id"),"case" to it,"template" to editorTemplate).toString())}
     }
     fun refreshRecordingJobs(){recordingJobs=recordingRecovery.list(user?.str("id")?:"sample")}
+    var recoveryActionId by mutableStateOf<String?>(null); private set
+    fun discardRecovery(job:JSONObject){
+        val owner=user?.str("id")?:return
+        val id=job.str("id")
+        if(id.isBlank() || job.str("owner")!=owner || recoveryActionId!=null)return
+        if(RecordingService.state.value.recording){notice="Stop the current recording before discarding unfinished work.";return}
+        recoveryActionId=id
+        viewModelScope.launch{
+            val discarded=withContext(Dispatchers.IO){runCatching{recordingRecovery.discard(id,owner)}.getOrDefault(false)}
+            if(user?.str("id")==owner){
+                refreshRecordingJobs()
+                notice=if(discarded)"Unfinished recording deleted from this device." else "This unfinished recording could not be deleted."
+            }
+            if(recoveryActionId==id)recoveryActionId=null
+        }
+    }
     private fun publishRecordingJob(job:JSONObject){
         if(job.str("owner")!=(user?.str("id")?:"sample"))return
         recordingJobs=(listOf(job)+recordingJobs.filter{it.str("id")!=job.str("id")}).sortedByDescending{it.optLong("updated_at")}

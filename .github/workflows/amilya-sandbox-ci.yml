@@ -180,8 +180,8 @@ jobs:
           api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: google_apis
-          # Limit the test emulator's userdata partition to fit on the runner's available disk.
-          disk-size: 4096M
+          # The emulator needs extra backing space beyond userdata; keep this within hosted-runner free disk.
+          disk-size: 2048M
           heap-size: 512M
           ram-size: 2048M
           disable-animations: true

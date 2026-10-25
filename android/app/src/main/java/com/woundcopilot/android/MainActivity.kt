@@ -34,6 +34,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import com.woundcopilot.android.ui.*
 import kotlinx.coroutines.flow.distinctUntilChanged
+import org.json.JSONObject
 
 class MainActivity:ComponentActivity(){
     private val state:AppState by viewModels()
@@ -217,12 +218,14 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
 
 @Composable fun SavedWorkScreen(s:AppState){
     var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
+    val recorder by RecordingService.state.collectAsState()
     Page{
         InstrumentTitle("Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
-        Row{TextButton({recovery=false}){Text("Saved")};TextButton({recovery=true}){Text("Recovery & older work")}}
+        Row{TextButton(onClick={recovery=false}){Text("Saved")};TextButton(onClick={recovery=true;s.refreshRecordingJobs()}){Text("Recovery & older work")}}
         val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
-        if(filtered.isEmpty()) {
-            Text("Nothing saved yet. Start a report from Home.")
+        if(recovery) RecordingRecoveryList(jobs=s.recordingJobs,actionId=s.recoveryActionId,recording=recorder.recording,onFinish=s::resumeRecording,onDiscard=s::discardRecovery)
+        if(filtered.isEmpty() && (!recovery || s.recordingJobs.isEmpty())) {
+            Text(if(recovery)"No unfinished recordings or older work." else "Nothing saved yet. Start a report from Home.")
             WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
         }
         if(!recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
@@ -234,9 +237,8 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                 "document","report","nursing"->"Nursing visit"
                 else->"Visit"
             }
-            val rawTitle=e.str("title").trim()
-            val name=if(rawTitle.isNotEmpty() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
-                rawTitle else "$type, ${localTime(e.str("updated_at"))}"
+            // Keep patient-entered titles out of Saved Work previews.
+            val name="$type, ${localTime(e.str("updated_at"))}"
             GlassPanel(Modifier.fillMaxWidth().clickable(role=Role.Button){s.openEncounter(e.str("id"))}){
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
                     Box(Modifier.size(45.dp).background(c.primaryContainer,CircleShape),contentAlignment=Alignment.Center){Text(name.split(' ').mapNotNull{it.firstOrNull()}.take(2).joinToString(""),style=MaterialTheme.typography.titleMedium,color=c.onPrimaryContainer)}
@@ -257,6 +259,36 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     }
 }
 
+@Composable internal fun RecordingRecoveryList(
+    jobs:List<JSONObject>, actionId:String?, recording:Boolean,
+    onFinish:(JSONObject)->Unit, onDiscard:(JSONObject)->Unit,
+){
+    var discardTarget by remember { mutableStateOf<JSONObject?>(null) }
+    if(jobs.isNotEmpty()){
+        Text("Unfinished recordings",style=MaterialTheme.typography.titleLarge)
+        jobs.forEach{job->
+            val phase=job.str("resume_from",job.str("phase"))
+            val action=when(phase){"REPORT_READY"->"Review report";"TRANSCRIBED","GENERATING_REPORT"->"Finish report";else->"Finish recording"}
+            val busy=recording || actionId!=null
+            GlassPanel(Modifier.fillMaxWidth()){
+                Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                    Text("Unfinished recording",style=MaterialTheme.typography.titleMedium)
+                    Text("Updated ${localTime(job.optLong("updated_at").toString())}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        Button(onClick={onFinish(job)},enabled=!busy){Text(action)}
+                        TextButton(onClick={discardTarget=job},enabled=!busy){Text("Discard")}
+                    }
+                }
+            }
+        }
+    }
+    discardTarget?.let{job->
+        AlertDialog(onDismissRequest={discardTarget=null},title={Text("Discard this recording?")},
+            text={Text("This permanently deletes the local audio and its unfinished recovery data from this device. Saved reports are not affected.")},
+            confirmButton={TextButton(onClick={discardTarget=null;onDiscard(job)}){Text("Discard permanently")}},
+            dismissButton={TextButton(onClick={discardTarget=null}){Text("Keep it")}})
+    }
+}
 @Composable fun EncounterScreen(s:AppState){
     val data=s.case?:return;val facts=data.items("facts");val pending=facts.count{it.str("confirmation_state")=="unconfirmed"};val confirmed=facts.count{it.str("confirmation_state")=="confirmed"};val c=MaterialTheme.colorScheme
     Page{

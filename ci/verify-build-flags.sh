@@ -17,5 +17,7 @@ check() { # $1 apk, $2 expected package, $3 expected SafeRecorderService enabled
 check "$(ls $APKS/release/*.apk | head -1)" com.woundcopilot.android.release false
 check "$(ls $APKS/debug/*.apk | head -1)" com.woundcopilot.android false
 check "$(ls $APKS/sandbox/*.apk | head -1)" com.woundcopilot.android.sandbox true
+# Pilot keeps the original recorder until clinical and device compatibility approval.
+check "$(ls $APKS/pilot/*.apk | head -1)" com.woundcopilot.android.pilot false
 [ $fail -eq 0 ] && echo "ALL BUILD-FLAG CHECKS PASSED"
 exit $fail
