@@ -1,0 +1,196 @@
+
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -9,8 +9,8 @@
+         applicationId = "com.woundcopilot.android"
+         minSdk = 28
+         targetSdk = 36
+-        versionCode = 23
+-        versionName = "1.8.5-test3"
++        versionCode = 24
++        versionName = "1.8.5-test4"
+         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
+         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+--- a/android/wear/build.gradle.kts
++++ b/android/wear/build.gradle.kts
+@@ -6,13 +6,18 @@
+   applicationId = "com.woundcopilot.android"
+   minSdk = 30
+   targetSdk = 36
+-  versionCode = 23
+-  versionName = "1.8.5-test3"
++  versionCode = 24
++  versionName = "1.8.5-test4"
+   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+  buildFeatures { compose = true; buildConfig = true }
+- buildTypes { getByName("release") { applicationIdSuffix = ".release"; isDebuggable=false } }
++ buildTypes {
++  getByName("release") { applicationIdSuffix = ".release"; isDebuggable=false }
++  // Test-only watch build that pairs with the phone "sandbox" build (same package name, as the Data Layer requires).
++  // It contains no server address and never talks to the internet itself.
++  create("sandbox") { initWith(getByName("debug")); applicationIdSuffix = ".sandbox"; versionNameSuffix = "-sandbox"; matchingFallbacks += listOf("debug") }
++ }
+ }
+ dependencies {
+  implementation(project(":wear-contract"))
+
+--- a/backend/server/providers.py
++++ b/backend/server/providers.py
+@@ -609,6 +609,16 @@
+         raise HTTPException(415, 'The image cannot be safely decoded')
+ 
+ 
++def read_pdf_text(data: bytes) -> str:
++    """Blocking: extract PDF text in a separate, time-limited process. Call only through asyncio.to_thread from async code."""
++    import sys
++    with tempfile.TemporaryDirectory(prefix='wcp-pdf-') as directory:
++        path = Path(directory) / 'source.pdf'; path.write_bytes(data)
++        completed = subprocess.run([sys.executable, '-m', 'server.pdf_extract', str(path)], capture_output=True, timeout=15, check=True,
++            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
++        return completed.stdout.decode('utf-8')
++
++
+ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
+     if kind == 'photo':
+         diagnostics.bind(user)
+@@ -640,13 +650,8 @@
+     if mime != 'application/pdf': raise HTTPException(415, 'Unsupported document')
+     if len(data) > settings.max_document_mb * 1024**2: raise HTTPException(413, 'Document exceeds size limit')
+     # Parse text locally; unscannable documents must not be represented as findings.
+-    try:
+-        import sys
+-        with tempfile.TemporaryDirectory(prefix='wcp-pdf-') as directory:
+-            path = Path(directory) / 'source.pdf'; path.write_bytes(data)
+-            completed = subprocess.run([sys.executable, '-m', 'server.pdf_extract', str(path)], capture_output=True, timeout=15, check=True,
+-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+-            text = completed.stdout.decode('utf-8')
++    # The reader runs in a child process for safety; wait for it off the event loop so other requests are not stalled.
++    try: text = await asyncio.to_thread(read_pdf_text, data)
+     except Exception: raise HTTPException(415, 'This PDF cannot be safely read. Use a text export or manually enter the relevant result.')
+     if not text.strip(): raise HTTPException(422, 'This PDF has no extractable text. Use a text export or manually enter the relevant result.')
+     result = await extract_text(text, 'document', user=user, encounter_id=encounter_id)
+
+--- a/backend/tests/test_audio_event_loop.py
++++ b/backend/tests/test_audio_event_loop.py
+@@ -14,7 +14,8 @@
+ from test_clinical import clinical_api
+ from test_quick_workflows import quick_api, start
+ 
+-BLOCKING = {'audio_duration', 'clip_audio'}
++BLOCKING = {'audio_duration', 'clip_audio', 'read_pdf_text'}
++SUBPROCESS_CALLS = {'run', 'Popen', 'check_output', 'check_call', 'call'}
+ SERVER = Path(__file__).resolve().parents[1] / 'server'
+ 
+ 
+@@ -52,6 +53,9 @@
+                 name = target.id if isinstance(target, ast.Name) else target.attr if isinstance(target, ast.Attribute) else ''
+                 if name in BLOCKING:
+                     found.append((function.name, node.lineno))
++                # Running a program (ffmpeg, ffprobe, a PDF reader...) directly inside async code freezes every other request.
++                elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'subprocess' and name in SUBPROCESS_CALLS:
++                    found.append((function.name, node.lineno))
+     return found
+ 
+ 
+
+--- a/verification/extract_pure_kotlin.py
++++ b/verification/extract_pure_kotlin.py
+@@ -0,0 +1,12 @@
++"""Copies the few pure (non-Android) Kotlin declarations the unit tests need into one file, straight from the real sources."""
++import re, sys
++root, out = sys.argv[1], sys.argv[2]
++base = root + '/android/app/src/main/java/com/woundcopilot/android/'
++api = open(base + 'Api.kt', newline='').read().replace('\r', '').split('\n')
++cf = open(base + 'ClinicianFeedback.kt', newline='').read().replace('\r', '').split('\n')
++def at(lines, prefix): return next(i for i, l in enumerate(lines) if l.startswith(prefix))
++i = at(api, 'internal fun needsCsrfBootstrap'); j = at(api, 'internal const val PRODUCTION_API_ORIGIN')
++parts = ['\n'.join(api[i:i + 2]), api[at(api, 'internal val AUTH_ENTRY_PATHS')], api[at(api, 'internal fun isCsrfRejection')],
++         api[at(api, 'class ApiException')], '\n'.join(api[j:j + 9])]
++a = at(cf, 'internal fun canRetryRequest'); b = next(k for k, l in enumerate(cf) if k > a + 3 and l.startswith('@Composable'))
++open(out, 'w').write('package com.woundcopilot.android\nimport java.io.IOException\n' + '\n'.join(parts) + '\n' + '\n'.join(cf[a:b]) + '\n')
+
+--- a/verification/kotlin-logic-tests.log
++++ b/verification/kotlin-logic-tests.log
+@@ -0,0 +1,12 @@
++JUnit version 4.13.2
++...................
++Time: 0.053
++
++OK (19 tests)
++
++JUnit version 4.13.2
++.......................................
++Time: 0.055
++
++OK (39 tests)
++
+
+--- a/verification/kotlin-syntax-check.log
++++ b/verification/kotlin-syntax-check.log
+@@ -0,0 +1,3 @@
++Kotlin parser check of 71 Kotlin files (app, tests, watch, shared protocol) using the compiler bundled with Gradle 8.14.3.
++The Android libraries are not available here, so 'unresolved reference' style errors are expected and ignored.
++Total compiler messages: 11099. Messages that are SYNTAX errors: 0.
+
+--- a/verification/pdf-reader-event-loop-check.log
++++ b/verification/pdf-reader-event-loop-check.log
+@@ -0,0 +1,3 @@
++Stand-in test (real read_pdf_text function from backend/server/providers.py, stub PDF worker that sleeps 0.5 s):
++result: 'hello from PDFDATA'  took 0.52s  event-loop ticks while waiting: 50 (>= 20 required)  -> PASS
++(The real PDF library pypdf and the full backend test suite could not be installed here.)
+
+--- a/verification/python-guard-catches-old-bug.log
++++ b/verification/python-guard-catches-old-bug.log
+@@ -0,0 +1,2 @@
++Guard run against the previous candidate (test3) server code with the new guard test:
++oldchk offenders: {'providers.py': [('analyze_media', 647)]}
+
+--- a/verification/python-static-checks.log
++++ b/verification/python-static-checks.log
+@@ -0,0 +1,2 @@
++parsed 75 Python files, syntax errors: 0
++async functions that run a blocking program directly: none
+
+--- a/verification/python_static_checks.py
++++ b/verification/python_static_checks.py
+@@ -0,0 +1,18 @@
++"""Checks that need no installed packages: every Python file parses, and no async server code runs a blocking program directly.
++Usage: python verification/python_static_checks.py   (run from the project root)"""
++import ast, sys
++from pathlib import Path
++root = Path(__file__).resolve().parents[1]
++files = [p for d in ('backend/server', 'backend/tests', 'backend/scripts', 'backend/migrations', 'test-tools', 'android/tools') for p in sorted((root / d).rglob('*.py'))]
++bad = []
++for p in files:
++    try: ast.parse(p.read_text(encoding='utf-8'), str(p))
++    except SyntaxError as e: bad.append((str(p), str(e)))
++print(f'parsed {len(files)} Python files, syntax errors: {len(bad)}', *bad)
++src = (root / 'backend/tests/test_audio_event_loop.py').read_text(encoding='utf-8')
++keep = [n for n in ast.parse(src).body if (isinstance(n, ast.Assign) and any(getattr(t, 'id', '') in ('BLOCKING', 'SUBPROCESS_CALLS') for t in n.targets))
++        or (isinstance(n, ast.FunctionDef) and n.name == 'direct_blocking_calls')]
++ns = {'ast': ast}; exec(compile(ast.Module(keep, []), 'guard', 'exec'), ns)
++offenders = {p.name: h for p in sorted((root / 'backend/server').glob('*.py')) if (h := ns['direct_blocking_calls'](p.read_text(encoding='utf-8')))}
++print('async functions that run a blocking program directly:', offenders or 'none')
++sys.exit(1 if bad or offenders else 0)
+
+--- a/verification/run_kotlin_logic_tests.sh
++++ b/verification/run_kotlin_logic_tests.sh
+@@ -0,0 +1,14 @@
++#!/bin/sh
++# Re-runs the pure-logic Kotlin tests WITHOUT Android, using the Kotlin compiler that ships inside a Gradle install.
++# Usage: sh run_kotlin_logic_tests.sh /path/to/gradle-home   (the folder that contains lib/kotlin-compiler-embeddable-*.jar)
++# Not a replacement for the real Android build. It only proves the pure logic (CSRF rules, retry rules, sandbox address guard, watch protocol).
++set -e
++G="${1:?give the Gradle install folder}"; L="$G/lib"; HERE="$(cd "$(dirname "$0")/.." && pwd)"
++KC=$(ls "$L"/kotlin-compiler-embeddable-*.jar); SL=$(ls "$L"/kotlin-stdlib-[0-9]*.jar | head -1)
++CP="$KC:$SL:$(ls "$L"/kotlin-script-runtime-*.jar):$(ls "$L"/kotlin-reflect-*.jar):$(ls "$L"/kotlin-daemon-embeddable-*.jar):$(ls "$L"/trove4j-*.jar):$(ls "$L"/annotations-*.jar | head -1):$(ls "$L"/kotlinx-coroutines-core-jvm-*.jar)"
++JU="$SL:$(ls "$L"/junit-4*.jar):$(ls "$L"/hamcrest-core-*.jar)"
++W="$(mktemp -d)"; python3 -I "$HERE/verification/extract_pure_kotlin.py" "$HERE" "$W/Extracted.kt"
++java -cp "$CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -cp "$JU" -d "$W/out" "$W/Extracted.kt" "$HERE"/android/app/src/test/java/com/woundcopilot/android/*.kt
++java -cp "$W/out:$JU" org.junit.runner.JUnitCore com.woundcopilot.android.CsrfBootstrapTest com.woundcopilot.android.CsrfRecoveryTest com.woundcopilot.android.ApiOriginGuardTest
++java -cp "$CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -cp "$JU" -d "$W/outw" $(find "$HERE/android/wear-contract/src" -name '*.kt')
++java -cp "$W/outw:$JU" org.junit.runner.JUnitCore $(grep -h '^class ' -r "$HERE/android/wear-contract/src/test" | sed 's/class \([A-Za-z]*\).*/com.woundcopilot.wear.contract.\1/')

@@ -1,0 +1,353 @@
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -7,8 +7,8 @@
+         applicationId = "com.woundcopilot.android"
+         minSdk = 28
+         targetSdk = 36
+-        versionCode = 20
+-        versionName = "1.8.4-test1"
++        versionCode = 21
++        versionName = "1.8.5-test1"
+         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
+         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+--- a/android/app/src/androidTest/java/com/woundcopilot/android/WearBridgeTest.kt
++++ b/android/app/src/androidTest/java/com/woundcopilot/android/WearBridgeTest.kt
+@@ -78,6 +78,17 @@
+   start();Thread.sleep(1800);val path=RecordingService.state.value.filePath!!
+   assertEquals(WearError.NONE,send(make(CommandType.CANCEL)).error)
+   Thread.sleep(600);assertFalse(File(path).exists());assertFalse(s.loading);assertTrue(s.editor.isBlank());assertEquals(Phase.CANCELLED,status().phase)
++ }
++ @Test fun failedAiReportAutomaticallyRecoversOriginalWithoutRepeatingTranscription(){
++  runBlocking{api.call("/test/config","POST",obj("failure" to "report-ai"))}
++  start();Thread.sleep(1800);val path=RecordingService.state.value.filePath!!;send(make(CommandType.STOP))
++  compose.waitUntil(20000){!s.loading&&s.editor.isNotBlank()}
++  assertNull(s.error);assertEquals("editor",s.screen);assertTrue(File(path).isFile)
++  assertTrue(s.documentAlerts.any{it.contains("source-only")})
++  assertEquals(Phase.REPORT_READY,status().phase)
++  val stats=(runBlocking{api.call("/test/stats")} as JSONObject).getJSONObject("calls")
++  assertEquals(2,stats.getInt("quick-report"));assertEquals(1,stats.getInt("reports_created"))
++  assertEquals(1,stats.getInt("audio-complete"))
+  }
+  @Test fun reportFailureRetainsRecordingAndRetryReusesTranscript(){
+   runBlocking{api.call("/test/config","POST",obj("failure" to "quick-report"))}
+--- a/android/app/src/main/java/com/woundcopilot/android/AppState.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/AppState.kt
+@@ -647,7 +647,15 @@
+         val payload=obj("template" to format,"use_ai" to ai,"preferred_length" to reportLength)
+         if(format=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
+         val response=if(demo)sampleDocument(case!!,format)
+-            else mutation(intent,"/encounters/$encounterId/quick-report",payload)
++            else try{mutation(intent,"/encounters/$encounterId/quick-report",payload)}catch(e:ApiException){
++                if(!ai || e.status !in listOf(402,429,502,503,504))throw e
++                // The failed AI draft is never promoted. Reuse acknowledged original sources.
++                // A distinct stable identity prevents a failed AI replay from blocking local drafting.
++                val recovered=mutation("$intent-source-only","/encounters/$encounterId/quick-report",JSONObject(payload.toString()).put("use_ai",false))
++                recovered.put("ui_alerts",JSONArray().put(obj("field" to "review","message" to "AI generation or checking could not complete. This source-only draft has not passed an AI check. Review the original source before using it.")))
++                recovered.put("warnings",JSONArray().put("A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording."))
++                recovered
++            }
+         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed during generation. Your edits were preserved."}
+         if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return}
+         snapshotDraft();restoring=true;editorTemplate=format;restoring=false
+--- a/android/wear/build.gradle.kts
++++ b/android/wear/build.gradle.kts
+@@ -6,8 +6,8 @@
+   applicationId = "com.woundcopilot.android"
+   minSdk = 30
+   targetSdk = 36
+-  versionCode = 20
+-  versionName = "1.8.4-test1"
++  versionCode = 21
++  versionName = "1.8.5-test1"
+   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+--- a/backend/server/billing.py
++++ b/backend/server/billing.py
+@@ -179,7 +179,7 @@
+             safe['routing']['policy_version'] = VERSION
+     if type(usage.get('upstream_status')) is int and 100 <= usage['upstream_status'] <= 599:
+         safe['upstream_status'] = usage['upstream_status']
+-    if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible'):
++    if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible', 'invalid_response', 'provider_timeout', 'provider_connection', 'response_processing'):
+         safe['failure_reason'] = usage['failure_reason']
+     retry_deadline = usage.get('retry_not_before')
+     if type(retry_deadline) in (int, float) and 0 < retry_deadline < 10**12:
+--- a/backend/server/clinical.py
++++ b/backend/server/clinical.py
+@@ -645,8 +645,9 @@
+             extra, validation_warnings = validate_candidates(extracted.get('facts', []), text, 'transcript')
+             candidates.extend(extra)
+             warnings.extend(validation_warnings + [str(w) for w in extracted.get('warnings', [])])
+-        except HTTPException:
+-            warnings.append('AI extraction was unavailable; review the preserved transcript and explicit suggestions.')
++        except HTTPException as error:
++            from .error_feedback import extraction_warning
++            warnings.append(extraction_warning(error))
+     elif kind == 'document' and mime in {'text/plain', 'text/csv'}:
+         text = data.decode('utf-8-sig')
+         if len(text) > 40000:
+--- a/backend/server/providers.py
++++ b/backend/server/providers.py
+@@ -225,20 +225,33 @@
+             # contradicts its own quality decision with plausible-looking facts.
+             return {'facts': [], 'warnings': [quality['message'], *extra[:15]], 'quality': quality}
+         facts, warnings = [], []
++        invalid_photo_count = 0
+         for item in data['facts']:
+-            if not isinstance(item, dict) or set(item) - {'name', 'value', 'quote'}: raise ValueError('Invalid finding')
+-            name, value, quote = item.get('name'), item.get('value'), item.get('quote')
+-            if name not in get_args(Name): raise ValueError('Unknown field')
+-            if task == 'image' and name not in PHOTO_NAMES:
+-                warnings.append('A finding outside visible photo evidence was excluded.')
+-                continue
+-            if not isinstance(quote, str) or len(quote) > 4000: raise ValueError('Invalid supporting quote')
+-            if source is not None and (not quote.strip() or quote not in source):
+-                warnings.append('A suggestion without an exact source quotation was excluded.')
+-                continue
+-            facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
++            try:
++                if not isinstance(item, dict) or set(item) - {'name', 'value', 'quote'}: raise ValueError('Invalid finding')
++                name, value = item.get('name'), item.get('value')
++                if task == 'image' and name not in PHOTO_NAMES:
++                    warnings.append('A finding outside visible photo evidence was excluded.')
++                    continue
++                if name not in get_args(Name): raise ValueError('Unknown field')
++                quote = item.get('quote', '' if task == 'image' else None)
++                if not isinstance(quote, str) or len(quote) > 4000: raise ValueError('Invalid supporting quote')
++                if task == 'image' and quote: raise ValueError('Photo cannot supply a text quotation')
++                if source is not None and (not quote.strip() or quote not in source):
++                    warnings.append('A suggestion without an exact source quotation was excluded.')
++                    continue
++                facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
++            except (ValueError, KeyError, TypeError):
++                if task != 'image':raise
++                invalid_photo_count += 1
++                # A bad candidate must not discard independently valid visual observations.
++                # No rejected field names, values, quotes, or provider text enter diagnostics.
++                warnings.append('An unusable photo finding was excluded. Review the remaining observations.')
++                diagnostics.event({'source':'server','stage':'photo_finding_validation','status':'failed','error_code':'INVALID_PHOTO_FINDING'})
+         result = {'facts': facts, 'warnings': warnings + extra[:16]}
+         if quality:
++            if not facts and invalid_photo_count:
++                raise ValueError('No valid visual findings after candidate validation')
+             # A "sufficient" image that yielded no assessable observations must
+             # not be shown as a completed wound assessment.
+             if not facts:
+@@ -354,7 +367,7 @@
+ 
+ 
+ async def metered_call(*, user: User, encounter_id: str, task: str, provider: str, model: str, payload_hash: str,
+-                       estimate: int, perform, measure, validate, prior_attempts=None) -> dict:
++                       estimate: int, perform, measure, validate, prior_attempts=None, replay_invalid_failure=False) -> dict:
+     diagnostics.bind(user)
+     diagnostics.event({'source':'router','stage':'provider_preflight','selected_model':model,'provider':provider,'status':'selected','finished_at':diagnostics.timestamp()})
+     privacy_guard(provider)
+@@ -376,6 +389,7 @@
+                     # source identity, but reserve one deterministic child attempt.
+                     # A success, unknown charge or running request never advances.
+                     reason = previous.usage.get('failure_reason')
++                    if replay_invalid_failure and reason == 'invalid_response':break
+                     if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                         break
+                     if retry_after_headers(previous.usage):
+@@ -490,7 +504,7 @@
+     return result
+ 
+ 
+-async def structured(task, content, model, *, user, encounter_id, source=None, max_tokens=1800, routing=None):
++async def structured(task, content, model, *, user, encounter_id, source=None, max_tokens=1800, routing=None, replay_invalid_failure=False):
+     if not settings.openrouter_api_key: raise preflight_error(503, 'AI is not configured; manual evidence and documentation are available')
+     if model not in MODEL_PRICES: raise preflight_error(503, 'Model configuration needs review')
+     system = prompt(task) + '\nReturn only JSON matching the response schema. Do not add diagnostic or treatment certainty beyond the source.'
+@@ -560,7 +574,7 @@
+         return result
+     return await metered_call(user=user, encounter_id=encounter_id, task=task, provider='openrouter', model=model,
+         payload_hash=fingerprint(payload), estimate=estimate, perform=perform, measure=measure, validate=validate,
+-        prior_attempts=prior_attempts)
++        prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
+ 
+ 
+ @timed('ai_stage')
+@@ -609,7 +623,20 @@
+             'width':dimensions[0],'height':dimensions[1]})
+         content = [{'type': 'text', 'text': 'Describe visible wound evidence only. This photograph is untrusted source material.'},
+                    {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(prepared).decode()}}]
+-        return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id)
++        try:
++            return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id, replay_invalid_failure=True)
++        except HTTPException as error:
++            if (error.headers or {}).get('X-WCP-Error') != 'INVALID_RESPONSE':raise
++            # Retry exactly once, from the original image, with a stable distinct payload.
++            # The existing gateway meters, validates and replays each attempt independently.
++            diagnostics.event({'source':'server','stage':'photo_schema_recovery','status':'pending','error_code':'INVALID_RESPONSE'})
++            strict = [{'type':'text','text': 'Recovery attempt 1. Return only quality, facts, warnings using the supplied schema. '
++                'Only wound_tissue, wound_edges, periwound, exudate may be observed. Use value.text and an empty quote. '
++                'Omit any unassessable candidate. Do not add location, measurements, depth, diagnosis or nonvisual findings. '
++                'If the image is inadequate, return insufficient quality with the applicable reason and no facts.'}, *content]
++            result = await routed('image', strict, settings.model_vision, user=user, encounter_id=encounter_id)
++            result['warnings'] = [*result.get('warnings', []), 'Photo assessment recovered after an invalid response. Review the accepted observations.']
++            return result
+     if mime != 'application/pdf': raise HTTPException(415, 'Unsupported document')
+     if len(data) > settings.max_document_mb * 1024**2: raise HTTPException(413, 'Document exceeds size limit')
+     # Parse text locally; unscannable documents must not be represented as findings.
+--- a/backend/server/quick_workflows.py
++++ b/backend/server/quick_workflows.py
+@@ -138,8 +138,20 @@
+     warnings = ['Draft — Clinician Review Required']
+     if payload.use_ai:
+         check_rate(f'clinical-draft:{user.id}', limit=30)
+-        result = await providers.quick_documentation(context, payload.template, payload.preferred_length,
+-            custom_template=custom_template, user=user, encounter_id=encounter_id)
++        try:
++            result = await providers.quick_documentation(context, payload.template, payload.preferred_length,
++                custom_template=custom_template, user=user, encounter_id=encounter_id)
++        except HTTPException as error:
++            if error.status_code not in {402,429,502,503,504}:raise
++            # Never display the draft rejected by semantic QA. Recover from original source
++            # using the already-supported manual projection, including rejected/edited facts.
++            result = documentation.source_report(context, payload.template, clinical.fact_phrase)
++            result['qa'] = {'passed': False, 'status':'source_only_unchecked', 'discrepancies': []}
++            result['recovery'] = {'mode':'source_only','cause': (error.headers or {}).get('X-WCP-Error','REPORT_CHECK_OR_GENERATION_FAILED')}
++            result['ui_alerts'] = [{'field':'review','message':'AI generation or checking could not complete. This source-only draft has not passed an AI check. Review it against the original source before using it.'}]
++            warnings.append('A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording.')
++            from . import diagnostics
++            diagnostics.event({'source':'server','stage':'report_source_recovery','status':'success','error_code':result['recovery']['cause']})
+     else:
+         result = documentation.source_report(context, payload.template, clinical.fact_phrase)
+     db.refresh(encounter)
+--- a/backend/tests/test_photo_recovery.py
++++ b/backend/tests/test_photo_recovery.py
+@@ -39,8 +39,11 @@
+ @pytest.mark.parametrize('failure',[httpx.ReadTimeout('synthetic'),(200,{'choices':[]}), (200,{'error':{'code':502}}), (503,{'error':{'code':503}})])
+ def test_photo_failure_can_resume_without_retake(gateway,failure):
+     gateway.http.responses=[failure,successful()]
+-    with pytest.raises(HTTPException):assess(gateway)
+-    assert assess(gateway)['quality']['retake_required']
++    if failure == (200,{'choices':[]}):
++        assert assess(gateway)['quality']['retake_required']
++    else:
++        with pytest.raises(HTTPException):assess(gateway)
++        assert assess(gateway)['quality']['retake_required']
+     assert len(gateway.http.calls)==2
+ 
+ def test_photo_retries_bounded(gateway):
+--- a/backend/tests/test_pipeline_recovery.py
++++ b/backend/tests/test_pipeline_recovery.py
+@@ -0,0 +1,100 @@
++"""Fictional sources and synthetic pixels only; every provider call intercepted."""
++import asyncio
++import io
++import json
++import pytest
++from fastapi import HTTPException
++from PIL import Image
++from server import providers
++from test_clinical import clinical_api
++from test_quick_workflows import quick_api, start, add_source
++from test_providers import gateway, completion
++
++@pytest.mark.parametrize('status',[402,429,502,503,504])
++def test_failed_ai_report_recovers_from_original_not_rejected_draft(quick_api,monkeypatch,status):
++    case=start(quick_api)
++    text='Synthetic client reports pain 2 out of 10. Dressing changed. Medication name unclear.'
++    add_source(quick_api,case,text)
++    async def fail(*a,**k):raise HTTPException(status,'SYNTHETIC_PRIVATE_PROVIDER_TEXT')
++    monkeypatch.setattr(providers,'quick_documentation',fail)
++    response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={'use_ai':True})
++    assert response.status_code==200,response.text
++    data=response.json()
++    assert data['status']=='ready' and 'Dressing changed' in data['text']
++    assert data['recovery']['mode']=='source_only' and data['qa']['passed'] is False
++    assert data['review_required'] is True and data['ui_alerts']
++    assert 'SYNTHETIC_PRIVATE_PROVIDER_TEXT' not in json.dumps(data)
++    assert 'antibiotic administered' not in data['text']
++    saved=quick_api.client.get(f"/api/v1/encounters/{case['encounter']['id']}").json()
++    assert saved['evidence'][0]['text']==text and not saved['documents']
++
++def test_authorization_failure_never_becomes_a_successful_draft(quick_api,monkeypatch):
++    case=start(quick_api);add_source(quick_api,case)
++    async def fail(*a,**k):raise HTTPException(401,'Sign in')
++    monkeypatch.setattr(providers,'quick_documentation',fail)
++    response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
++    assert response.status_code==401
++
++def test_partial_photo_accepts_only_independently_valid_candidates():
++    result=providers.validate_result({'quality':{'status':'sufficient','reason':'none'},'warnings':[],
++        'facts':[{'name':'wound_edges','value':{'text':'Irregular visible edge'},'quote':''},
++                 {'name':'periwound','value':{'observation':'unsupported key'},'quote':''},
++                 {'name':'pain','value':{'present':True},'quote':''}]},'image')
++    assert len(result['facts'])==1 and result['facts'][0]['name']=='wound_edges'
++    assert result['quality']['retake_required'] is False
++    assert 'unsupported key' not in json.dumps(result)
++    assert result['warnings']
++
++def png():
++    output=io.BytesIO();Image.new('RGB',(32,32),'blue').save(output,format='PNG');return output.getvalue()
++
++def assess(gateway):
++    return asyncio.run(providers.analyze_media(png(),'image/png','photo',user=gateway.user,encounter_id='synthetic-photo-recovery'))
++
++def test_invalid_photo_envelope_recovers_once_then_replays_without_more_calls(gateway):
++    gateway.http.responses=[completion({'facts':[],'warnings':[]}),completion({'quality':{'status':'sufficient','reason':'none'},'facts':[{'name':'periwound','value':{'text':'Visible redness'},'quote':''}],'warnings':[]})]
++    result=assess(gateway)
++    assert result['facts'][0]['name']=='periwound' and len(gateway.http.calls)==2
++    assert assess(gateway)['facts']==result['facts'] and len(gateway.http.calls)==2
++
++def test_photo_recovery_is_bounded_and_never_fabricates_an_assessment(gateway):
++    gateway.http.responses=[completion({'facts':[],'warnings':[]}),completion({'facts':[],'warnings':[]})]
++    with pytest.raises(HTTPException) as error:assess(gateway)
++    assert error.value.headers['X-WCP-Error']=='INVALID_RESPONSE'
++    assert len(gateway.http.calls)==2
++
++def test_provider_credit_error_does_not_start_schema_repair(gateway):
++    gateway.http.responses=[(402,{'error':{'code':402}})]
++    with pytest.raises(HTTPException):assess(gateway)
++    assert len(gateway.http.calls)==1
++
++
++def test_recovery_never_restores_rejected_findings(quick_api,monkeypatch):
++    case=start(quick_api);source=add_source(quick_api,case)
++    fact=source['facts'][0]
++    assert quick_api.client.post(f"/api/v1/facts/{fact['id']}/review",json={'expected_revision':1,'action':'reject'}).status_code==200
++    async def fail(*a,**k):raise HTTPException(502,'Synthetic QA rejection')
++    monkeypatch.setattr(providers,'quick_documentation',fail)
++    response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
++    assert response.status_code==200
++    assert response.json()['text']=='' and response.json()['status']=='no_content'
++    assert response.json()['fact_snapshot']==[]
++
++
++def test_concurrent_source_edit_blocks_recovered_outdated_draft(quick_api,monkeypatch):
++    from server.clinical_models import Encounter
++    case=start(quick_api);add_source(quick_api,case)
++    async def fail(*a,**k):
++        with quick_api.sessions() as db:
++            row=db.get(Encounter,case['encounter']['id']);row.revision+=1;db.commit()
++        raise HTTPException(502,'Synthetic QA rejection')
++    monkeypatch.setattr(providers,'quick_documentation',fail)
++    response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
++    assert response.status_code==409 and 'Patient reports pain' not in response.text
++
++
++def test_failure_categories_survive_metadata_sanitization():
++    from server.billing import _safe_usage
++    for category in ['invalid_response','provider_timeout','provider_connection','response_processing']:
++        result=_safe_usage({'failure_reason':category,'transcript':'SYNTHETIC_PRIVATE_TEXT','api_key':'SYNTHETIC_SECRET'})
++        assert result=={'failure_reason':category}
+--- a/backend/tests/test_quick_workflows.py
++++ b/backend/tests/test_quick_workflows.py
+@@ -219,7 +219,11 @@
+         raise HTTPException(status, 'Synthetic provider gate')
+     monkeypatch.setattr(providers, 'quick_documentation', failed)
+     response = quick_api.client.post(f'/api/v1/encounters/{case_id}/quick-report', json={})
+-    assert response.status_code == status
++    assert response.status_code == (422 if status == 422 else 200)
++    if status != 422:
++        assert response.json()['recovery']['mode'] == 'source_only'
++        assert response.json()['qa']['passed'] is False
++        assert response.json()['ui_alerts']
+     assert quick_api.client.get(f'/api/v1/encounters/{case_id}').json() == before
+ 
+ 

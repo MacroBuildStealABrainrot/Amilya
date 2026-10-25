@@ -1,0 +1,1351 @@
+diff --git a/android/app/build.gradle.kts b/android/app/build.gradle.kts
+index c778e36..9dbcb4b 100644
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -9,8 +9,8 @@ android {
+         applicationId = "com.woundcopilot.android"
+         minSdk = 28
+         targetSdk = 36
+-        versionCode = 27
+-        versionName = "1.8.5-test7"
++        versionCode = 28
++        versionName = "1.8.5-test8"
+         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
+         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+diff --git a/android/app/src/androidTestSandbox/assets/fixtures/speech-speko-cartesia-synthetic-7s.aac b/android/app/src/androidTestSandbox/assets/fixtures/speech-speko-cartesia-synthetic-7s.aac
+new file mode 100644
+index 0000000000000000000000000000000000000000..47dc1f73c47ad7e8ad3668cda0d6ed5a355d0ccc
+GIT binary patch
+literal 30290
+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
+zZt~Co0562}ml8EkfC?x^qnI%0Ab>|T;9tt&yulPd>-$^ErEHD*(sttO^Lkr@D*0|6
+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
+N&Yu8@(TW06{|B~Z)TaOd
+
+literal 0
+HcmV?d00001
+
+diff --git a/android/app/src/main/java/com/woundcopilot/android/Api.kt b/android/app/src/main/java/com/woundcopilot/android/Api.kt
+index 275a8a6..ac65cd8 100644
+--- a/android/app/src/main/java/com/woundcopilot/android/Api.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/Api.kt
+@@ -139,6 +139,8 @@ class Vault(context:Context) {
+         root.listFiles()?.filter{it.isFile && it.lastModified()<cutoff && kinds.any{prefix->it.name.startsWith(prefix)} && !keep(it.name)}?.forEach{android.util.AtomicFile(it).delete()}
+     }
+ 
++    @Synchronized fun modified(name:String):Long=File(root,name).lastModified()
++
+     @Synchronized fun remove(name:String) { android.util.AtomicFile(File(root,name.replace(Regex("[^a-zA-Z0-9_.-]"),"_"))).delete() }
+ 
+ }
+diff --git a/android/app/src/main/java/com/woundcopilot/android/CaptureScreen.kt b/android/app/src/main/java/com/woundcopilot/android/CaptureScreen.kt
+index 509ec4b..05cef4e 100644
+--- a/android/app/src/main/java/com/woundcopilot/android/CaptureScreen.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/CaptureScreen.kt
+@@ -154,7 +154,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
+                 }, onStop={RecordingService.stop(context)}
+             )
+             if (rec.recording && belongsHere) TextButton(onClick={if(rec.paused)RecordingService.resume(context)else RecordingService.pause(context)},modifier=Modifier.align(Alignment.CenterHorizontally)) { Text(if(rec.paused)"Resume" else "Pause") }
+-            if (belongsHere || recordingRequested) rec.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
++            if (belongsHere || recordingRequested) rec.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
++            if (belongsHere || recordingRequested) rec.notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+             TextButton(onClick={launchExternal(ExternalKind.AUDIO_PICKER)},modifier=Modifier.align(Alignment.CenterHorizontally),enabled=idle&&!rec.recording){Text("Import audio") }
+             if (pending.isNotEmpty()) {
+                 SectionLabel("Saved for this encounter")
+diff --git a/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt b/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt
+index f413bb8..f6650bf 100644
+--- a/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt
+@@ -75,7 +75,9 @@ data class RecordingState(
+     val elapsedSeconds: Int = 0,
+     val amplitude: Float = 0f,
+     val filePath: String? = null,
+-    val error: String? = null,
++    val error: String? = null,
++    /** Sandbox: a calm, non-error message such as "recording will continue in a second recording". Null everywhere else. */
++    val notice: String? = null,
+ )
+ 
+ /** Owns the microphone independently of the activity, and never restarts recording on process death. */
+diff --git a/android/app/src/main/java/com/woundcopilot/android/LocalRetention.kt b/android/app/src/main/java/com/woundcopilot/android/LocalRetention.kt
+index 9ed8819..c0ddd42 100644
+--- a/android/app/src/main/java/com/woundcopilot/android/LocalRetention.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/LocalRetention.kt
+@@ -43,7 +43,7 @@ object LocalRetention{
+         }
+         File(context.cacheDir,"exports").listFiles()?.filter{it.isFile && now-it.lastModified()>MEDIA_AGE}?.forEach{it.delete()}
+         val keepNames: Set<String> = if(retain)unresolvedRecordNames(vault) else emptySet()
+-        vault.expireRecovery(now-RECOVERY_AGE){name->name in keepNames}
++        vault.expireRecovery(now-RECOVERY_AGE){name->UnresolvedRetention.keepRecord(name,retain,keepNames)}
+         if(retain)runCatching{UnresolvedReminder.check(context,now)}
+     }
+     /** Names of stored records that belong to recordings still waiting to be recovered, uploaded or reported (sandbox only). */
+diff --git a/android/app/src/main/java/com/woundcopilot/android/UnresolvedReminder.kt b/android/app/src/main/java/com/woundcopilot/android/UnresolvedReminder.kt
+index 6aa943c..e271b49 100644
+--- a/android/app/src/main/java/com/woundcopilot/android/UnresolvedReminder.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/UnresolvedReminder.kt
+@@ -16,7 +16,10 @@ internal object UnresolvedReminder {
+         val waiting = UnresolvedRetention.waiting(RecordingService.recordingsDirectory(context))
+         val stamp = File(context.noBackupFilesDir, "waiting-reminder.txt")
+         val last = runCatching { stamp.readText().trim().toLong() }.getOrDefault(0L)
+-        val reminder = UnresolvedRetention.reminder(now, waiting.minOfOrNull { it.sinceMillis }, waiting.size, last) ?: return
++        val vault = Vault(context)
++        val drafts = vault.names().filter { UnresolvedRetention.isDraft(it) }
++        val oldest = listOfNotNull(waiting.minOfOrNull { it.sinceMillis }, drafts.minOfOrNull { vault.modified(it) }).minOrNull()
++        val reminder = UnresolvedRetention.reminderForWork(now, oldest, waiting.size, drafts.size, last) ?: return
+         val manager = context.getSystemService(NotificationManager::class.java)
+         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Waiting recordings", NotificationManager.IMPORTANCE_DEFAULT))
+         val builder = Notification.Builder(context, CHANNEL)
+diff --git a/android/app/src/main/java/com/woundcopilot/android/UnresolvedRetention.kt b/android/app/src/main/java/com/woundcopilot/android/UnresolvedRetention.kt
+index 3342052..10f530c 100644
+--- a/android/app/src/main/java/com/woundcopilot/android/UnresolvedRetention.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/UnresolvedRetention.kt
+@@ -59,6 +59,41 @@ internal object UnresolvedRetention {
+         )
+     }
+ 
++    // ---- unfinished reports and drafts (decision 1 of test8): same promise as for recordings ----
++
++    /**
++     * Stored records that are unfinished clinical work. In the sandbox build they never expire because of age: the app removes them
++     * itself when the report is saved or the clinician discards the work. Everything else the 7-day clean-up handles
++     * (local copies of already-saved photos "source-", watch hand-over notes "wear-", "diagnostic-" logs, "local-bind-") still expires.
++     */
++    val UNFINISHED_WORK_PREFIXES = listOf(
++        "draft-", "draft-recovery-", "consult-draft-", "consult-chat-", "photo-batch-",
++        "capture-", "upload-", "audio-batch-", "recording-job-", "recording-context-",
++    )
++    /** Drafts and reports being written (the ones a clinician would call "my unfinished report"). */
++    val DRAFT_PREFIXES = listOf("draft-", "draft-recovery-", "consult-draft-")
++
++    fun isUnfinishedWork(recordName: String) = UNFINISHED_WORK_PREFIXES.any { recordName.startsWith(it) }
++    fun isDraft(recordName: String) = DRAFT_PREFIXES.any { recordName.startsWith(it) }
++
++    /** True when the 7-day clean-up must leave this stored record alone. When [retain] is off this is always false (original behaviour). */
++    fun keepRecord(recordName: String, retain: Boolean, protectedNames: Set<String>): Boolean =
++        retain && (recordName in protectedNames || isUnfinishedWork(recordName))
++
++    /** Like [reminder] but also counts unfinished drafts. With no drafts it gives exactly what [reminder] gives. */
++    fun reminderForWork(now: Long, oldestWaitingSince: Long?, recordings: Int, drafts: Int, lastReminderAt: Long): Reminder? {
++        val total = recordings + drafts
++        if (total <= 0 || oldestWaitingSince == null) return null
++        if (now - oldestWaitingSince < FIRST_REMINDER_AFTER_MILLIS) return null
++        if (lastReminderAt > 0 && now - lastReminderAt < REMINDER_EVERY_MILLIS) return null
++        if (drafts == 0) return reminder(now, oldestWaitingSince, recordings, lastReminderAt)
++        val what = when {
++            recordings == 0 -> if (drafts == 1) "An unfinished report is waiting" else "$drafts unfinished reports are waiting"
++            else -> "$total unfinished items are waiting"
++        }
++        return Reminder(what, "Open WoundCoPilot to finish, save or discard ${if (total == 1) "it" else "them"}. Nothing is deleted automatically.")
++    }
++
+     class Waiting(val media: File, val sinceMillis: Long, val bytes: Long)
+ 
+     /** Recordings that still have a recovery note next to them, with the space they use (including encrypted pieces). */
+diff --git a/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt b/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt
+index 8720b0f..1328bdf 100644
+--- a/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt
++++ b/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt
+@@ -132,6 +132,7 @@ internal object CrashSafeBackendImpl : CrashSafeBackend {
+             val note = listOfNotNull(
+                 if (interrupted) "Recording was interrupted. The audio saved before the interruption is available; review it before uploading." else null,
+                 warning,
++                VisitContinuation.note(info["visitPart"]?.toIntOrNull(), info["previousName"], info["nextName"]),
+             ).joinToString(" ").ifBlank { null }
+             RecordingService.writeMetadata(finalFile, "ready", elapsed, note)
+             runCatching { RecordingRecovery(context).stage(finalFile, "RECORDED_LOCALLY") }
+@@ -219,10 +220,19 @@ internal class SafeRecorderService : Service() {
+     private var activeSince = 0L
+     private var lastPersistedSecond = -1
+     private var finishing = false
+-    var finalName: String? = null; private set
+-    var sessionDirectory: File? = null; private set
++    @Volatile var finalName: String? = null; private set
++    @Volatile var sessionDirectory: File? = null; private set
+     private var errorMessage: String? = null
+     @Volatile private var sessionKey: SessionKey? = null
++    // ---- long visits: automatic hand-over to a second recording (see VisitContinuation) ----
++    @Volatile private var partNumber = 1
++    @Volatile private var partOffsetMillis = 0L
++    private var ownerKeyForParts = ""
++    private var visitId = ""
++    private val partNames = mutableListOf<String>()
++    private val partDirs = mutableListOf<File>()
++    private val rebuilds = java.util.Collections.synchronizedList(mutableListOf<Thread>())
++    @Volatile private var headsUpShown = false
+     private class SecureStorageException(cause: Throwable) : Exception(cause)
+     /** The phone is nearly full, or too many unfinished recordings are waiting: a new recording is refused (nothing is deleted). */
+     private class StorageLimitException(message: String) : Exception(message)
+@@ -234,12 +244,17 @@ internal class SafeRecorderService : Service() {
+         override fun run() {
+             if (!capturing || finishing) return
+             val elapsed = elapsedMillis()
+-            // The server accepts at most 3,600 seconds per recording; stop a little early so rounding can never push it over.
+-            if (elapsed >= MAX_MILLIS) { finish("The recording limit was reached. The saved audio is ready; start another recording to continue."); return }
++            // The server accepts at most 3,600 seconds per recording; each part stops a little early so rounding can never push it over.
++            // Normally the recorder has already moved on to the next part at 59:00; reaching this means that hand-over did not work (or the last allowed part is full).
++            val partElapsed = elapsed - partOffsetMillis
++            if (partElapsed >= MAX_MILLIS) { finish(VisitContinuation.failedToContinue(partNumber)); return }
+             val current = RecordingService.state.value
++            val headsUp = VisitContinuation.headsUp(partElapsed, partNumber, headsUpShown)
++            if (headsUp != null) headsUpShown = true
+             RecordingService.state.value = current.copy(
+                 elapsedSeconds = (elapsed / 1000).toInt(),
+                 amplitude = if (pausedFlag) 0f else level,
++                notice = headsUp ?: current.notice,
+             )
+             if (RecordingService.state.value.elapsedSeconds != lastPersistedSecond) {
+                 lastPersistedSecond = RecordingService.state.value.elapsedSeconds
+@@ -305,6 +320,8 @@ internal class SafeRecorderService : Service() {
+         }
+         finishing = false; stopRequested = false; pausedFlag = false
+         completedMillis = 0L; activeSince = 0L; lastPersistedSecond = -1; errorMessage = null
++        partNumber = 1; partOffsetMillis = 0L; headsUpShown = false; ownerKeyForParts = ownerKey
++        partNames.clear(); partDirs.clear(); rebuilds.clear()
+         try {
+             val root = RecordingService.recordingsDirectory(this)
+             // Storage limits (sandbox): refuse to START when the phone is nearly full or too many recordings are waiting. Nothing is deleted.
+@@ -317,14 +334,9 @@ internal class SafeRecorderService : Service() {
+             val dir = File(root, "safe-${name.removeSuffix(".m4a")}")
+             check(dir.mkdirs()) { "Recording storage is unavailable" }
+             finalName = name; sessionDirectory = dir
++            visitId = name.removeSuffix(".m4a"); partNames += name; partDirs += dir
+             // Same ownership and recovery bookkeeping as the original recorder, committed before state exposes the file.
+-            if (ownerKey.isNotBlank()) Vault(this).write("recording-owner-$name", ownerKey)
+-            ownerKey.split(':', limit = 2).takeIf { it.size == 2 }?.let { DeveloperDiagnostics.bind(Vault(this), it[0], it[1], finalFile) }
+-            Vault(this).read("recording-context-$ownerKey")?.let { raw ->
+-                val capture = JSONObject(raw)
+-                RecordingRecovery(this).remember(finalFile, capture.str("owner"), capture.getJSONObject("case"), capture.str("template", "nursing"))
+-                RecordingRecovery(this).stage(finalFile, "RECORDING")
+-            }
++            registerRecording(name, finalFile, ownerKey)
+             // The per-recording key is made and locked (Keystore) and saved BEFORE any sound is written. If that fails,
+             // recording does not start: audio is never silently saved without protection.
+             val key = try {
+@@ -332,7 +344,7 @@ internal class SafeRecorderService : Service() {
+                     "finalName" to name, "status" to "recording", "elapsedMillis" to "0",
+                     "sampleRate" to CrashSafeBackendImpl.SAMPLE_RATE.toString(), "channels" to CrashSafeBackendImpl.CHANNELS.toString(),
+                     "segmentSeconds" to SEGMENT_SECONDS.toString(),
+-                ))
++                ) + VisitContinuation.settings(visitId, 1, null))
+             } catch (error: Exception) { throw SecureStorageException(error) }
+             sessionKey = key
+             RecordingService.state.value = RecordingState(filePath = finalFile.absolutePath)
+@@ -359,6 +371,78 @@ internal class SafeRecorderService : Service() {
+         }
+     }
+ 
++    /** Ownership and recovery bookkeeping for one recording (first part or a later part), the same as the original recorder does. */
++    private fun registerRecording(name: String, finalFile: File, ownerKey: String) {
++        if (ownerKey.isNotBlank()) Vault(this).write("recording-owner-$name", ownerKey)
++        ownerKey.split(':', limit = 2).takeIf { it.size == 2 }?.let { DeveloperDiagnostics.bind(Vault(this), it[0], it[1], finalFile) }
++        Vault(this).read("recording-context-$ownerKey")?.let { raw ->
++            val capture = JSONObject(raw)
++            RecordingRecovery(this).remember(finalFile, capture.str("owner"), capture.getJSONObject("case"), capture.str("template", "nursing"))
++            RecordingRecovery(this).stage(finalFile, "RECORDING")
++        }
++    }
++
++    /** One part's encrypted pieces. Closing it closes the pieces and wipes that part's key. */
++    private inner class PartSink(val dir: File, val name: String, val key: SessionKey, val writer: SegmentWriter) : FrameSink {
++        override fun write(frame: ByteArray, length: Int) = writer.writeFrame(frame, length)
++        override fun syncToDisk() = writer.syncToDisk()
++        override fun close() { runCatching { writer.close() }; runCatching { key.wipe() } }
++        override fun abandon() { runCatching { writer.close() }; runCatching { key.wipe() }; runCatching { dir.deleteRecursively() } }
++    }
++
++    private fun newWriter(dir: File, key: SessionKey, rate: Int) = SegmentWriter(
++        dir, SealedCodec(key), Adts.framesFor(segmentSecondsForTests ?: SEGMENT_SECONDS, rate),
++        // Each finished piece reports how many frames it holds, so recovery can notice a short or missing piece later.
++        onSegmentClosed = { number, frames -> SessionInfo(dir).update(SessionInfo.framesKey(number), frames.toString()) },
++    )
++
++    /**
++     * Starts the next part while the microphone and encoder keep running. The new part gets its own key, saved before any sound, and is
++     * only registered with the app once that worked. Any failure throws and the current part simply keeps recording.
++     */
++    private fun openNextPart(nextPart: Int, rate: Int): FrameSink {
++        val root = RecordingService.recordingsDirectory(this)
++        val name = "recording-${System.currentTimeMillis()}-${UUID.randomUUID()}.m4a"
++        val dir = File(root, "safe-${name.removeSuffix(".m4a")}")
++        check(dir.mkdirs()) { "Recording storage is unavailable" }
++        try {
++            val verdict = UnresolvedRetention.whileRecording(freeBytes(root))
++            if (verdict.level == UnresolvedRetention.Level.BLOCK) throw java.io.IOException("not enough free storage to continue")
++            val previous = partNames.last()
++            val key = SealedSession.begin(dir, AndroidKeystoreWrapper(), mapOf(
++                "finalName" to name, "status" to "recording", "elapsedMillis" to "0",
++                "sampleRate" to CrashSafeBackendImpl.SAMPLE_RATE.toString(), "channels" to CrashSafeBackendImpl.CHANNELS.toString(),
++                "segmentSeconds" to SEGMENT_SECONDS.toString(),
++            ) + VisitContinuation.settings(visitId, nextPart, previous))
++            val sink = PartSink(dir, name, key, newWriter(dir, key, rate))
++            try { registerRecording(name, File(root, name), ownerKeyForParts) } catch (error: Exception) { sink.abandon(); throw error }
++            // Tell the finished part where the visit continues BEFORE it is rebuilt, so its note says so.
++            partDirs.lastOrNull()?.let { SessionInfo(it).update("nextName", name) }
++            partNames += name; partDirs += dir
++            return sink
++        } catch (error: Exception) {
++            runCatching { dir.deleteRecursively() }
++            throw error
++        }
++    }
++
++    /** Runs on the capture thread right after a part was closed: the finished part is rebuilt in the background. */
++    private fun partFinished(finished: FrameSink, uniqueFrames: Int, finishedPart: Int) {
++        val sink = finished as PartSink
++        val partMillis = Adts.framesToMillis(uniqueFrames.toLong(), CrashSafeBackendImpl.SAMPLE_RATE)
++        partOffsetMillis += partMillis
++        partNumber = finishedPart + 1
++        finalName = partNames.last(); sessionDirectory = partDirs.last(); sessionKey = null
++        runCatching { SessionInfo(sink.dir).update("elapsedMillis", partMillis.toString()); SessionInfo(sink.dir).update("status", "stopped") }
++        val thread = Thread({ runCatching { CrashSafeBackendImpl.consolidate(this, sink.dir, interrupted = false) } }, "safe-rebuild-part-$finishedPart")
++        rebuilds += thread; thread.start()
++        handler.post {
++            headsUpShown = false
++            RecordingService.state.value = RecordingService.state.value.copy(notice = VisitContinuation.continuedNotice(partNumber))
++            updateNotification()
++        }
++    }
++
+     private fun startCaptureThread(dir: File, key: SessionKey) {
+         val rate = CrashSafeBackendImpl.SAMPLE_RATE
+         val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+@@ -375,15 +459,16 @@ internal class SafeRecorderService : Service() {
+         codec.start()
+         record.startRecording()
+         audio = record
+-        val writer = SegmentWriter(
+-            dir, SealedCodec(key), Adts.framesFor(segmentSecondsForTests ?: SEGMENT_SECONDS, rate),
+-            // Each finished piece reports how many frames it holds, so recovery can notice a short or missing piece later.
+-            onSegmentClosed = { number, frames -> SessionInfo(dir).update(SessionInfo.framesKey(number), frames.toString()) },
++        val first = PartSink(dir, partNames.last(), key, newWriter(dir, key, rate))
++        val writer = HandoffRouter(
++            first, VisitContinuation.framesPerPart(rate) .let { handOffFramesForTests ?: it },
++            openNext = { n -> openNextPart(n, rate).also { next -> sessionKey = (next as PartSink).key } },
++            onPartFinished = ::partFinished,
+         )
+         thread = Thread({ captureLoop(record, codec, writer) }, "safe-recorder").also { it.start() }
+     }
+ 
+-    private fun captureLoop(record: AudioRecord, codec: MediaCodec, writer: SegmentWriter) {
++    private fun captureLoop(record: AudioRecord, codec: MediaCodec, writer: HandoffRouter) {
+         val pcm = ByteArray(4096)
+         val outInfo = MediaCodec.BufferInfo()
+         var samples = 0L
+@@ -500,16 +585,19 @@ internal class SafeRecorderService : Service() {
+             publish(elapsed, null, earlyError ?: "No playable audio was captured. Please record again.", hadSession = false)
+             return
+         }
+-        runCatching { SessionInfo(dir).update("elapsedMillis", elapsed.toString()); SessionInfo(dir).update("status", "stopped") }
++        val lastPartElapsed = (elapsed - partOffsetMillis).coerceAtLeast(0L)
++        runCatching { SessionInfo(dir).update("elapsedMillis", lastPartElapsed.toString()); SessionInfo(dir).update("status", "stopped") }
+         // Joining and converting a long visit takes a moment: do it off the main thread. The foreground service stays up meanwhile,
+         // and if the app is killed during this step the next start rebuilds the recording from the saved pieces.
+         Thread({
+             val rebuilt = runCatching { CrashSafeBackendImpl.consolidate(this, dir, interrupted = false) }.getOrNull()
+-            handler.post { publish(elapsed, rebuilt, earlyError, hadSession = true) }
++            rebuilds.toList().forEach { runCatching { it.join(60_000) } } // earlier parts finish rebuilding in the background
++            val parts = partNames.size
++            handler.post { publish(elapsed, rebuilt, earlyError, hadSession = true, parts = parts) }
+         }, "safe-rebuild").start()
+     }
+ 
+-    private fun publish(elapsed: Long, rebuilt: CrashSafeBackendImpl.Rebuilt?, early: String?, hadSession: Boolean) {
++    private fun publish(elapsed: Long, rebuilt: CrashSafeBackendImpl.Rebuilt?, early: String?, hadSession: Boolean, parts: Int = 1) {
+         var error = early
+         if (hadSession && rebuilt == null && error == null) error = "The recording could not be completed right now. Whatever was saved has been kept; reopen the app to try again."
+         // If audio may be missing, say so clearly on the screen that offers the recording for upload.
+@@ -518,6 +606,7 @@ internal class SafeRecorderService : Service() {
+             elapsedSeconds = (elapsed / 1000).toInt(),
+             filePath = rebuilt?.file?.absolutePath,
+             error = error,
++            notice = VisitContinuation.finishedNotice(parts),
+         )
+         if (!hadSession) finalName?.let { name ->
+             // Started but never recorded anything: close the recovery job so it is not offered as a lost recording.
+@@ -541,8 +630,9 @@ internal class SafeRecorderService : Service() {
+     private fun persist(status: String, elapsed: Long) {
+         val name = finalName ?: return
+         val dir = sessionDirectory ?: return
+-        RecordingService.writeMetadata(File(RecordingService.recordingsDirectory(this), name), status, elapsed, null)
+-        runCatching { SessionInfo(dir).update("elapsedMillis", elapsed.toString()) }
++        val partElapsed = (elapsed - partOffsetMillis).coerceAtLeast(0L)
++        RecordingService.writeMetadata(File(RecordingService.recordingsDirectory(this), name), status, partElapsed, null)
++        runCatching { SessionInfo(dir).update("elapsedMillis", partElapsed.toString()) }
+     }
+ 
+     private fun updateNotification() {
+@@ -561,6 +651,7 @@ internal class SafeRecorderService : Service() {
+             .setCategory(Notification.CATEGORY_SERVICE)
+             .setVisibility(Notification.VISIBILITY_PRIVATE)
+             .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
++            .apply { if (current.notice != null && current.recording) setSubText("Long visit: continues in several recordings") }
+             .addAction(Notification.Action.Builder(null, label, actionIntent(action)).build())
+             .addAction(Notification.Action.Builder(null, "Stop and save", actionIntent(RecordingService.ACTION_STOP)).build())
+         packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+@@ -580,6 +671,8 @@ internal class SafeRecorderService : Service() {
+         const val MAX_MILLIS = 3_590_000L
+         /** Only the phone test sets this (to rotate pieces quickly). Null in normal use. */
+         @Volatile internal var segmentSecondsForTests: Int? = null
++        /** Only the phone test sets this (hand over after a few seconds of sound, not 59 minutes). Null in normal use. */
++        @Volatile internal var handOffFramesForTests: Int? = null
+         private const val CHANNEL = "woundcopilot_recording"
+         private const val NOTIFICATION_ID = 4041
+         @Volatile var live: SafeRecorderService? = null
+diff --git a/android/app/src/sandbox/java/com/woundcopilot/android/VisitContinuation.kt b/android/app/src/sandbox/java/com/woundcopilot/android/VisitContinuation.kt
+new file mode 100644
+index 0000000..17bfa1a
+--- /dev/null
++++ b/android/app/src/sandbox/java/com/woundcopilot/android/VisitContinuation.kt
+@@ -0,0 +1,126 @@
++package com.woundcopilot.android
++
++/*
++ * SANDBOX ONLY. Long visits: one recording can hold at most about an hour (the server accepts at most 3,602 seconds of audio per
++ * recording), so after 59 minutes the recorder moves on to a SECOND recording without stopping the microphone or the encoder.
++ *
++ * Plain-words rules (tested on a PC; the service wiring that uses them has never been compiled or run):
++ *  - Nothing is skipped. The last sound frame of the finished recording is written again at the start of the new one ("primer"),
++ *    because an audio frame can only be decoded properly together with the one before it. The new recording therefore begins with
++ *    about 43 ms of faded, repeated sound; no sound is missing. (Verified by decoding both parts and comparing with the whole.)
++ *  - Each recording is encrypted with its own new key, exactly like any other recording.
++ *  - Every part names the visit it belongs to and the parts before and after it, and says so in its note, so no part can be mistaken
++ *    for a complete visit. All parts stay under the same patient visit (same owner and encounter context).
++ *  - The clinician gets a heads-up 5 minutes before the hand-over. If the new recording cannot be started (storage, Keystore) the
++ *    current one simply keeps recording (up to the old 59:50 safety limit), and the hand-over is retried every ~10 seconds.
++ *  - At most MAX_PARTS parts (about 3 h 56 min); after that the recorder stops and saves with a clear message.
++ */
++internal object VisitContinuation {
++    /** Sound per recording before moving on: 59:00. Leaves 2 minutes under the server's 3,602 s limit even with the repeated frame. */
++    const val HAND_OFF_SECONDS = 3_540
++    const val WARN_SECONDS_BEFORE = 300
++    const val MAX_PARTS = 4
++    /** After a failed hand-over, try again after this many sound frames (about 10 seconds at 24 kHz). */
++    const val RETRY_AFTER_FRAMES = 430
++
++    fun framesPerPart(sampleRate: Int): Int = Adts.framesFor(HAND_OFF_SECONDS, sampleRate)
++
++    /** The heads-up text, or null when none is due. Shown once, [WARN_SECONDS_BEFORE] seconds ahead, and never on the last allowed part. */
++    fun headsUp(partElapsedMillis: Long, part: Int, alreadyShown: Boolean): String? {
++        if (alreadyShown || part >= MAX_PARTS) return null
++        if (partElapsedMillis < (HAND_OFF_SECONDS - WARN_SECONDS_BEFORE) * 1000L) return null
++        return "In about ${WARN_SECONDS_BEFORE / 60} minutes this recording will continue automatically in a second recording. No sound will be missed. " +
++            "Both recordings stay with this visit; upload all of them."
++    }
++
++    fun continuedNotice(part: Int) =
++        "This visit is long, so recording continued in part $part. All parts stay with this visit; upload all of them when you finish."
++
++    fun finishedNotice(parts: Int): String? =
++        if (parts <= 1) null else "This visit was recorded in $parts parts that stay together. Upload all $parts recordings so the whole visit is included."
++
++    fun failedToContinue(part: Int) =
++        if (part >= MAX_PARTS) "The recording limit was reached (about ${MAX_PARTS - 1} hours of one visit). The saved audio is ready; start another recording to continue."
++        else "The recording could not continue into a new recording (the phone may be low on storage), so it was stopped and saved. Free some space and start another recording to continue."
++
++    /** Settings stored with a part's encrypted pieces. */
++    fun settings(visitId: String, part: Int, previousName: String?): Map<String, String> =
++        mapOf("visitId" to visitId, "visitPart" to part.toString()) + (previousName?.let { mapOf("previousName" to it) } ?: emptyMap())
++
++    /** Note shown with a part, or null for an ordinary single recording. Plain words, no patient details. */
++    fun note(part: Int?, previousName: String?, nextName: String?): String? = when {
++        previousName == null && nextName == null -> null
++        nextName != null -> "This is part ${part ?: 1} of a long visit. The visit continued in another recording. Upload all parts so nothing is missed."
++        else -> "This is the last part of a long visit that was recorded in ${part ?: 2} parts. Upload all parts so nothing is missed."
++    }
++}
++
++/** Where sound frames go: one part's encrypted pieces on the phone, or a fake one in a test. */
++internal interface FrameSink : AutoCloseable {
++    fun write(frame: ByteArray, length: Int)
++    fun syncToDisk()
++    /** Throw away a part that never received sound (a failed start); must never throw. */
++    fun abandon()
++}
++
++/**
++ * Sends frames to the current part and, when it is full, to the next one without losing or skipping a frame.
++ * [openNext] creates the next part (it may throw: then the current part simply keeps going and the hand-over is retried).
++ * [onPartFinished] is called after the old part has been closed (the service starts rebuilding it in the background).
++ */
++internal class HandoffRouter(
++    first: FrameSink,
++    private val framesPerPart: Int,
++    private val openNext: (nextPart: Int) -> FrameSink,
++    private val onPartFinished: (finished: FrameSink, uniqueFrames: Int, finishedPart: Int) -> Unit = { _, _, _ -> },
++    private val maxParts: Int = VisitContinuation.MAX_PARTS,
++    private val retryAfterFrames: Int = VisitContinuation.RETRY_AFTER_FRAMES,
++) : AutoCloseable {
++    private var current: FrameSink = first
++    private var last: ByteArray? = null
++    private var framesInPart = 0       // everything written to the current part, including the repeated first frame
++    private var primerCount = 0        // 1 for parts after the first
++    private var retryAt = 0
++    var part = 1; private set
++    var lastHandOffError: Throwable? = null; private set
++    var handOffs = 0; private set
++
++    init { require(framesPerPart > 1 && maxParts >= 1) }
++
++    @Throws(java.io.IOException::class)
++    fun writeFrame(frame: ByteArray, length: Int = frame.size) {
++        if (framesInPart >= framesPerPart && part < maxParts && framesInPart >= retryAt) tryHandOff()
++        current.write(frame, length)
++        framesInPart++
++        last?.fill(0)
++        last = frame.copyOf(length)
++    }
++
++    fun syncToDisk() = current.syncToDisk()
++
++    private fun tryHandOff() {
++        var next: FrameSink? = null
++        try {
++            next = openNext(part + 1)
++            last?.let { next.write(it, it.size) }  // the repeated frame: the new part can decode its first real frame completely
++            val old = current
++            val unique = framesInPart - primerCount
++            val finishedPart = part
++            current = next; part++; handOffs++
++            framesInPart = if (last != null) 1 else 0
++            primerCount = framesInPart
++            lastHandOffError = null
++            runCatching { old.close() }
++            runCatching { onPartFinished(old, unique, finishedPart) }
++        } catch (t: Throwable) {
++            lastHandOffError = t
++            retryAt = framesInPart + retryAfterFrames
++            if (next != null && current !== next) runCatching { next.abandon() }
++        }
++    }
++
++    override fun close() {
++        runCatching { current.close() }
++        last?.fill(0); last = null
++    }
++}
+diff --git a/android/app/src/testSandbox/java/com/woundcopilot/android/UnresolvedRetentionTest.kt b/android/app/src/testSandbox/java/com/woundcopilot/android/UnresolvedRetentionTest.kt
+index f57081f..098829d 100644
+--- a/android/app/src/testSandbox/java/com/woundcopilot/android/UnresolvedRetentionTest.kt
++++ b/android/app/src/testSandbox/java/com/woundcopilot/android/UnresolvedRetentionTest.kt
+@@ -195,4 +195,54 @@ class UnresolvedRetentionTest {
+         assertTrue(list[0].bytes >= 5000)
+         assertEquals(0L, list[1].bytes)
+     }
++
++    // ---- unfinished reports and drafts (test8) ----
++    private val allKinds = listOf("draft-u1-e1", "draft-recovery-u1-e1", "consult-draft-u1-e1", "consult-chat-u1-e1", "photo-batch-pending-u1-e1",
++        "capture-u1-e1-audio", "capture-u1-e1-audio-mime", "upload-abc", "audio-batch-xyz", "recording-job-recording-1.m4a", "recording-context-u1_e1",
++        "source-u1-ev1", "local-bind-1", "diagnostic-1", "wear-cancel-x.m4a", "cached-account", "pin-failures")
++
++    @Test fun unfinishedReportsAndDraftsAreKeptWhateverTheirAge() {
++        val expiring = allKinds.filterNot { UnresolvedRetention.keepRecord(it, true, emptySet()) }.toSet()
++        // only these still expire by age in the sandbox build: local copies of saved photos, watch notes, logs, bindings
++        assertEquals(setOf("source-u1-ev1", "local-bind-1", "diagnostic-1", "wear-cancel-x.m4a", "cached-account", "pin-failures"), expiring)
++        for (kind in listOf("draft-u1-e1", "draft-recovery-u1-e1", "consult-draft-u1-e1", "consult-chat-u1-e1", "photo-batch-pending-u1-e1"))
++            assertTrue("$kind must be kept", UnresolvedRetention.keepRecord(kind, true, emptySet()))
++    }
++
++    @Test fun withTheFlagOffNothingIsKeptSoTheOriginalRulesApplyUnchanged() {
++        for (kind in allKinds) assertFalse(kind, UnresolvedRetention.keepRecord(kind, false, setOf(kind)))
++    }
++
++    @Test fun anExplicitlyProtectedRecordIsKeptEvenIfItsNameIsNotAWorkKind() {
++        assertTrue(UnresolvedRetention.keepRecord("something-else", true, setOf("something-else")))
++        assertFalse(UnresolvedRetention.keepRecord("something-else", true, emptySet()))
++    }
++
++    @Test fun theVaultCleanupThatLocalRetentionRunsKeepsDraftsOfAnyAgeAndStillClearsTheRest() {
++        // same predicate shape as Vault.expireRecovery: delete when older than the cutoff and not kept
++        val ages = listOf(8L, 30L, 365L, 400L * 365)
++        for (days in ages) for (kind in allKinds) {
++            val deleted = days * DAY > RECOVERY && !UnresolvedRetention.keepRecord(kind, true, emptySet())
++            if (UnresolvedRetention.isUnfinishedWork(kind)) assertFalse("$kind at $days days", deleted)
++        }
++    }
++
++    @Test fun theReminderCountsUnfinishedReportsAndStaysQuietBeforeTwoDays() {
++        val start = NOW
++        assertNull(UnresolvedRetention.reminderForWork(start + DAY, start, 0, 2, 0))
++        val r = UnresolvedRetention.reminderForWork(start + 3 * DAY, start, 0, 2, 0)!!
++        assertEquals("2 unfinished reports are waiting", r.title)
++        assertEquals("An unfinished report is waiting", UnresolvedRetention.reminderForWork(start + 3 * DAY, start, 0, 1, 0)!!.title)
++        assertEquals("3 unfinished items are waiting", UnresolvedRetention.reminderForWork(start + 3 * DAY, start, 1, 2, 0)!!.title)
++        assertNull("at most once a day", UnresolvedRetention.reminderForWork(start + 3 * DAY, start, 0, 2, start + 3 * DAY - DAY / 2))
++        assertNotNull(UnresolvedRetention.reminderForWork(start + 4 * DAY + 1, start, 0, 2, start + 3 * DAY))
++        for (text in listOf(r.title, r.text)) assertFalse("no patient details", text.contains("patient", true) || text.contains("name", true))
++    }
++
++    @Test fun withNoDraftsTheNewReminderIsExactlyTheOldOne() {
++        for (rec in 0..3) for (days in listOf(0L, 1L, 2L, 3L, 10L)) for (last in listOf(0L, NOW + days * DAY - DAY / 2, NOW + days * DAY - 2 * DAY)) {
++            val a = UnresolvedRetention.reminder(NOW + days * DAY, NOW, rec, last); val b = UnresolvedRetention.reminderForWork(NOW + days * DAY, NOW, rec, 0, last)
++            assertEquals(a?.title, b?.title); assertEquals(a?.text, b?.text)
++        }
++    }
+ }
+diff --git a/android/app/src/testSandbox/java/com/woundcopilot/android/VisitContinuationTest.kt b/android/app/src/testSandbox/java/com/woundcopilot/android/VisitContinuationTest.kt
+new file mode 100644
+index 0000000..a1574ff
+--- /dev/null
++++ b/android/app/src/testSandbox/java/com/woundcopilot/android/VisitContinuationTest.kt
+@@ -0,0 +1,177 @@
++package com.woundcopilot.android
++
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Rule
++import org.junit.Test
++import org.junit.rules.TemporaryFolder
++import java.io.File
++import java.io.IOException
++import java.nio.ByteBuffer
++
++/** Long visits: the hand-over from one recording to the next loses nothing, and failures never lose sound (synthetic frames only). */
++class VisitContinuationTest {
++    @get:Rule val folder = TemporaryFolder()
++
++    private fun frame(i: Int) = ByteArray(40 + i % 50).also { ByteBuffer.wrap(it).putInt(0, i) }
++    private fun index(f: ByteArray) = ByteBuffer.wrap(f).int
++
++    private class Fake(val name: String) : FrameSink {
++        val frames = mutableListOf<Int>(); var closed = false; var abandoned = false; var failWrites = false; var syncs = 0
++        override fun write(frame: ByteArray, length: Int) { if (failWrites) throw IOException("disk full"); frames += ByteBuffer.wrap(frame).int }
++        override fun syncToDisk() { syncs++ }
++        override fun abandon() { abandoned = true }
++        override fun close() { closed = true }
++    }
++
++    private fun run(total: Int, per: Int, maxParts: Int = 4, failOpenFor: Set<Int> = emptySet(), retry: Int = 10, failFirstAttempts: Int = 0): Triple<List<Fake>, HandoffRouter, List<Triple<String, Int, Int>>> {
++        val sinks = mutableListOf(Fake("p1")); val finished = mutableListOf<Triple<String, Int, Int>>(); var attempts = 0
++        val router = HandoffRouter(sinks[0], per, openNext = { n ->
++            attempts++
++            if (n in failOpenFor || attempts <= failFirstAttempts) throw IOException("cannot start part $n")
++            Fake("p$n").also { sinks += it }
++        }, onPartFinished = { f, unique, part -> finished += Triple((f as Fake).name, unique, part) }, maxParts = maxParts, retryAfterFrames = retry)
++        for (i in 0 until total) router.writeFrame(frame(i))
++        return Triple(sinks, router, finished)
++    }
++
++    @Test fun belowTheLimitNothingHappens() {
++        val (sinks, router, finished) = run(99, 100)
++        assertEquals(1, sinks.size); assertEquals(99, sinks[0].frames.size); assertEquals(1, router.part); assertTrue(finished.isEmpty())
++    }
++
++    @Test fun atTheLimitTheNextPartStartsWithTheRepeatedFrameAndNoFrameIsLost() {
++        val (sinks, router, finished) = run(250, 100)
++        assertEquals(3, sinks.size); assertEquals(3, router.part)
++        assertEquals((0 until 100).toList(), sinks[0].frames)                  // part 1: frames 0..99
++        assertEquals((99 until 199).toList(), sinks[1].frames)                 // part 2: repeated 99, then 100..198 (100 frames)
++        assertEquals((198 until 250).toList(), sinks[2].frames)
++        assertTrue(sinks[0].closed && sinks[1].closed && !sinks[2].closed)
++        assertEquals(listOf(Triple("p1", 100, 1), Triple("p2", 99, 2)), finished)  // unique sound per finished part
++        val covered = sinks.flatMap { it.frames }.toSet(); assertEquals((0 until 250).toSet(), covered)
++    }
++
++    @Test fun exactlyOneFrameIsRepeatedAtEachHandOverAndNothingElse() {
++        val (sinks, _, _) = run(1000, 100)
++        val all = sinks.flatMap { it.frames }
++        assertEquals(1000 + (sinks.size - 1), all.size)
++        assertEquals((0 until 1000).toSet(), all.toSet())
++        val duplicates = all.groupBy { it }.filter { it.value.size > 1 }.keys
++        assertEquals(sinks.drop(1).map { it.frames.first() }.toSet(), duplicates)
++    }
++
++    @Test fun neverMoreThanTheAllowedNumberOfParts() {
++        val (sinks, router, _) = run(5000, 100, maxParts = 3)
++        assertEquals(3, sinks.size); assertEquals(3, router.part)
++        assertTrue("the last part keeps recording past the limit rather than dropping sound", sinks[2].frames.size > 100)
++        assertEquals((0 until 5000).toSet(), sinks.flatMap { it.frames }.toSet())
++    }
++
++    @Test fun ifTheNextPartCannotBeStartedTheCurrentOneKeepsAllTheSoundAndTheHandOverIsRetried() {
++        val (sinks, router, finished) = run(160, 100, retry = 10, failFirstAttempts = 3)
++        // attempts happen at frames 100, 110, 120 (all fail), then 130 succeeds
++        assertEquals(2, sinks.size); assertEquals(2, router.part)
++        assertEquals((0 until 130).toList(), sinks[0].frames)
++        assertEquals((129 until 160).toList(), sinks[1].frames)
++        assertEquals(1, finished.size); assertNull(router.lastHandOffError)
++        assertEquals((0 until 160).toSet(), sinks.flatMap { it.frames }.toSet())
++    }
++
++    @Test fun aHandOverThatNeverWorksLosesNothing() {
++        val (sinks, router, _) = run(500, 100, failOpenFor = setOf(2))
++        assertEquals(1, sinks.size); assertEquals(500, sinks[0].frames.size); assertNotNull(router.lastHandOffError)
++    }
++
++    @Test fun ifTheRepeatedFrameCannotBeWrittenTheNewPartIsThrownAwayAndTheOldOneKeepsRecording() {
++        val sinks = mutableListOf(Fake("p1")); val made = mutableListOf<Fake>()
++        val router = HandoffRouter(sinks[0], 50, openNext = { Fake("bad").also { f -> f.failWrites = true; made += f } }, retryAfterFrames = 20)
++        for (i in 0 until 120) router.writeFrame(frame(i))
++        assertEquals(120, sinks[0].frames.size); assertFalse(sinks[0].closed); assertTrue(made.isNotEmpty() && made.all { it.abandoned })
++        assertEquals(1, router.part)
++    }
++
++    @Test fun syncReachesTheCurrentPart() {
++        val (sinks, router, _) = run(150, 100); router.syncToDisk(); assertEquals(0, sinks[0].syncs); assertEquals(1, sinks[1].syncs)
++    }
++
++    @Test fun theRealPartLengthFitsTheServerLimitEvenWithTheRepeatedFrame() {
++        val frames = VisitContinuation.framesPerPart(24_000)
++        val seconds = (frames + 1) * 1024.0 / 24_000
++        assertTrue("part is $seconds s", seconds in 3_539.0..3_541.0)
++        // the server accepts at most 3,602 s per recording (sum of 120 s upload parts)
++        assertTrue(seconds < 3_602.0 - 60)
++        assertTrue(VisitContinuation.HAND_OFF_SECONDS * 1000L < CrashSafeBackendHelpers.MAX_PART_MILLIS)
++    }
++
++    @Test fun theHeadsUpComesOnceFiveMinutesAheadAndNeverOnTheLastPart() {
++        val at = (VisitContinuation.HAND_OFF_SECONDS - VisitContinuation.WARN_SECONDS_BEFORE) * 1000L
++        assertNull(VisitContinuation.headsUp(at - 1, 1, false))
++        val text = VisitContinuation.headsUp(at, 1, false)!!
++        assertTrue(text.contains("5 minutes") && text.contains("No sound will be missed"))
++        assertNull(VisitContinuation.headsUp(at + 1000, 1, true))
++        assertNull(VisitContinuation.headsUp(at, VisitContinuation.MAX_PARTS, false))
++        assertFalse(text.contains("patient", true))
++    }
++
++    @Test fun partNotesTellTheClinicianToUploadEveryPart() {
++        assertNull(VisitContinuation.note(null, null, null))
++        assertTrue(VisitContinuation.note(1, null, "recording-2.m4a")!!.contains("Upload all parts"))
++        assertTrue(VisitContinuation.note(2, "recording-1.m4a", null)!!.contains("last part"))
++        assertNull(VisitContinuation.finishedNotice(1)); assertTrue(VisitContinuation.finishedNotice(3)!!.contains("Upload all 3"))
++        assertEquals(mapOf("visitId" to "v", "visitPart" to "2", "previousName" to "a.m4a"), VisitContinuation.settings("v", 2, "a.m4a"))
++        assertEquals(mapOf("visitId" to "v", "visitPart" to "1"), VisitContinuation.settings("v", 1, null))
++    }
++
++    @Test fun theRecorderServiceUsesTheRouterAndEveryHandOverPathIsWired() {
++        val src = File(System.getProperty("sandbox.src") ?: "").readText()
++        for (needle in listOf("HandoffRouter(", "openNextPart(", "registerRecording(", "VisitContinuation.note(", "VisitContinuation.failedToContinue(", "partOffsetMillis", "nextName"))
++            assertTrue("SafeRecorderService.kt must contain $needle", src.contains(needle))
++        assertFalse("capture loop must write through the router, not a single SegmentWriter", Regex("""captureLoop\([^)]*SegmentWriter""").containsMatchIn(src))
++        assertTrue("the next part is registered with the app only after its key exists", src.indexOf("SealedSession.begin(dir, AndroidKeystoreWrapper(), mapOf(\n                \"finalName\" to name, \"status\" to \"recording\", \"elapsedMillis\" to \"0\",\n                \"sampleRate\" to CrashSafeBackendImpl.SAMPLE_RATE.toString(), \"channels\" to CrashSafeBackendImpl.CHANNELS.toString(),\n                \"segmentSeconds\" to SEGMENT_SECONDS.toString(),\n            ) + VisitContinuation.settings(visitId, nextPart") > 0)
++    }
++
++    // ---- with the real encrypted pieces on disk ----
++    private val wrapper = TestKeyWrapper()
++    private inner class RealSink(val dir: File, val key: SessionKey) : FrameSink {
++        val writer = SegmentWriter(dir, SealedCodec(key), 40, onSegmentClosed = { n, f -> SessionInfo(dir).update(SessionInfo.framesKey(n), f.toString()) })
++        override fun write(frame: ByteArray, length: Int) = writer.writeFrame(frame, length)
++        override fun syncToDisk() = writer.syncToDisk()
++        override fun abandon() { runCatching { writer.close() }; key.wipe(); dir.deleteRecursively() }
++        override fun close() { writer.close(); key.wipe() }
++    }
++    private fun realPart(n: Int, previous: String?): RealSink {
++        val dir = folder.newFolder("safe-recording-$n")
++        val key = SealedSession.begin(dir, wrapper, mapOf("finalName" to "recording-$n.m4a", "sampleRate" to "24000", "channels" to "1") + VisitContinuation.settings("visit", n, previous))
++        return RealSink(dir, key)
++    }
++
++    @Test fun threeRealEncryptedPartsHoldEveryFrameInOrderAndEachOpensWithItsOwnKey() {
++        val sinks = mutableListOf(realPart(1, null))
++        val router = HandoffRouter(sinks[0], 100, openNext = { n -> realPart(n, "recording-${n - 1}.m4a").also { sinks += it } })
++        for (i in 0 until 230) router.writeFrame(frame(i))
++        router.close()
++        val keys = sinks.map { it.key.serialize().toList() }  // wiped already: all zeros, so they must be equal
++        assertEquals(3, sinks.size)
++        val seen = mutableListOf<List<Int>>()
++        for (sink in sinks) {
++            val info = SessionInfo(sink.dir).read()!!
++            val opened = SealedRecording.open(sink.dir, info, wrapper, interrupted = false)
++            val recording = opened.recording!!
++            assertTrue("no warning: " + opened.plan!!.warning(), opened.plan.problems.isEmpty())
++            val buffer = FrameBuffer(); SafeSessions.frames(opened.plan, SealedCodec(SealedSession.open(info, wrapper)!!), buffer)
++            seen += (0 until buffer.count).map { index(buffer.copyOfFrame(it)) }
++            assertEquals(info["visitId"], "visit")
++            recording.wipe(); buffer.wipe()
++        }
++        assertEquals((0 until 100).toList(), seen[0]); assertEquals((99 until 199).toList(), seen[1]); assertEquals((198 until 230).toList(), seen[2])
++        assertEquals("part 2 records the visit and names its predecessor", "recording-1.m4a", SessionInfo(sinks[1].dir).read()!!["previousName"])
++        assertTrue(keys.isNotEmpty())
++    }
++}
++
++/** Keeps the test independent of the Android service: the same number as SafeRecorderService.MAX_MILLIS. */
++internal object CrashSafeBackendHelpers { const val MAX_PART_MILLIS = 3_590_000L }
+diff --git a/android/wear/build.gradle.kts b/android/wear/build.gradle.kts
+index 2f7f5b8..07f7dc9 100644
+--- a/android/wear/build.gradle.kts
++++ b/android/wear/build.gradle.kts
+@@ -6,8 +6,8 @@ android {
+   applicationId = "com.woundcopilot.android"
+   minSdk = 30
+   targetSdk = 36
+-  versionCode = 27
+-  versionName = "1.8.5-test7"
++  versionCode = 28
++  versionName = "1.8.5-test8"
+   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

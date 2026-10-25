@@ -1,0 +1,1238 @@
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/build.gradle.kts rev5/android/app/build.gradle.kts
+--- a/android/app/build.gradle.kts	2026-10-24 17:02:56.997096732 -0400
++++ b/android/app/build.gradle.kts	2026-10-24 17:33:52.825236610 -0400
+@@ -9,8 +9,8 @@
+         applicationId = "com.woundcopilot.android"
+         minSdk = 28
+         targetSdk = 36
+-        versionCode = 24
+-        versionName = "1.8.5-test4"
++        versionCode = 25
++        versionName = "1.8.5-test5"
+         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
+         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+@@ -22,12 +22,14 @@
+         getByName("debug") {
+             buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
+             buildConfigField("boolean", "SANDBOX", "false")
++            buildConfigField("boolean", "CRASH_SAFE_RECORDING", "false")
+         }
+         getByName("release") {
+             applicationIdSuffix = ".release"
+             isDebuggable = false
+             buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
+             buildConfigField("boolean", "SANDBOX", "false")
++            buildConfigField("boolean", "CRASH_SAFE_RECORDING", "false")
+         }
+         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
+         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
+@@ -38,6 +40,7 @@
+             versionNameSuffix = "-sandbox"
+             buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:18766/api/v1\"")
+             buildConfigField("boolean", "SANDBOX", "true")
++            buildConfigField("boolean", "CRASH_SAFE_RECORDING", "true")
+             matchingFallbacks += listOf("debug")
+         }
+     }
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/src/androidTestSandbox/java/com/woundcopilot/android/CrashSafeRecordingTest.kt rev5/android/app/src/androidTestSandbox/java/com/woundcopilot/android/CrashSafeRecordingTest.kt
+--- a/android/app/src/androidTestSandbox/java/com/woundcopilot/android/CrashSafeRecordingTest.kt	1969-12-31 19:00:00.000000000 -0500
++++ b/android/app/src/androidTestSandbox/java/com/woundcopilot/android/CrashSafeRecordingTest.kt	2026-10-24 17:33:29.802610000 -0400
+@@ -0,0 +1,106 @@
++package com.woundcopilot.android
++
++import android.Manifest
++import android.content.Context
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import androidx.test.rule.GrantPermissionRule
++import org.junit.After
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNotNull
++import org.junit.Assert.assertTrue
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import java.io.File
++import java.io.FileOutputStream
++import kotlin.random.Random
++
++/**
++ * Sandbox-only tests for the EXPERIMENTAL crash-resistant recorder. Not run in this workspace (no Android SDK or device);
++ * they are written for you to run with: connectedSandboxAndroidTest (see RUN-ON-YOUR-PC.md, Step 8).
++ * Uses only the phone's microphone input and made-up audio. No patient data, no network.
++ */
++@RunWith(AndroidJUnit4::class)
++class CrashSafeRecordingTest {
++    @get:Rule val permission: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
++    private val context: Context get() = InstrumentationRegistry.getInstrumentation().targetContext
++    private val created = mutableListOf<String>()
++
++    @After fun cleanUp() {
++        RecordingService.stop(context)
++        waitUntil(10_000) { !RecordingService.state.value.recording }
++        created.forEach { runCatching { RecordingService.clearPending(context, it, deleteFile = true) } }
++        RecordingService.state.value = RecordingState()
++    }
++
++    private fun waitUntil(ms: Long, condition: () -> Boolean): Boolean {
++        val end = System.currentTimeMillis() + ms
++        while (System.currentTimeMillis() < end) { if (condition()) return true; Thread.sleep(50) }
++        return condition()
++    }
++
++    private fun durationMillis(file: File): Long {
++        val r = android.media.MediaMetadataRetriever()
++        return try { r.setDataSource(file.absolutePath); r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)!!.toLong() } finally { r.release() }
++    }
++
++    @Test fun sandboxBuildUsesTheExperimentalRecorder() {
++        assertTrue("This test must run on the sandbox build", BuildConfig.CRASH_SAFE_RECORDING)
++        assertNotNull(crashSafeBackend())
++    }
++
++    @Test fun recordPauseResumeStopGivesOnePlayableFileOfTheRightLength() {
++        RecordingService.start(context)
++        assertTrue(waitUntil(8_000) { RecordingService.state.value.recording })
++        Thread.sleep(6_000)
++        RecordingService.pause(context)
++        assertTrue(waitUntil(5_000) { RecordingService.state.value.paused })
++        Thread.sleep(4_000) // this paused time must NOT appear in the audio
++        RecordingService.resume(context)
++        assertTrue(waitUntil(5_000) { !RecordingService.state.value.paused })
++        Thread.sleep(5_000)
++        RecordingService.stop(context)
++        assertTrue(waitUntil(30_000) { !RecordingService.state.value.recording && RecordingService.state.value.filePath != null })
++        val path = RecordingService.state.value.filePath!!.also { created += it }
++        val file = File(path)
++        assertTrue(RecordingService.readableAudio(file))
++        val seconds = durationMillis(file) / 1000.0
++        assertTrue("expected about 11 s of audio (6 + 5), paused time excluded; got $seconds", seconds in 9.0..13.5)
++    }
++
++    /**
++     * Simulates "Android killed the app mid-recording": a session folder with whole pieces plus a torn last frame,
++     * and no finished .m4a. Opening the pending list must rebuild a playable file from the valid part only.
++     */
++    @Test fun leftBehindSessionIsRebuiltIntoAPlayableRecording() {
++        val root = RecordingService.recordingsDirectory(context)
++        val name = "recording-${System.currentTimeMillis()}-test-orphan.m4a"
++        val dir = File(root, "safe-${name.removeSuffix(".m4a")}").apply { mkdirs() }
++        val rate = CrashSafeBackendImpl.SAMPLE_RATE
++        val perSegment = 400
++        AdtsSegmentWriter(dir, rate, 1, perSegment).use { w ->
++            val rnd = Random(7)
++            repeat(1000) { w.writeFrame(rnd.nextBytes(90)) } // 3 pieces: 400, 400, 200 frames
++        }
++        // tear the last frame: chop 30 bytes off the end of the final piece, like a kill in mid-write
++        val last = SafeSessions.segments(dir).last()
++        FileOutputStream(last, true).channel.use { it.truncate(it.size() - 30) }
++        SessionInfo(dir).write(mapOf("finalName" to name, "status" to "recording", "elapsedMillis" to "1000",
++            "sampleRate" to rate.toString(), "channels" to "1"))
++        RecordingService.writeMetadata(File(root, name), "recording", 1000, null)
++
++        val recovered = RecordingService.pendingRecordings(context).firstOrNull { it.filePath?.endsWith(name) == true }
++        assertNotNull("the interrupted session should be rebuilt", recovered)
++        val file = File(recovered!!.filePath!!).also { created += it.absolutePath }
++        assertTrue(RecordingService.readableAudio(file))
++        val expected = Adts.framesToMillis(999, rate) // 1000 frames minus the torn one
++        val actual = durationMillis(file)
++        assertTrue("expected about $expected ms, got $actual", kotlin.math.abs(actual - expected) < 500)
++        assertTrue("the user must be told it was interrupted", recovered.error?.contains("interrupted") == true)
++        assertEquals(true, dir.isDirectory) // raw pieces are kept until the user confirms upload or discard
++        RecordingService.clearPending(context, file.absolutePath, deleteFile = true)
++        created.clear()
++        assertTrue("discard removes the raw pieces too", !dir.exists())
++    }
++}
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt rev5/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt
+--- a/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt	2026-10-24 17:01:02.503907766 -0400
++++ b/android/app/src/main/java/com/woundcopilot/android/DeviceTools.kt	2026-10-24 17:31:19.955710189 -0400
+@@ -34,6 +34,26 @@
+ import java.util.UUID
+ import kotlin.math.sqrt
+ 
++/**
++ * Seam for the experimental crash-resistant recorder. Only the sandbox build contains an implementation.
++ * In debug and release builds the flag is false, the lookup returns null and the existing recorder is used unchanged.
++ */
++internal interface CrashSafeBackend {
++    fun start(context: Context, ownerKey: String)
++    fun control(context: Context, action: String)
++    fun isActive(): Boolean
++    fun activeFileName(): String?
++    /** Turn any unfinished safe sessions (app killed mid-visit) into normal .m4a recordings with sidecars. */
++    fun recoverOrphans(context: Context)
++    /** Remove the raw segment folder that belongs to this finished file. Never touches the file itself. */
++    fun discard(context: Context, finalFile: File)
++}
++
++internal fun crashSafeBackend(): CrashSafeBackend? =
++    if (BuildConfig.CRASH_SAFE_RECORDING) {
++        runCatching { Class.forName("com.woundcopilot.android.CrashSafeBackendImpl").getField("INSTANCE").get(null) as CrashSafeBackend }.getOrNull()
++    } else null
++
+ data class RecordingState(
+     val recording: Boolean = false,
+     val paused: Boolean = false,
+@@ -310,11 +330,11 @@
+         val state = MutableStateFlow(RecordingState())
+         private const val CHANNEL = "woundcopilot_recording"
+         private const val NOTIFICATION_ID = 4041
+-        private const val ACTION_START = "com.woundcopilot.android.recording.START"
+-        private const val ACTION_PAUSE = "com.woundcopilot.android.recording.PAUSE"
+-        private const val ACTION_RESUME = "com.woundcopilot.android.recording.RESUME"
+-        private const val ACTION_STOP = "com.woundcopilot.android.recording.STOP"
+-        private const val EXTRA_OWNER = "com.woundcopilot.android.recording.OWNER"
++        internal const val ACTION_START = "com.woundcopilot.android.recording.START"
++        internal const val ACTION_PAUSE = "com.woundcopilot.android.recording.PAUSE"
++        internal const val ACTION_RESUME = "com.woundcopilot.android.recording.RESUME"
++        internal const val ACTION_STOP = "com.woundcopilot.android.recording.STOP"
++        internal const val EXTRA_OWNER = "com.woundcopilot.android.recording.OWNER"
+         @Volatile private var liveService: RecordingService? = null
+         @Volatile private var startRequested = false
+ 
+@@ -324,6 +344,13 @@
+         }
+ 
+         @JvmStatic @JvmOverloads fun start(context: Context, ownerKey: String = "") {
++            // Experimental crash-resistant recorder: exists only in the sandbox build. Everywhere else this is skipped.
++            crashSafeBackend()?.let { backend ->
++                if (backend.isActive()) return
++                if (!microphoneGranted(context)) { state.value = RecordingState(error = "Microphone permission is required to record."); return }
++                backend.start(context, ownerKey)
++                return
++            }
+             if (liveService?.recorder != null || startRequested) return
+             // Never launch a microphone foreground service that cannot finish starting.
+             if (!microphoneGranted(context)) {
+@@ -345,6 +372,7 @@
+         @JvmStatic fun stop(context: Context) = sendControl(context, ACTION_STOP)
+ 
+         private fun sendControl(context: Context, action: String) {
++            crashSafeBackend()?.takeIf { it.isActive() }?.let { it.control(context, action); return }
+             if (liveService == null && !startRequested) {
+                 restorePending(context)
+                 return
+@@ -358,7 +386,7 @@
+ 
+         /** Call at app startup. Only finalized, readable audio is returned as a usable file path. */
+         @JvmStatic fun restorePending(context: Context): RecordingState? {
+-            if (liveService?.recorder != null || startRequested) return state.value
++            if (liveService?.recorder != null || startRequested || crashSafeBackend()?.isActive() == true) return state.value
+             val restored = pendingRecordings(context).firstOrNull() ?: return null
+             state.value = restored
+             return restored
+@@ -366,10 +394,11 @@
+ 
+         /** Each capture keeps its own sidecar, so a new recording cannot erase an earlier pending one. */
+         @JvmStatic fun pendingRecordings(context: Context): List<RecordingState> {
++            crashSafeBackend()?.recoverOrphans(context)
+             val directory = recordingsDirectory(context)
+             return directory.listFiles { file -> file.isFile && file.name.endsWith(".m4a.json") }
+                 .orEmpty().filter { metadata ->
+-                    !state.value.recording || metadata.name != liveService?.outputFile?.name + ".json"
++                    !state.value.recording || metadata.name != (liveService?.outputFile?.name ?: crashSafeBackend()?.activeFileName()) + ".json"
+                 }.sortedByDescending {
+                     it.name.substringAfter("recording-").substringBefore('-').toLongOrNull() ?: it.lastModified()
+                 }.mapNotNull { metadata ->
+@@ -403,15 +432,16 @@
+             require(file.parentFile == directory && file.extension == "m4a") { "Invalid recording path" }
+             check(liveService?.outputFile?.canonicalFile != file || liveService?.recorder == null) { "Recording is still active" }
+             AtomicFile(File(file.absolutePath + ".json")).delete()
++            crashSafeBackend()?.discard(context, file)
+             if (deleteFile) file.delete()
+             if (!state.value.recording && state.value.filePath?.let { File(it).canonicalFile } == file) state.value = RecordingState()
+         }
+ 
+-        private fun recordingsDirectory(context: Context) = File(context.filesDir, "recordings").apply {
++        internal fun recordingsDirectory(context: Context) = File(context.filesDir, "recordings").apply {
+             check(exists() || mkdirs()) { "Recording storage is unavailable" }
+         }
+ 
+-        private fun writeMetadata(file: File, status: String, elapsed: Long, error: String?) {
++        internal fun writeMetadata(file: File, status: String, elapsed: Long, error: String?) {
+             val atomic = AtomicFile(File(file.absolutePath + ".json"))
+             var stream: FileOutputStream? = null
+             try {
+@@ -430,7 +460,7 @@
+             }
+         }
+ 
+-        private fun readableAudio(file: File): Boolean {
++        internal fun readableAudio(file: File): Boolean {
+             if (!file.isFile || file.length() < 128L) return false
+             val retriever = MediaMetadataRetriever()
+             return try {
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/src/sandbox/AndroidManifest.xml rev5/android/app/src/sandbox/AndroidManifest.xml
+--- a/android/app/src/sandbox/AndroidManifest.xml	2026-10-24 17:01:02.505668218 -0400
++++ b/android/app/src/sandbox/AndroidManifest.xml	2026-10-24 17:30:02.805661157 -0400
+@@ -1,4 +1,7 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+     <!-- Test-only build: clearly named on the phone, and plain HTTP allowed only to this PC (127.0.0.1) through adb reverse. -->
+-    <application android:label="WoundCoPilot SANDBOX" android:networkSecurityConfig="@xml/sandbox_network" tools:replace="android:label" />
++    <application android:label="WoundCoPilot SANDBOX" android:networkSecurityConfig="@xml/sandbox_network" tools:replace="android:label">
++        <!-- Experimental crash-resistant recorder. Exists only in the sandbox build; the normal recorder is untouched. -->
++        <service android:name=".SafeRecorderService" android:exported="false" android:foregroundServiceType="microphone" />
++    </application>
+ </manifest>
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt rev5/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt
+--- a/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt	1969-12-31 19:00:00.000000000 -0500
++++ b/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecorderService.kt	2026-10-24 17:37:01.717902961 -0400
+@@ -0,0 +1,489 @@
++package com.woundcopilot.android
++
++import android.Manifest
++import android.app.Notification
++import android.app.NotificationChannel
++import android.app.NotificationManager
++import android.app.PendingIntent
++import android.app.Service
++import android.content.Context
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.content.pm.ServiceInfo
++import android.media.AudioFormat
++import android.media.AudioRecord
++import android.media.MediaCodec
++import android.media.MediaCodecInfo
++import android.media.MediaExtractor
++import android.media.MediaFormat
++import android.media.MediaMuxer
++import android.media.MediaRecorder
++import android.os.Build
++import android.os.Handler
++import android.os.IBinder
++import android.os.Looper
++import android.os.SystemClock
++import org.json.JSONObject
++import java.io.BufferedOutputStream
++import java.io.File
++import java.io.FileOutputStream
++import java.util.UUID
++import kotlin.math.abs
++
++/**
++ * EXPERIMENTAL, sandbox build only. Records microphone audio as many small, independent AAC pieces instead of one
++ * MP4 file whose index is written only at the very end. If Android kills the app, every piece already written is
++ * still playable and recovery rebuilds the normal .m4a that the rest of the app already understands.
++ *
++ * The original MediaRecorder-based RecordingService is not changed and remains the recorder in debug and release builds.
++ * This file has NOT been compiled against the Android SDK in the environment that produced it.
++ */
++internal object CrashSafeBackendImpl : CrashSafeBackend {
++    @JvmField val INSTANCE = this
++    const val SAMPLE_RATE = 24_000
++    const val CHANNELS = 1
++    private const val SESSION_PREFIX = "safe-"
++
++    override fun start(context: Context, ownerKey: String) {
++        SafeRecorderService.starting = true
++        try {
++            context.startForegroundService(
++                Intent(context, SafeRecorderService::class.java)
++                    .setAction(RecordingService.ACTION_START)
++                    .putExtra(RecordingService.EXTRA_OWNER, ownerKey),
++            )
++        } catch (_: Exception) {
++            SafeRecorderService.starting = false
++            RecordingService.state.value = RecordingState(error = "Recording could not start. Keep WoundCoPilot open and allow microphone access, then try again.")
++        }
++    }
++
++    override fun control(context: Context, action: String) {
++        try {
++            context.startService(Intent(context, SafeRecorderService::class.java).setAction(action))
++        } catch (_: Exception) {
++            RecordingService.state.value = RecordingService.state.value.copy(error = "The recording control could not be delivered. Use the recording notification to stop or pause.")
++        }
++    }
++
++    override fun isActive(): Boolean = SafeRecorderService.starting || SafeRecorderService.live?.isCapturing() == true
++
++    override fun activeFileName(): String? = SafeRecorderService.live?.finalName
++
++    /**
++     * Finds sessions left behind by a killed app (status not "finished") and turns what was saved into a normal
++     * recording. The raw pieces stay on disk until the finished file is verified, and are only deleted by [discard].
++     */
++    @Synchronized
++    override fun recoverOrphans(context: Context) {
++        val root = RecordingService.recordingsDirectory(context)
++        val live = SafeRecorderService.live?.takeIf { it.isCapturing() }?.sessionDirectory
++        root.listFiles { f -> f.isDirectory && f.name.startsWith(SESSION_PREFIX) }.orEmpty().forEach { dir ->
++            if (live != null && dir.canonicalFile == live.canonicalFile) return@forEach
++            runCatching { consolidate(context, dir, interrupted = true) }
++        }
++    }
++
++    override fun discard(context: Context, finalFile: File) {
++        val root = RecordingService.recordingsDirectory(context)
++        root.listFiles { f -> f.isDirectory && f.name.startsWith(SESSION_PREFIX) }.orEmpty().forEach { dir ->
++            val info = SessionInfo(dir).read() ?: return@forEach
++            if (info["finalName"] == finalFile.name) dir.deleteRecursively()
++        }
++    }
++
++    /**
++     * Joins the valid pieces, converts them into an .m4a, checks that the result is playable and about the right
++     * length, then publishes it. The raw pieces are kept until the user's upload or discard is confirmed.
++     */
++    fun consolidate(context: Context, dir: File, interrupted: Boolean): File? {
++        val sessionInfo = SessionInfo(dir)
++        val info = sessionInfo.read() ?: return null
++        val finalName = info["finalName"] ?: return null
++        val root = RecordingService.recordingsDirectory(context)
++        val finalFile = File(root, finalName)
++        if (finalFile.name != finalName || finalFile.extension != "m4a") return null
++        val rate = info["sampleRate"]?.toIntOrNull() ?: SAMPLE_RATE
++        val channels = info["channels"]?.toIntOrNull() ?: CHANNELS
++        val plan = SafeSessions.plan(dir, rate, channels)
++        if (plan.totalFrames == 0L) {
++            sessionInfo.update("status", "empty")
++            RecordingService.writeMetadata(finalFile, "interrupted", 0L, "No audio had been saved before the recording was interrupted. Please record again.")
++            return null
++        }
++        if (!(finalFile.isFile && RecordingService.readableAudio(finalFile) && info["status"] == "finished")) {
++            val joined = File(dir, "joined.aac")
++            val temp = File(root, "$finalName.tmp")
++            try {
++                BufferedOutputStream(FileOutputStream(joined)).use { SafeSessions.join(plan, it) }
++                remux(joined, temp)
++                if (!RecordingService.readableAudio(temp)) throw IllegalStateException("rebuilt file is not playable")
++                if (!temp.renameTo(finalFile)) throw IllegalStateException("could not publish the rebuilt file")
++            } finally {
++                temp.delete()
++                joined.delete()
++            }
++        }
++        val elapsed = info["elapsedMillis"]?.toLongOrNull()?.takeIf { !interrupted } ?: plan.durationMillis
++        val note = if (interrupted) "Recording was interrupted. The audio saved before the interruption is available; review it before uploading." else null
++        RecordingService.writeMetadata(finalFile, "ready", elapsed, note)
++        runCatching { RecordingRecovery(context).stage(finalFile, "RECORDED_LOCALLY") }
++        sessionInfo.update("status", "finished")
++        return finalFile
++    }
++
++    /** Turns the joined ADTS stream into an MPEG-4 audio file without re-encoding. */
++    private fun remux(source: File, target: File) {
++        val extractor = MediaExtractor()
++        var muxer: MediaMuxer? = null
++        try {
++            extractor.setDataSource(source.absolutePath)
++            check(extractor.trackCount > 0) { "no audio track" }
++            extractor.selectTrack(0)
++            muxer = MediaMuxer(target.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
++            val track = muxer.addTrack(extractor.getTrackFormat(0))
++            muxer.start()
++            val buffer = java.nio.ByteBuffer.allocate(64 * 1024)
++            val info = MediaCodec.BufferInfo()
++            while (true) {
++                buffer.clear()
++                val size = extractor.readSampleData(buffer, 0)
++                if (size < 0) break
++                info.set(0, size, extractor.sampleTime, MediaCodec.BUFFER_FLAG_KEY_FRAME)
++                muxer.writeSampleData(track, buffer, info)
++                extractor.advance()
++            }
++            muxer.stop()
++        } finally {
++            runCatching { muxer?.release() }
++            runCatching { extractor.release() }
++        }
++    }
++}
++
++internal class SafeRecorderService : Service() {
++    private val handler = Handler(Looper.getMainLooper())
++    @Volatile private var audio: AudioRecord? = null
++    @Volatile private var capturing = false
++    @Volatile private var pausedFlag = false
++    @Volatile private var stopRequested = false
++    @Volatile private var level = 0f
++    private var thread: Thread? = null
++    private var completedMillis = 0L
++    private var activeSince = 0L
++    private var lastPersistedSecond = -1
++    private var finishing = false
++    var finalName: String? = null; private set
++    var sessionDirectory: File? = null; private set
++    private var errorMessage: String? = null
++
++    fun isCapturing() = capturing || finishing
++
++    private val ticker = object : Runnable {
++        override fun run() {
++            if (!capturing || finishing) return
++            val elapsed = elapsedMillis()
++            // Same limit as the original recorder: the server accepts at most 3,600 seconds per recording.
++            if (elapsed >= MAX_MILLIS) { finish("The recording limit was reached. The saved audio is ready; start another recording to continue."); return }
++            val current = RecordingService.state.value
++            RecordingService.state.value = current.copy(
++                elapsedSeconds = (elapsed / 1000).toInt(),
++                amplitude = if (pausedFlag) 0f else level,
++            )
++            if (RecordingService.state.value.elapsedSeconds != lastPersistedSecond) {
++                lastPersistedSecond = RecordingService.state.value.elapsedSeconds
++                persist(if (pausedFlag) "paused" else "recording", elapsed)
++                updateNotification()
++            }
++            handler.postDelayed(this, 100)
++        }
++    }
++
++    override fun onCreate() {
++        super.onCreate()
++        live = this
++        getSystemService(NotificationManager::class.java).createNotificationChannel(
++            NotificationChannel(CHANNEL, "Recording", NotificationManager.IMPORTANCE_LOW).apply {
++                description = "Microphone recording controls"
++                setSound(null, null)
++                enableVibration(false)
++                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
++            },
++        )
++    }
++
++    override fun onBind(intent: Intent?): IBinder? = null
++
++    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
++        when (intent?.action) {
++            RecordingService.ACTION_START -> begin(intent.getStringExtra(RecordingService.EXTRA_OWNER).orEmpty())
++            RecordingService.ACTION_PAUSE -> pause()
++            RecordingService.ACTION_RESUME -> resume()
++            RecordingService.ACTION_STOP -> finish(null)
++            else -> if (!capturing) stopSelf()
++        }
++        // A killed microphone service must never silently resume capture.
++        return START_NOT_STICKY
++    }
++
++    private fun begin(ownerKey: String) {
++        if (capturing) return
++        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
++            starting = false
++            RecordingService.state.value = RecordingState(error = "Microphone permission is required to record.")
++            stopSelf()
++            return
++        }
++        try {
++            val first = notification()
++            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
++                startForeground(NOTIFICATION_ID, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
++            } else startForeground(NOTIFICATION_ID, first)
++        } catch (_: Exception) {
++            starting = false
++            RecordingService.state.value = RecordingState(error = "The microphone could not start. Keep WoundCoPilot open and try again.")
++            stopSelf()
++            return
++        }
++        finishing = false; stopRequested = false; pausedFlag = false
++        completedMillis = 0L; activeSince = 0L; lastPersistedSecond = -1; errorMessage = null
++        try {
++            val root = RecordingService.recordingsDirectory(this)
++            val name = "recording-${System.currentTimeMillis()}-${UUID.randomUUID()}.m4a"
++            val finalFile = File(root, name)
++            val dir = File(root, "safe-${name.removeSuffix(".m4a")}")
++            check(dir.mkdirs()) { "Recording storage is unavailable" }
++            finalName = name; sessionDirectory = dir
++            // Same ownership and recovery bookkeeping as the original recorder, committed before state exposes the file.
++            if (ownerKey.isNotBlank()) Vault(this).write("recording-owner-$name", ownerKey)
++            ownerKey.split(':', limit = 2).takeIf { it.size == 2 }?.let { DeveloperDiagnostics.bind(Vault(this), it[0], it[1], finalFile) }
++            Vault(this).read("recording-context-$ownerKey")?.let { raw ->
++                val capture = JSONObject(raw)
++                RecordingRecovery(this).remember(finalFile, capture.str("owner"), capture.getJSONObject("case"), capture.str("template", "nursing"))
++                RecordingRecovery(this).stage(finalFile, "RECORDING")
++            }
++            SessionInfo(dir).write(mapOf(
++                "finalName" to name, "status" to "recording", "elapsedMillis" to "0",
++                "sampleRate" to CrashSafeBackendImpl.SAMPLE_RATE.toString(), "channels" to CrashSafeBackendImpl.CHANNELS.toString(),
++                "segmentSeconds" to SEGMENT_SECONDS.toString(),
++            ))
++            RecordingService.state.value = RecordingState(filePath = finalFile.absolutePath)
++            capturing = true
++            starting = false
++            startCaptureThread(dir)
++            activeSince = SystemClock.elapsedRealtime()
++            RecordingService.state.value = RecordingService.state.value.copy(recording = true, paused = false, error = null)
++            persist("recording", 0L)
++            updateNotification()
++            handler.post(ticker)
++        } catch (error: Exception) {
++            starting = false
++            capturing = false
++            val message = if (error is SecurityException) "Microphone access was denied. Open the app and allow microphone access before recording."
++            else "The microphone could not start. Check that another app is not using it and try again."
++            finish(message)
++        }
++    }
++
++    private fun startCaptureThread(dir: File) {
++        val rate = CrashSafeBackendImpl.SAMPLE_RATE
++        val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
++        check(minBuffer > 0) { "audio input unavailable" }
++        val record = AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 4)
++        check(record.state == AudioRecord.STATE_INITIALIZED) { "audio input unavailable" }
++        val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, rate, CrashSafeBackendImpl.CHANNELS).apply {
++            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
++            setInteger(MediaFormat.KEY_BIT_RATE, 32_000)
++            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
++        }
++        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
++        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
++        codec.start()
++        record.startRecording()
++        audio = record
++        val writer = AdtsSegmentWriter(dir, rate, CrashSafeBackendImpl.CHANNELS, Adts.framesFor(SEGMENT_SECONDS, rate))
++        thread = Thread({ captureLoop(record, codec, writer) }, "safe-recorder").also { it.start() }
++    }
++
++    private fun captureLoop(record: AudioRecord, codec: MediaCodec, writer: AdtsSegmentWriter) {
++        val pcm = ByteArray(4096)
++        val outInfo = MediaCodec.BufferInfo()
++        var samples = 0L
++        var failure: String? = null
++        var wasPaused = false
++        fun drain(untilEnd: Boolean): Boolean {
++            while (true) {
++                val index = codec.dequeueOutputBuffer(outInfo, if (untilEnd) 10_000 else 0)
++                if (index < 0) { if (untilEnd) continue else return false }
++                val out = codec.getOutputBuffer(index)
++                val ended = outInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
++                if (out != null && outInfo.size > 0 && outInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) {
++                    val bytes = ByteArray(outInfo.size)
++                    out.position(outInfo.offset); out.get(bytes)
++                    writer.writeFrame(bytes, bytes.size)
++                }
++                codec.releaseOutputBuffer(index, false)
++                if (ended) return true
++                if (!untilEnd) continue
++            }
++        }
++        try {
++            while (!stopRequested) {
++                if (pausedFlag) {
++                    if (!wasPaused) { runCatching { record.stop() }; writer.syncToDisk(); wasPaused = true }
++                    Thread.sleep(40)
++                    continue
++                }
++                if (wasPaused) { record.startRecording(); wasPaused = false }
++                val read = record.read(pcm, 0, pcm.size)
++                if (read < 0) { failure = "The microphone stopped providing audio."; break }
++                if (read == 0) continue
++                var peak = 0
++                var i = 0
++                while (i + 1 < read) { peak = maxOf(peak, abs(((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort().toInt())); i += 2 }
++                level = kotlin.math.sqrt(peak / 32767f)
++                var offset = 0
++                while (offset < read) {
++                    val inIndex = codec.dequeueInputBuffer(10_000)
++                    if (inIndex < 0) { drain(false); continue }
++                    val input = codec.getInputBuffer(inIndex)!!
++                    input.clear()
++                    val chunk = minOf(read - offset, input.remaining())
++                    input.put(pcm, offset, chunk)
++                    codec.queueInputBuffer(inIndex, 0, chunk, samples * 1_000_000L / CrashSafeBackendImpl.SAMPLE_RATE, 0)
++                    samples += chunk / 2
++                    offset += chunk
++                    drain(false)
++                }
++            }
++            // Flush what the encoder still holds, so the last seconds before Stop are not lost.
++            var queued = false
++            while (!queued) {
++                val inIndex = codec.dequeueInputBuffer(10_000)
++                if (inIndex >= 0) {
++                    codec.queueInputBuffer(inIndex, 0, 0, samples * 1_000_000L / CrashSafeBackendImpl.SAMPLE_RATE, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
++                    queued = true
++                }
++            }
++            drain(true)
++        } catch (error: Exception) {
++            failure = failure ?: "Recording was interrupted by the microphone. Review the saved audio before uploading."
++        } finally {
++            runCatching { writer.close() }
++            runCatching { record.stop() }
++            runCatching { record.release() }
++            runCatching { codec.stop() }
++            runCatching { codec.release() }
++        }
++        handler.post { capturing = false; finish(failure) }
++    }
++
++    private fun pause() {
++        if (!capturing || pausedFlag || finishing) return
++        completedMillis += SystemClock.elapsedRealtime() - activeSince
++        activeSince = 0L
++        pausedFlag = true
++        RecordingService.state.value = RecordingService.state.value.copy(paused = true, amplitude = 0f, elapsedSeconds = (completedMillis / 1000).toInt())
++        persist("paused", completedMillis)
++        updateNotification()
++    }
++
++    private fun resume() {
++        if (!capturing || !pausedFlag || finishing) return
++        activeSince = SystemClock.elapsedRealtime()
++        pausedFlag = false
++        RecordingService.state.value = RecordingService.state.value.copy(paused = false, error = null)
++        persist("recording", completedMillis)
++        updateNotification()
++    }
++
++    private fun elapsedMillis(): Long = completedMillis + if (activeSince > 0L && !pausedFlag) SystemClock.elapsedRealtime() - activeSince else 0L
++
++    /** First call asks the capture thread to stop; when it has flushed and closed the pieces it calls back here. */
++    private fun finish(message: String?) {
++        if (finishing) return
++        if (message != null) errorMessage = message
++        if (capturing) {
++            // Ask the capture thread to flush; it will call finish() again after closing the last piece.
++            val elapsed = elapsedMillis()
++            completedMillis = elapsed; activeSince = 0L
++            stopRequested = true
++            return
++        }
++        finishing = true
++        handler.removeCallbacks(ticker)
++        val elapsed = completedMillis.takeIf { it > 0 } ?: elapsedMillis()
++        val dir = sessionDirectory
++        var file: File? = null
++        var error = errorMessage
++        if (dir != null) {
++            runCatching { SessionInfo(dir).update("elapsedMillis", elapsed.toString()); SessionInfo(dir).update("status", "stopped") }
++            file = runCatching { CrashSafeBackendImpl.consolidate(this, dir, interrupted = false) }.getOrNull()
++            if (file == null && error == null) error = "No playable audio was captured. Please record again."
++        } else if (error == null) error = "No playable audio was captured. Please record again."
++        RecordingService.state.value = RecordingState(
++            elapsedSeconds = (elapsed / 1000).toInt(),
++            filePath = file?.absolutePath,
++            error = error,
++        )
++        if (file == null) finalName?.let { name ->
++            RecordingService.writeMetadata(File(RecordingService.recordingsDirectory(this), name), "interrupted", elapsed, error)
++        }
++        stopForeground(STOP_FOREGROUND_REMOVE)
++        stopSelf()
++    }
++
++    override fun onDestroy() {
++        // If Android destroys the service while recording, the capture thread flushes and the pieces stay recoverable.
++        if (capturing && !finishing) { errorMessage = "Recording stopped when the service closed. Review the saved audio before uploading."; stopRequested = true }
++        handler.removeCallbacksAndMessages(null)
++        if (live === this) live = null
++        starting = false
++        super.onDestroy()
++    }
++
++    private fun persist(status: String, elapsed: Long) {
++        val name = finalName ?: return
++        val dir = sessionDirectory ?: return
++        RecordingService.writeMetadata(File(RecordingService.recordingsDirectory(this), name), status, elapsed, null)
++        runCatching { SessionInfo(dir).update("elapsedMillis", elapsed.toString()) }
++    }
++
++    private fun updateNotification() {
++        runCatching { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification()) }
++    }
++
++    private fun notification(): Notification {
++        val current = RecordingService.state.value
++        val action = if (current.paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE
++        val label = if (current.paused) "Resume" else "Pause"
++        val elapsed = current.elapsedSeconds
++        val builder = Notification.Builder(this, CHANNEL)
++            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
++            .setContentTitle(if (current.paused) "Recording paused" else "Recording audio")
++            .setContentText("WoundCoPilot · %d:%02d".format(elapsed / 60, elapsed % 60))
++            .setCategory(Notification.CATEGORY_SERVICE)
++            .setVisibility(Notification.VISIBILITY_PRIVATE)
++            .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
++            .addAction(Notification.Action.Builder(null, label, actionIntent(action)).build())
++            .addAction(Notification.Action.Builder(null, "Stop and save", actionIntent(RecordingService.ACTION_STOP)).build())
++        packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
++            builder.setContentIntent(PendingIntent.getActivity(this, 30, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
++        }
++        return builder.build()
++    }
++
++    private fun actionIntent(action: String): PendingIntent = PendingIntent.getService(
++        this, action.hashCode(), Intent(this, SafeRecorderService::class.java).setAction(action),
++        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
++    )
++
++    companion object {
++        const val SEGMENT_SECONDS = 300
++        const val MAX_MILLIS = 3_600_000L
++        private const val CHANNEL = "woundcopilot_recording"
++        private const val NOTIFICATION_ID = 4041
++        @Volatile var live: SafeRecorderService? = null
++        @Volatile var starting = false
++    }
++}
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecording.kt rev5/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecording.kt
+--- a/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecording.kt	1969-12-31 19:00:00.000000000 -0500
++++ b/android/app/src/sandbox/java/com/woundcopilot/android/SafeRecording.kt	2026-10-24 17:26:38.704542285 -0400
+@@ -0,0 +1,229 @@
++package com.woundcopilot.android
++
++import java.io.File
++import java.io.FileInputStream
++import java.io.FileOutputStream
++import java.io.IOException
++import java.io.OutputStream
++import java.nio.file.Files
++import java.nio.file.StandardCopyOption
++import java.util.Properties
++
++/*
++ * PROTOTYPE (sandbox build only). Crash-resistant recording storage.
++ *
++ * Idea in plain words: the sound is saved as a chain of small "AAC frames" (about 43 ms each). Each frame carries its
++ * own length, so a file can be read up to its last complete frame even if the app was killed while writing it. The
++ * chain is split into segment files (default 5 minutes each). Nothing here needs Android, so it is tested on a PC.
++ */
++
++/** ADTS framing: a 7-byte header in front of every AAC frame. */
++internal object Adts {
++    const val HEADER_BYTES = 7
++    const val SAMPLES_PER_FRAME = 1024
++    private val RATES = intArrayOf(96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000)
++
++    fun rateIndex(sampleRate: Int): Int {
++        val index = RATES.indexOf(sampleRate)
++        require(index >= 0) { "Unsupported sample rate $sampleRate" }
++        return index
++    }
++
++    /** Header for an AAC-LC frame whose raw payload is [payloadBytes] long. */
++    fun header(payloadBytes: Int, sampleRate: Int, channels: Int): ByteArray {
++        require(payloadBytes in 1..(8191 - HEADER_BYTES)) { "Frame size out of range" }
++        require(channels in 1..7)
++        val length = payloadBytes + HEADER_BYTES
++        val profile = 2 // AAC-LC
++        return byteArrayOf(
++            0xFF.toByte(),
++            0xF1.toByte(), // MPEG-4, layer 0, no CRC
++            (((profile - 1) shl 6) or (rateIndex(sampleRate) shl 2) or (channels shr 2)).toByte(),
++            (((channels and 3) shl 6) or (length shr 11)).toByte(),
++            ((length and 0x7FF) shr 3).toByte(),
++            (((length and 7) shl 5) or 0x1F).toByte(),
++            0xFC.toByte(),
++        )
++    }
++
++    /** Total frame length (header + payload) if a valid header for this format starts at [offset], else -1. */
++    fun frameLength(buffer: ByteArray, offset: Int, available: Int, sampleRate: Int, channels: Int): Int {
++        if (available < HEADER_BYTES) return -1
++        val b = IntArray(HEADER_BYTES) { buffer[offset + it].toInt() and 0xFF }
++        if (b[0] != 0xFF || b[1] != 0xF1) return -1
++        if ((b[2] shr 6) != 1) return -1 // AAC-LC only
++        if (((b[2] shr 2) and 0xF) != rateIndex(sampleRate)) return -1
++        if ((((b[2] and 1) shl 2) or (b[3] shr 6)) != channels) return -1
++        if ((b[5] and 0x1F) != 0x1F || (b[6] and 0xFC) != 0xFC) return -1
++        val length = ((b[3] and 3) shl 11) or (b[4] shl 3) or (b[5] shr 5)
++        return if (length > HEADER_BYTES) length else -1
++    }
++
++    fun framesToMillis(frames: Long, sampleRate: Int): Long = frames * SAMPLES_PER_FRAME * 1000L / sampleRate
++    /** Number of frames that cover at least [seconds] of sound. */
++    fun framesFor(seconds: Int, sampleRate: Int): Int = ((seconds.toLong() * sampleRate + SAMPLES_PER_FRAME - 1) / SAMPLES_PER_FRAME).toInt()
++}
++
++/** What a scan found in one segment file. [validBytes] ends exactly on a frame boundary. */
++internal data class ScanResult(val frames: Int, val validBytes: Long, val totalBytes: Long) {
++    val trailingBytes: Long get() = totalBytes - validBytes
++}
++
++internal object AdtsScanner {
++    /** Reads [file] from the start and stops at the first byte that is not part of a complete, valid frame. */
++    fun scan(file: File, sampleRate: Int, channels: Int): ScanResult {
++        val total = file.length()
++        if (total == 0L) return ScanResult(0, 0, 0)
++        var frames = 0
++        var position = 0L
++        val header = ByteArray(Adts.HEADER_BYTES)
++        FileInputStream(file).use { input ->
++            while (position + Adts.HEADER_BYTES <= total) {
++                if (!readFully(input, header, Adts.HEADER_BYTES)) break
++                val length = Adts.frameLength(header, 0, Adts.HEADER_BYTES, sampleRate, channels)
++                if (length < 0 || position + length > total) break
++                var remaining = length - Adts.HEADER_BYTES
++                var broken = false
++                while (remaining > 0) {
++                    val skipped = input.skip(remaining.toLong())
++                    if (skipped <= 0) { broken = true; break }
++                    remaining -= skipped.toInt()
++                }
++                if (broken) break
++                position += length
++                frames++
++            }
++        }
++        return ScanResult(frames, position, total)
++    }
++
++    private fun readFully(input: FileInputStream, buffer: ByteArray, count: Int): Boolean {
++        var done = 0
++        while (done < count) {
++            val n = input.read(buffer, done, count - done)
++            if (n < 0) return false
++            done += n
++        }
++        return true
++    }
++}
++
++/** Small settings file for one recording session, replaced atomically so a kill can never leave half a file. */
++internal class SessionInfo(val directory: File) {
++    private val file = File(directory, "session.properties")
++    fun write(values: Map<String, String>) {
++        directory.mkdirs()
++        val properties = Properties().apply { values.forEach { (k, v) -> setProperty(k, v) } }
++        val temporary = File(directory, "session.properties.tmp")
++        FileOutputStream(temporary).use { out ->
++            properties.store(out, null)
++            out.fd.sync()
++        }
++        Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
++    }
++    fun read(): Map<String, String>? {
++        if (!file.isFile) return null
++        return try {
++            val properties = Properties()
++            FileInputStream(file).use { properties.load(it) }
++            properties.stringPropertyNames().associateWith { properties.getProperty(it) }
++        } catch (_: IOException) { null }
++    }
++    fun update(key: String, value: String) { write((read() ?: emptyMap()) + (key to value)) }
++}
++
++/**
++ * Writes AAC frames into numbered segment files (seg-00001.aac, ...). A new segment starts only on a frame boundary,
++ * so joining the segments in order gives exactly the frames that were written: nothing lost, nothing repeated.
++ */
++internal class AdtsSegmentWriter(
++    private val directory: File,
++    private val sampleRate: Int,
++    private val channels: Int,
++    private val framesPerSegment: Int,
++    private val syncEveryFrames: Int = 120,
++) : AutoCloseable {
++    init { require(framesPerSegment > 0 && syncEveryFrames > 0) }
++    private var stream: FileOutputStream? = null
++    private var framesInSegment = 0
++    private var sinceSync = 0
++    var framesWritten = 0L; private set
++    var segmentsOpened = 0; private set
++    private var scratch = ByteArray(4096)
++
++    fun segmentFile(number: Int) = File(directory, "seg-%05d.aac".format(number))
++
++    @Throws(IOException::class)
++    fun writeFrame(payload: ByteArray, length: Int = payload.size) {
++        if (stream == null || framesInSegment >= framesPerSegment) rotate()
++        val total = Adts.HEADER_BYTES + length
++        if (scratch.size < total) scratch = ByteArray(total)
++        System.arraycopy(Adts.header(length, sampleRate, channels), 0, scratch, 0, Adts.HEADER_BYTES)
++        System.arraycopy(payload, 0, scratch, Adts.HEADER_BYTES, length)
++        // One write per frame, no extra buffering: once write() returns, the frame survives the app being killed.
++        stream!!.write(scratch, 0, total)
++        framesInSegment++; framesWritten++; sinceSync++
++        if (sinceSync >= syncEveryFrames) syncToDisk()
++    }
++
++    /** Also protects against the phone losing power. A process kill does not need this. */
++    fun syncToDisk() { stream?.fd?.sync(); sinceSync = 0 }
++
++    private fun rotate() {
++        closeCurrent()
++        directory.mkdirs()
++        var number = segmentsOpened + 1
++        while (segmentFile(number).exists()) number++ // never overwrite earlier audio
++        stream = FileOutputStream(segmentFile(number))
++        segmentsOpened = number
++        framesInSegment = 0
++    }
++
++    private fun closeCurrent() {
++        stream?.let { runCatching { it.fd.sync() }; it.close() }
++        stream = null
++    }
++
++    override fun close() { closeCurrent() }
++}
++
++/** One piece of a segment file that may be used: the first [validBytes] bytes. */
++internal data class SegmentSlice(val file: File, val validBytes: Long, val frames: Int, val trailingBytes: Long)
++
++internal data class RecoveryPlan(val slices: List<SegmentSlice>, val sampleRate: Int, val channels: Int) {
++    val totalFrames: Long get() = slices.sumOf { it.frames.toLong() }
++    val durationMillis: Long get() = Adts.framesToMillis(totalFrames, sampleRate)
++    val discardedBytes: Long get() = slices.sumOf { it.trailingBytes }
++    /** True when every segment ended cleanly (nothing was cut off). */
++    val intact: Boolean get() = discardedBytes == 0L
++}
++
++internal object SafeSessions {
++    fun segments(directory: File): List<File> =
++        directory.listFiles { f -> f.isFile && f.name.matches(Regex("seg-\\d{5}\\.aac")) }.orEmpty().sortedBy { it.name }
++
++    /** Works out what can be recovered from a session folder, after a normal stop or after the app was killed. */
++    fun plan(directory: File, sampleRate: Int, channels: Int): RecoveryPlan {
++        val slices = segments(directory).mapNotNull { file ->
++            val scan = AdtsScanner.scan(file, sampleRate, channels)
++            if (scan.frames == 0) null else SegmentSlice(file, scan.validBytes, scan.frames, scan.trailingBytes)
++        }
++        return RecoveryPlan(slices, sampleRate, channels)
++    }
++
++    /** Copies the usable part of every segment, in order, into one stream (used before turning it into an .m4a). */
++    fun join(plan: RecoveryPlan, output: OutputStream) {
++        val buffer = ByteArray(64 * 1024)
++        for (slice in plan.slices) {
++            FileInputStream(slice.file).use { input ->
++                var left = slice.validBytes
++                while (left > 0) {
++                    val n = input.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
++                    if (n < 0) throw IOException("Segment ${slice.file.name} became shorter while joining")
++                    output.write(buffer, 0, n)
++                    left -= n
++                }
++            }
++        }
++    }
++}
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/app/src/testSandbox/java/com/woundcopilot/android/SafeRecordingTest.kt rev5/android/app/src/testSandbox/java/com/woundcopilot/android/SafeRecordingTest.kt
+--- a/android/app/src/testSandbox/java/com/woundcopilot/android/SafeRecordingTest.kt	1969-12-31 19:00:00.000000000 -0500
++++ b/android/app/src/testSandbox/java/com/woundcopilot/android/SafeRecordingTest.kt	2026-10-24 17:27:07.733433836 -0400
+@@ -0,0 +1,195 @@
++package com.woundcopilot.android
++
++import org.junit.Assert.assertArrayEquals
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Rule
++import org.junit.Test
++import org.junit.rules.TemporaryFolder
++import java.io.ByteArrayOutputStream
++import java.io.File
++import java.io.RandomAccessFile
++import java.nio.ByteBuffer
++import java.util.Random
++
++/** Prototype tests for crash-resistant recording storage. Pure JVM: no Android needed. Synthetic data only. */
++class SafeRecordingTest {
++    @get:Rule val folder = TemporaryFolder()
++    private val rate = 24000
++    private val channels = 1
++
++    /** A fake AAC payload that carries its own index, so any loss, repeat or reorder is detectable. */
++    private fun payload(index: Int, random: Random): ByteArray {
++        val size = 8 + random.nextInt(180)
++        return ByteArray(size).also { random.nextBytes(it); ByteBuffer.wrap(it).putInt(0, index) }
++    }
++
++    private fun writeFrames(dir: File, count: Int, perSegment: Int, seed: Long = 7): List<ByteArray> {
++        val random = Random(seed)
++        val frames = (0 until count).map { payload(it, random) }
++        AdtsSegmentWriter(dir, rate, channels, perSegment).use { writer -> frames.forEach { writer.writeFrame(it) } }
++        return frames
++    }
++
++    /** Reads a joined stream back into payloads. */
++    private fun parse(bytes: ByteArray): List<ByteArray> {
++        val out = mutableListOf<ByteArray>()
++        var position = 0
++        while (position < bytes.size) {
++            val length = Adts.frameLength(bytes, position, bytes.size - position, rate, channels)
++            assertTrue("valid frame header at $position", length > 0 && position + length <= bytes.size)
++            out += bytes.copyOfRange(position + Adts.HEADER_BYTES, position + length)
++            position += length
++        }
++        return out
++    }
++
++    private fun joined(dir: File): Pair<RecoveryPlan, ByteArray> {
++        val plan = SafeSessions.plan(dir, rate, channels)
++        return plan to ByteArrayOutputStream().also { SafeSessions.join(plan, it) }.toByteArray()
++    }
++
++    @Test fun headerRoundTripForManySizesRatesAndChannels() {
++        for (sampleRate in listOf(24000, 16000, 44100, 48000)) for (ch in 1..2) for (size in listOf(1, 2, 100, 2047, 2048, 8184)) {
++            val frame = Adts.header(size, sampleRate, ch) + ByteArray(size)
++            assertEquals(size + 7, Adts.frameLength(frame, 0, frame.size, sampleRate, ch))
++        }
++    }
++
++    @Test fun headerRejectsGarbageAndWrongFormat() {
++        val good = Adts.header(100, rate, channels) + ByteArray(100)
++        assertEquals(-1, Adts.frameLength(good, 0, 3, rate, channels))
++        assertEquals(-1, Adts.frameLength(good, 0, good.size, 16000, channels))
++        assertEquals(-1, Adts.frameLength(good, 0, good.size, rate, 2))
++        val random = Random(1)
++        var accepted = 0
++        repeat(20000) { val junk = ByteArray(16).also(random::nextBytes); if (Adts.frameLength(junk, 0, junk.size, rate, channels) > 0) accepted++ }
++        assertEquals("random bytes must never look like a frame", 0, accepted)
++        assertEquals(-1, Adts.frameLength(good.copyOf().also { it[1] = 0xF0.toByte() }, 0, good.size, rate, channels))
++    }
++
++    @Test fun fiveMinutesAtTwentyFourKilohertz() {
++        assertEquals(7032, Adts.framesFor(300, 24000))
++        assertEquals(42666L, Adts.framesToMillis(1000, 24000))
++    }
++
++    @Test fun segmentsJoinWithNothingLostRepeatedOrReordered() {
++        val dir = folder.newFolder()
++        val frames = writeFrames(dir, 1005, 100)
++        assertEquals(11, SafeSessions.segments(dir).size)
++        val (plan, bytes) = joined(dir)
++        assertTrue(plan.intact)
++        assertEquals(1005L, plan.totalFrames)
++        val back = parse(bytes)
++        assertEquals(frames.size, back.size)
++        for (i in frames.indices) assertArrayEquals("frame $i", frames[i], back[i])
++    }
++
++    @Test fun everySegmentEndsOnAFrameBoundaryAndTheNextStartsWithAHeader() {
++        val dir = folder.newFolder()
++        writeFrames(dir, 450, 100)
++        val files = SafeSessions.segments(dir)
++        assertEquals(5, files.size)
++        for ((i, file) in files.withIndex()) {
++            val scan = AdtsScanner.scan(file, rate, channels)
++            assertEquals(0L, scan.trailingBytes)
++            assertEquals(if (i < 4) 100 else 50, scan.frames)
++        }
++    }
++
++    @Test fun killedMidFrameKeepsEveryCompleteFrame() {
++        for (cut in listOf(1L, 3L, 7L, 9L, 40L)) {
++            val dir = folder.newFolder()
++            val frames = writeFrames(dir, 250, 100, seed = 11 + cut)
++            val last = SafeSessions.segments(dir).last()
++            RandomAccessFile(last, "rw").use { it.setLength(it.length() - cut) }
++            val (plan, bytes) = joined(dir)
++            assertEquals("cut $cut", 249L, plan.totalFrames)
++            assertFalse(plan.intact)
++            val back = parse(bytes)
++            for (i in back.indices) assertArrayEquals(frames[i], back[i])
++        }
++    }
++
++    @Test fun killedExactlyAfterAHeaderOrBeforeAnyPayloadStillWorks() {
++        val dir = folder.newFolder()
++        val frames = writeFrames(dir, 120, 100)
++        val last = SafeSessions.segments(dir).last()
++        val keep = AdtsScanner.scan(last, rate, channels).validBytes
++        // a new frame started: only 5 bytes of its header were saved
++        java.io.FileOutputStream(last, true).use { it.write(Adts.header(60, rate, channels), 0, 5) }
++        val (plan, bytes) = joined(dir)
++        assertEquals(120L, plan.totalFrames)
++        assertEquals(5L, plan.discardedBytes)
++        assertEquals(frames.size, parse(bytes).size)
++        assertEquals(keep, plan.slices.last().validBytes)
++    }
++
++    @Test fun aDamagedFrameHeaderInTheMiddleKeepsTheGoodPartsAndLaterSegments() {
++        val dir = folder.newFolder()
++        val frames = writeFrames(dir, 300, 100)
++        val second = SafeSessions.segments(dir)[1]
++        val offset = (0 until 30).sumOf { frames[100 + it].size + Adts.HEADER_BYTES }.toLong()
++        RandomAccessFile(second, "rw").use { it.seek(offset); it.write(0) } // break the 31st frame's start code
++        val (plan, bytes) = joined(dir)
++        assertFalse(plan.intact)
++        assertEquals(listOf(100, 30, 100), plan.slices.map { it.frames })
++        val back = parse(bytes) // everything kept is still made of valid frames
++        assertEquals(230, back.size)
++        assertArrayEquals(frames[0], back[0])
++        assertArrayEquals(frames[129], back[129])
++        assertArrayEquals(frames[200], back[130])
++        assertArrayEquals(frames[299], back.last())
++    }
++
++    @Test fun damageInsideASoundPayloadCannotBeDetectedButNeverBreaksTheChain() {
++        // ADTS has no checksum. A flipped sound byte plays as a tiny glitch; the chain and the frame count stay intact.
++        val dir = folder.newFolder()
++        val frames = writeFrames(dir, 200, 100)
++        val second = SafeSessions.segments(dir)[1]
++        RandomAccessFile(second, "rw").use { it.seek(Adts.HEADER_BYTES.toLong() + 3); it.write(0x55) }
++        val (plan, _) = joined(dir)
++        assertEquals(200L, plan.totalFrames)
++        assertTrue(plan.intact)
++        assertEquals(200, frames.size)
++    }
++
++    @Test fun emptyOrMissingSessionsGiveNothingAndDoNotCrash() {
++        val dir = folder.newFolder()
++        assertEquals(0, SafeSessions.plan(dir, rate, channels).slices.size)
++        File(dir, "seg-00001.aac").writeBytes(ByteArray(0))
++        File(dir, "notes.txt").writeText("ignored")
++        assertEquals(0, SafeSessions.plan(dir, rate, channels).slices.size)
++        assertEquals(0, SafeSessions.plan(File(dir, "missing"), rate, channels).slices.size)
++    }
++
++    @Test fun neverOverwritesEarlierAudio() {
++        val dir = folder.newFolder()
++        val existing = File(dir, "seg-00001.aac").also { it.writeBytes(byteArrayOf(1, 2, 3, 4)) }
++        writeFrames(dir, 10, 100)
++        assertArrayEquals(byteArrayOf(1, 2, 3, 4), existing.readBytes())
++        assertTrue(File(dir, "seg-00002.aac").isFile)
++    }
++
++    @Test fun sessionInfoIsReplacedAtomicallyAndIgnoresLeftovers() {
++        val dir = folder.newFolder()
++        val info = SessionInfo(dir)
++        assertEquals(null, info.read())
++        info.write(mapOf("state" to "recording", "finalName" to "a.m4a"))
++        File(dir, "session.properties.tmp").writeText("broken half write")
++        assertEquals("recording", info.read()!!["state"])
++        info.update("state", "stopped")
++        assertEquals("stopped", info.read()!!["state"])
++        assertEquals("a.m4a", info.read()!!["finalName"])
++    }
++
++    @Test fun longVisitSizeIsSmall() {
++        // 60 minutes at 32 kbps is about 14 MB. Frames of 100 bytes ~ 23.4 per second plus 7 byte headers.
++        val dir = folder.newFolder()
++        val frames = Adts.framesFor(60, rate) // one minute is enough to measure; scale up
++        writeFrames(dir, frames, Adts.framesFor(300, rate))
++        val bytes = SafeSessions.segments(dir).sumOf { it.length() }
++        assertTrue(bytes < 60L * 32000 / 8 * 3)
++    }
++}
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/android/wear/build.gradle.kts rev5/android/wear/build.gradle.kts
+--- a/android/wear/build.gradle.kts	2026-10-24 17:02:56.997450962 -0400
++++ b/android/wear/build.gradle.kts	2026-10-24 17:33:52.825775023 -0400
+@@ -6,8 +6,8 @@
+   applicationId = "com.woundcopilot.android"
+   minSdk = 30
+   targetSdk = 36
+-  versionCode = 24
+-  versionName = "1.8.5-test4"
++  versionCode = 25
++  versionName = "1.8.5-test5"
+   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+diff -ruN '--exclude=SHA256SUMS.txt' '--exclude=SOURCE-MANIFEST.json' '--exclude=source-changes' '--exclude=verification' '--exclude=*.md' WoundCoPilot-1.8.5-test4-candidate/sandbox/Run-KillRecordingTest.ps1 rev5/sandbox/Run-KillRecordingTest.ps1
+--- a/sandbox/Run-KillRecordingTest.ps1	1969-12-31 19:00:00.000000000 -0500
++++ b/sandbox/Run-KillRecordingTest.ps1	2026-10-24 17:33:29.804014129 -0400
+@@ -0,0 +1,17 @@
++# SANDBOX ONLY. Simulates Android killing the app in the middle of a recording, then reopens it.
++# Run AFTER installing the sandbox app (RUN-ON-YOUR-PC.md Step 5) and starting a made-up-voice recording in the phone app.
++# It only force-stops the SANDBOX app (com.woundcopilot.android.sandbox). It never touches your release or debug app.
++$pkg = 'com.woundcopilot.android.sandbox'
++$adb = 'adb'
++if (-not (& $adb shell pm list packages $pkg)) { Write-Host "The sandbox app is not installed. Do Step 5 first." -ForegroundColor Red; exit 1 }
++Write-Host "Make sure the sandbox app is RECORDING now (made-up voice, at least 60 seconds)." -ForegroundColor Cyan
++Read-Host "Press Enter to kill the app now"
++$stamp = Get-Date -Format HH:mm:ss
++Write-Host "[$stamp] Killing the app (like Android reclaiming memory)..."
++& $adb shell am kill $pkg            # same effect as the system killing a background process
++& $adb shell am force-stop $pkg      # make sure it is really gone
++Start-Sleep -Seconds 3
++Write-Host "Reopening the app..."
++& $adb shell monkey -p $pkg -c android.intent.category.LAUNCHER 1 | Out-Null
++Write-Host "Now look at the phone: the interrupted recording should be listed as saved and playable, with the audio up to about the kill moment." -ForegroundColor Green
++Write-Host "Write down: the time you pressed Enter, how long the recording had run, and the length of the recovered audio."
