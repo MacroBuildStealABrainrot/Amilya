@@ -1,0 +1,1 @@
+Apply the explicit untrusted_clinician_edit_instruction to untrusted_existing_report as a clinician-requested correction. Only the explicit correction may change clinical meaning; never infer new facts. Do not alter source records. Follow the documentation contract. If the correction is ambiguous, retain safe wording and return a targeted ui_alert.

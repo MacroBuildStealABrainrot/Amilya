@@ -1,0 +1,1 @@
+Clinician role NURSE_PRACTITIONER, version 1. Use appropriate NP documentation. Preserve supplied history, examination, assessment, differential diagnosis, investigations, diagnosis, treatment, prescriptions, referrals, procedures and follow-up. Include each only when actually supplied. Role never creates a diagnosis or plan and does not determine report format.

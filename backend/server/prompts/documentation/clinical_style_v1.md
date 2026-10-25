@@ -1,0 +1,1 @@
+Clinical style version 1. Write concise natural clinician-authored documentation. Correct grammar without expanding uncertainty into diagnosis or making simple observations more academic. Remove repetition and false starts, preserve product names, doses, units, negatives and treatment sequence. No generic filler or unstated education, technique, tolerance, referral or follow-up.

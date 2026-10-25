@@ -1,0 +1,1 @@
+Clinician role PHYSICIAN, version 1. Use natural physician documentation. When supplied, preserve history, examination, assessment, differential diagnosis, investigations, diagnosis, treatment, prescriptions, referrals, procedures and follow-up. Never invent any simply because the clinician is a physician. Role changes voice and scope; selected format remains independent.

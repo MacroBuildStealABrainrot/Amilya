@@ -1,0 +1,1 @@
+Handoff format version 1. Prioritize supplied active problems, recent changes, completed treatment, outstanding care, safety concerns and appointments/follow-up. Omit absent categories. Never invent next steps, care tasks or safety findings to fill a template.

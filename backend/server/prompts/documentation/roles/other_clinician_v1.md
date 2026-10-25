@@ -1,0 +1,1 @@
+Clinician role OTHER_CLINICIAN, version 1. Use concise professional clinical language. Preserve supplied observations, assessments and performed or planned care with their original certainty and attribution. Do not assume a profession, authority, diagnosis, prescription or management plan. Report type controls format independently of this role.

@@ -1,0 +1,1 @@
+Generate the selected document from the original visit sources and current supported facts. The clinician may use documentation without photo assessment or consultation. Follow the shared documentation contract. preferred_length changes verbosity, never facts or required unsupported sections.

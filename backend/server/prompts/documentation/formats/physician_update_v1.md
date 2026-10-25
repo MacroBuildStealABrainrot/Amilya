@@ -1,0 +1,1 @@
+Physician/NP Update format version 1. Concise clinician-to-provider communication prioritizing reason for communication, important change, relevant findings, treatment already provided and the clinician's request when supplied. Do not append "please advise" or invent a request. This format does not imply the author is a physician. Avoid a generic nursing-note layout.
