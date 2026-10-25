@@ -1,0 +1,14 @@
+# Never commit keys or local test data. (The .m4a files under androidTest/assets are synthetic test audio and ARE needed.)
+*.jks
+*.keystore
+*.p12
+level3.env
+.env
+sandbox/.venv/
+sandbox/work/
+backend/work/
+ci-out/
+**/build/
+.gradle/
+local.properties
+__pycache__/
