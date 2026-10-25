@@ -40,6 +40,20 @@ android {
             manifestPlaceholders["crashSafeRecording"] = crashSafeRelease
             buildConfigField("boolean", "RETAIN_UNRESOLVED", "false")
         }
+        // Side-by-side PILOT candidate: real HTTPS API, separate app data and identity.
+        // Uses the proven original recorder until the crash-safe recorder passes device validation.
+        // Do not use identifiable clinical data until compatibility and privacy checks are completed.
+        create("pilot") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".pilot"
+            versionNameSuffix = "-pilot"
+            buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
+            buildConfigField("boolean", "SANDBOX", "false")
+            buildConfigField("boolean", "CRASH_SAFE_RECORDING", "false")
+            manifestPlaceholders["crashSafeRecording"] = "false"
+            buildConfigField("boolean", "RETAIN_UNRESOLVED", "false")
+            matchingFallbacks += listOf("debug")
+        }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
         // production address is refused in code, so a recording can never be sent to the live service.
