@@ -1,0 +1,3 @@
+Stand-in test (real read_pdf_text function from backend/server/providers.py, stub PDF worker that sleeps 0.5 s):
+result: 'hello from PDFDATA'  took 0.52s  event-loop ticks while waiting: 50 (>= 20 required)  -> PASS
+(The real PDF library pypdf and the full backend test suite could not be installed here.)

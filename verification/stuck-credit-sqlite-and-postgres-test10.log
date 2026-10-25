@@ -1,0 +1,27 @@
+# Stuck-credit recovery tests on SQLite AND a real PostgreSQL 16.15 server (temporary local cluster, synthetic data), 2026-10-25T03:03:02Z
+============================= test session starts ==============================
+platform linux -- Python 3.13.17, pytest-9.1.1, pluggy-1.6.0 -- /home/claude/venv/bin/python
+rootdir: /home/claude/work/amilya/backend
+configfile: pyproject.toml
+plugins: platformdirs-4.12.4, anyio-4.15.1
+collecting ... collected 17 items
+
+tests/test_stuck_credit_recovery.py::test_with_the_flag_off_a_dead_request_still_blocks_exactly_as_before PASSED [  5%]
+tests/test_stuck_credit_recovery.py::test_a_dead_request_is_released_in_full_never_charged_and_the_retry_succeeds[sqlite] PASSED [ 11%]
+tests/test_stuck_credit_recovery.py::test_a_dead_request_is_released_in_full_never_charged_and_the_retry_succeeds[postgresql] PASSED [ 17%]
+tests/test_stuck_credit_recovery.py::test_the_retry_limit_still_applies_after_interruptions[sqlite] PASSED [ 23%]
+tests/test_stuck_credit_recovery.py::test_the_retry_limit_still_applies_after_interruptions[postgresql] PASSED [ 29%]
+tests/test_stuck_credit_recovery.py::test_a_non_report_request_says_try_again_and_a_new_request_works[sqlite] PASSED [ 35%]
+tests/test_stuck_credit_recovery.py::test_a_non_report_request_says_try_again_and_a_new_request_works[postgresql] PASSED [ 41%]
+tests/test_stuck_credit_recovery.py::test_a_late_worker_whose_hold_was_released_cannot_charge_or_save[sqlite] PASSED [ 47%]
+tests/test_stuck_credit_recovery.py::test_a_late_worker_whose_hold_was_released_cannot_charge_or_save[postgresql] PASSED [ 52%]
+tests/test_stuck_credit_recovery.py::test_heartbeat_only_extends_the_current_workers_lease[sqlite] PASSED [ 58%]
+tests/test_stuck_credit_recovery.py::test_heartbeat_only_extends_the_current_workers_lease[postgresql] PASSED [ 64%]
+tests/test_stuck_credit_recovery.py::test_the_batch_job_reports_first_never_charges_and_leaves_live_work_alone[sqlite] PASSED [ 70%]
+tests/test_stuck_credit_recovery.py::test_the_batch_job_reports_first_never_charges_and_leaves_live_work_alone[postgresql] PASSED [ 76%]
+tests/test_stuck_credit_recovery.py::test_postgres_many_workers_racing_to_release_one_dead_hold_release_it_exactly_once[sqlite] SKIPPED [ 82%]
+tests/test_stuck_credit_recovery.py::test_postgres_many_workers_racing_to_release_one_dead_hold_release_it_exactly_once[postgresql] PASSED [ 88%]
+tests/test_stuck_credit_recovery.py::test_settle_racing_release_ends_exactly_one_way[sqlite] PASSED [ 94%]
+tests/test_stuck_credit_recovery.py::test_settle_racing_release_ends_exactly_one_way[postgresql] PASSED [100%]
+
+======================== 16 passed, 1 skipped in 6.20s =========================

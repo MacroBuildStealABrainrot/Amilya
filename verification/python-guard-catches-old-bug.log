@@ -1,0 +1,2 @@
+Guard run against the previous candidate (test3) server code with the new guard test:
+oldchk offenders: {'providers.py': [('analyze_media', 647)]}

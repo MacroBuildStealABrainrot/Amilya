@@ -1,0 +1,28 @@
+one-minute: frames=2443 parts=0
+ten-minutes: frames=24430 parts=0
+missing-piece: frames=1743 parts=0
+killed: frames=2442 parts=0
+wipedBufferCount=0
+PASS  whole file is well-formed MP4 (every box fits exactly inside its parent)
+PASS  has the boxes a player needs (ftyp, moov/trak/mdia/minf/stbl: stsd stts stsc stsz stco, mdat)
+PASS  ffprobe: AAC-LC, 24000 Hz, mono, correct frame count   [{'codec_name': 'aac', 'profile': 'LC', 'sample_rate': '24000', 'channels': 1, 'duration': '104.234667', 'nb_frames': '2443'}]
+PASS  decoded sound equals the original recording sample for sample   [2501632 vs 2501632 samples]
+PASS  decoded sound equals the same frames as a plain ADTS stream
+PASS  backend audio_duration agrees with the frame count   [104.2347s]
+PASS  backend checked_media accepts it as audio/mp4
+      (tone check skipped: this fixture is speech)
+PASS  every kind of box in the file made by ffmpeg's muxer that a player needs is also present in ours
+PASS  part count matches   [9 parts]
+PASS  every part passes the backend's checks (format, <= 130 s, <= 4 MB)   [longest 119.98s, biggest 484 KiB]
+PASS  parts add up to the whole visit (within 1 ms per part)   [1042.347s vs 1042.347s]
+PASS  server's total-length rule (sum of parts <= 3602 s, at most 32 parts) is met
+PASS  parts played one after another are the same length as the whole visit   [25016320 samples]
+PASS  away from the cuts the sound matches the whole visit to within 200/32767 (-44 dB; decoder noise-fill only)   [largest difference 0/32767]
+PASS  part 0 is byte-identical when built again after re-opening the pieces
+PASS  last part is byte-identical when built again
+PASS  no clock values inside the file (nothing varies between two builds)
+PASS  missing piece: a warning is raised and a file is still produced   [Part of this recording may be missing: about 30 seconds of audio is missing around 0:29. L]
+PASS  missing piece: file plays and its length is the surviving frames
+PASS  killed mid-record: playable, no false warning   [2442 frames]
+
+20 of 20 checks passed

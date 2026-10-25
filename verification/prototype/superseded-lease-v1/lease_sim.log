@@ -1,0 +1,22 @@
+PASS  50 simultaneous claims: exactly one winner
+PASS  claim of an unknown request is refused
+PASS  worker A gets token 1
+PASS  worker B refused while A's lease is alive
+PASS  worker B takes over after expiry with token 2
+PASS  zombie A cannot store a result
+PASS  zombie A cannot release
+PASS  zombie A cannot heartbeat
+PASS  worker B stores result and settles
+PASS  a second settle changes nothing
+PASS  charged exactly the stored amount, difference returned
+PASS  reaper does nothing before the grace period (except finishing stored results)
+PASS  reaper releases the silent request
+PASS  reaper never releases a request whose answer was stored; it settles it
+PASS  reaper leaves a live (heartbeating) request alone
+PASS  the only charge is the stored provider cost (3500)
+PASS  late worker W1 cannot settle a released request
+PASS  stress: 6000 random steps, credits conserved at every step
+PASS  after everything expires no request is stuck (stuck=0, held=0)
+      (1434 requests created in the stress run)
+
+19/19 checks passed

@@ -1,0 +1,32 @@
+clean-sealed: frames=1408 problems=0
+clean-plain: frames=1408 problems=0
+killed-midrecord: frames=1406 problems=0
+missing-piece-2: frames=1108 problems=1
+damaged-piece-2: frames=1258 problems=1
+PASS  clean-sealed: rebuilt audio is byte-for-byte the original (1408 frames)
+PASS  clean-sealed: decoded sound is sample-for-sample identical to the original
+PASS  clean-sealed: no warning
+PASS  clean-plain: rebuilt audio is byte-for-byte the original (1408 frames)
+PASS  clean-plain: decoded sound is sample-for-sample identical to the original
+PASS  clean-plain: no warning
+PASS  backend audio_duration accepts the rebuilt file and agrees with the frame count   [backend=60.075s frames=60.075s]
+PASS  backend checked_media accepts it as audio/mp4
+PASS  stream is AAC-LC, 24000 Hz, mono
+PASS  clean: seconds 3, 17, 31, 44, 55 carry the right tones (continuity across every piece boundary)
+PASS  clean: no click at piece boundaries (largest sample jump at a boundary is no bigger than elsewhere)
+PASS  killed: every complete frame before the cut is kept, byte for byte, and nothing else   [frames=1406/1408; the 33 cut bytes ate the last 2 (tiny end-of-file) record(s)]
+PASS  killed: a normal kill gives NO missing-audio warning
+PASS  killed: decoded sound equals the original for its whole length
+PASS  missing piece: exactly the other frames survive, in order   [frames=1108]
+PASS  missing piece: warning names the loss and where   [Part of this recording may be missing: about 13 seconds of audio is missing around 0:12. Listen to the whole r]
+PASS  missing piece: sound before the gap is untouched
+PASS  missing piece: sound after the gap matches the original to within -44 dB (only the encoder's noise-fill differs)   [largest difference 143 of 32767]
+PASS  same gap with the noise-fill feature switched off: sound after the gap is sample-for-sample exact
+PASS  missing piece: tones after the gap are shifted by exactly the lost time   [[(20, 33), (30, 3), (40, 13)]]
+PASS  damaged: good frames before the damage and all later pieces survive, in order   [kept 150/300 of piece 2]
+PASS  damaged: warning says audio may be missing, with its length   [Part of this recording may be missing: about 6 seconds of audio is missing around 0:19. Listen to the whole re]
+PASS  10-minute visit split into 120 s parts: every part passes the backend duration and format checks (limit 130 s)   [6 parts, longest 120.0s]
+PASS  60-minute visit at the 3,600 s limit: accepted by the backend's whole-file duration check   [accepted, 3600.000s, 14.7 MiB (limit 25 MiB)]
+PASS  60-minute file is under the backend's 25 MiB limit
+
+25/25 checks passed

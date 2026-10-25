@@ -1,0 +1,8 @@
+Speko transcription test, 2026-10-24 (approved: one ~10 s synthetic clip, at most $1 CAD, no patient information)
+Text spoken (made up): "This is a synthetic test. The dressing was changed on the left forearm. The wound measures four centimetres by two centimetres."
+1. Text-to-speech (Speko, cartesia:sonic-3): 7.1 s clip, 24 kHz mono.  Balance 99.925135 -> 99.916467 USD: cost US$0.008668
+2. Speech-to-text (Speko picked azure MAI-Transcribe-2): Balance 99.916467 -> 99.915312 USD: cost US$0.001155
+   Transcript returned: "This is a synthetic test. The dressing was changed on the left forearm. The wound measures 4 cm by 2 cm."
+Total US$0.00982 (about CAD 0.014), far below the CAD 1 limit. Nothing else was sent. Only synthetic audio left this workspace.
+Limits: the service can only fetch audio from a web link, so the transcript is of the ORIGINAL clip, not of the .m4a the app rebuilds.
+Instead the same clip was encoded like the app, sealed, rebuilt in memory and checked (see sealed-upload-speko-voice.log).

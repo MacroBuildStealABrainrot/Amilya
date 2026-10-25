@@ -1,0 +1,32 @@
+server: PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu,
+PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)  (throw-away server, test database 'leasetest')
+
+PASS  50 simultaneous sessions claim one request: exactly one winner, ticket 1   [1 winner(s)]
+PASS  race: credits conserved, holds match, no request settled/released twice   [ok]
+PASS  worker A gets ticket 1
+PASS  worker B is refused while A's lease is alive
+PASS  A can renew its lease while alive
+PASS  after A's lease runs out, B takes over with ticket 2
+PASS  zombie A cannot store a result
+PASS  zombie A cannot release
+PASS  zombie A cannot renew
+PASS  B stores its result and settles
+PASS  a repeated settle changes nothing
+PASS  charged exactly the stored cost; the rest of the hold went back   [998500|0|1500]
+PASS  takeover: credits conserved, holds match, no request settled/released twice   [ok]
+PASS  reaper too early: releases nothing silent (it only finishes the stored result)   [0|1]
+PASS  a stored result is settled (never released) even before the quiet period ends
+PASS  reaper releases the silent request and the never-claimed one   [2|0]
+PASS  reaper leaves a heartbeating request alone
+PASS  the only charge is the stored provider cost (3500)
+PASS  a late worker cannot store a result for a released request
+PASS  reaper: credits conserved, holds match, no request settled/released twice   [ok]
+PASS  25 races of 'store result' against 'reaper': never both, never lost, money consistent   [0 bad rounds]
+PASS  stress: 8 sessions x 1200 random steps ran with no database errors (no deadlocks, no rule violations)   [6s]
+PASS  stress (after the storm): credits conserved, holds match, no request settled/released twice   [ok]
+      stress mix: released=1099, reserved=42, settled=476; requests taken over by a second worker or the reaper: 683
+PASS  stress really exercised takeovers, settles and releases
+PASS  after every lease and quiet period has run out, nothing is stuck (stuck=0, held=0; 1617 requests created)
+PASS  stress (after clean-up): credits conserved, holds match, no request settled/released twice   [ok]
+
+26/26 checks passed

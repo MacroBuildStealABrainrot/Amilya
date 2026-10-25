@@ -1,0 +1,20 @@
+Mutation checks (test8): a deliberate mistake is put into a COPY of the code and the tests must notice. 2026-10-25
+-- carried over from test7 (rerun against the current code: all still caught) --
+retention: a protected recording is no longer kept ........ caught by UnresolvedRetentionTest
+key handling: the spare key copy is not wiped ............. caught by KeyHandlingTest (2 failures)
+FrameBuffer: wipe() does nothing .......................... caught by InMemoryRecordingTest (2 failures)
+FrameBuffer: growing leaves the old block unwiped ......... caught by InMemoryRecordingTest (1 failure)
+ByteArrayOutputStream.size() re-declared .................. rejected by the compiler; caught by run_exposed_bytes_check.sh and BackendInstanceTest
+-- new in test8 --
+drafts and reports expire after 7 days again .............. caught by UnresolvedRetentionTest (2 failures)
+hand-over forgets the repeated first frame ................ caught by VisitContinuationTest (several failures)
+hand-over loses the first frame of the new part ........... caught by VisitContinuationTest (several failures)
+more parts than allowed ................................... caught by VisitContinuationTest (1 failure)
+no retry after a failed hand-over ......................... caught by VisitContinuationTest (1 failure)
+lease rules: no retry limit ............................... caught by lease_pg_test.py (4 checks fail)
+lease rules: idempotency conflict not detected ............ caught by lease_pg_test.py (1 check fails)
+lease rules: charge line not written ...................... caught by lease_pg_test.py (8 checks fail)
+lease rules: database allows a double settle .............. caught by lease_pg_test.py (2 checks fail)
+lease rules: absorbed cost not counted .................... caught by lease_pg_test.py (3 checks fail)
+lease rules (test7, still caught): ticket check removed (6), "released" check removed (4)
+(Run on a PC; not an Android build.)

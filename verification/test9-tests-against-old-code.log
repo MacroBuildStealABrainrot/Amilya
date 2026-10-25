@@ -1,0 +1,26 @@
+# The 1.8.5-test9 regression tests, run against the UNCHANGED 1.8.5-test8 server code. Failures here show the tests detect the old problems. (test_android_contract and the route-match test are guards: they are expected to pass on both.)
+## test_report_retry_after_failure
+E   fastapi.exceptions.HTTPException: 504: This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.
+/tmp/oldcheck/backend/server/providers.py:430: fastapi.exceptions.HTTPException: 504: This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.
+E   fastapi.exceptions.HTTPException: 502: This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.
+/tmp/oldcheck/backend/server/providers.py:430: fastapi.exceptions.HTTPException: 502: This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.
+E   fastapi.exceptions.HTTPException: 502: This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.
+/tmp/oldcheck/backend/server/providers.py:430: fastapi.exceptions.HTTPException: 502: This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.
+FAILED tests/test_report_retry_after_failure.py::test_failed_report_stage_is_retried_with_the_same_request_key[<lambda>0]
+FAILED tests/test_report_retry_after_failure.py::test_failed_report_stage_is_retried_with_the_same_request_key[<lambda>1]
+FAILED tests/test_report_retry_after_failure.py::test_failed_report_stage_is_retried_with_the_same_request_key[<lambda>2]
+FAILED tests/test_report_retry_after_failure.py::test_retry_attempts_are_bounded
+4 failed, 1 passed in 2.33s
+## test_avoided_wording
+E   ImportError: cannot import name 'avoid_unrequested_wording' from 'server.documentation' (/tmp/oldcheck/backend/server/documentation.py)
+ERROR tests/test_avoided_wording.py
+1 error in 0.08s
+## test_speech_loops
+E   ImportError: cannot import name 'collapse_speech_loops' from 'server.providers' (/tmp/oldcheck/backend/server/providers.py)
+ERROR tests/test_speech_loops.py
+1 error in 0.80s
+## test_android_routes
+FAILED tests/test_android_routes.py::test_a_write_to_a_missing_route_is_a_clear_404_not_a_405
+1 failed, 2 passed in 0.91s
+## test_android_contract
+2 passed in 0.72s

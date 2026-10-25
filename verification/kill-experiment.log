@@ -1,0 +1,2 @@
+Real SIGKILL experiment (JVM only, NOT Android): 2026-10-25T01:01:21Z
+trials=300 (sealed=150, in-memory .m4a rebuilt correctly after the kill in 75; hand-over trials ok 75, of which 74 were killed after the first hand-over) failures=0 falseMissingAudioWarnings=0 killedAfterSegmentBoundary=219 withPartialLastFrame=0 minimum(recovered - reported)=0 largestRun=15047 frames (642 s of sound)

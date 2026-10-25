@@ -1,0 +1,70 @@
+server: PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu,
+PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)  (throw-away server, test database 'leasetest')
+
+PASS  50 simultaneous sessions claim one request: exactly one winner, ticket 1
+PASS  race: credits conserved, nothing charged twice, nothing charged without a saved result   [ok]
+PASS  worker A gets ticket 1; B is refused while A's lease is alive
+PASS  A renews its lease in time
+PASS  ... so B is still refused (the renewal moved the deadline)
+PASS  after A goes silent past the lease, B takes over with ticket 2
+PASS  zombie A cannot save a result or charge (fenced)   [998000|2000|0]
+PASS  zombie A cannot renew or release
+PASS  B commits: result saved and charged exactly once   [998500|0|1500]
+PASS  a repeated commit (even from the zombie) changes nothing
+PASS  takeover: credits conserved, nothing charged twice, nothing charged without a saved result   [ok]
+PASS  while the dead worker's lease is alive the retry is told 'in progress'
+PASS  lease ran out but the quiet period has not: reaper leaves it alone
+PASS  after the quiet period the reaper releases it
+PASS  the customer was NOT charged for the lost attempt: all credits back, no result   [1000000|0|0]
+PASS  a second reaper pass does nothing
+PASS  the retry reserves again on the same request
+PASS  the retry gets a newer ticket than the dead attempt   [1 -> 3]
+PASS  the dead attempt, if it wakes up late, is refused
+PASS  the retry commits: charged ONCE, one saved result   [997500|0|2500]
+PASS  provider was called twice for this visit (one call absorbed by us, never billed to the customer)
+PASS  answered-then-crashed: credits conserved, nothing charged twice, nothing charged without a saved result   [ok]
+PASS  commit succeeds (then the response is lost on the way back)
+PASS  retry: 'saved' - told to use the stored result, not to call the provider
+PASS  retry cannot claim (nothing left to do)
+PASS  the stored result comes back unchanged
+PASS  the reaper leaves a finished request alone   [996400|0|3600]
+PASS  only one provider call, one charge
+PASS  saved-then-reply-lost: credits conserved, nothing charged twice, nothing charged without a saved result   [ok]
+PASS  provider failure: worker releases its own hold, credits return
+PASS  a late commit after release saves nothing and charges nothing
+PASS  not enough credit: refused, nothing changes
+PASS  if the real cost is above the hold, the customer pays at most the hold
+PASS  a released request that cannot be re-reserved for lack of credit says so
+PASS  ... and credits held by one request are not available to another
+PASS  audit after shortfalls
+PASS  commit-vs-reaper race: every request ends exactly one way (committed 27, released-first 13)
+PASS  ... never both charged and released, never an unpaid result   [ok]
+PASS  ... and the reaper's count matches what the commits lost   [13 vs 13]
+PASS  stress: 120 client retries loops on 60 requests ran with no database errors/deadlocks (13s)
+PASS  stress: credits conserved, nothing charged twice, nothing charged without a saved result   [ok]
+PASS  stress: nothing left holding credits
+PASS  stress: the customer paid exactly what the saved results say, and nothing else
+PASS  stress: at most one saved result and one charge per request
+PASS  stress: no provider call was ever made on a ticket newer than the one that saved the result
+PASS  stress really exercised the hard cases   [{'provider_call': 122, 'crash_after_provider': 18, 'commit_committed': 60, 'reply_lost': 29, 'provider_failed': 13, 'replay': 76, 'reaped': 13, 'reaped_requests': 19, 'commit_fenced': 21, 'commit_lost': 8, 'commit_already_saved': 2}]
+PASS  stress: cost monitoring agrees: absorbed attempts = provider calls - saved results   [62 vs 62]
+PASS  stress: every absorbed attempt has a cost on record and none of them was billed to the customer
+      report: attempts=122 absorbed_attempts=62 absorbed_micros=98009 customer_charged_micros=167105 requests_out_of_retries=0
+      requests: settled=60; provider calls 122, saved results 60 -> 62 provider call(s) absorbed by us and never billed (seed 20261024)
+      events: {'provider_call': 122, 'crash_after_provider': 18, 'commit_committed': 60, 'reply_lost': 29, 'provider_failed': 13, 'replay': 76, 'reaped': 13, 'reaped_requests': 19, 'commit_fenced': 21, 'commit_lost': 8, 'commit_already_saved': 2}
+PASS  retry limit: attempts 1 and 2 are allowed
+PASS  ... attempt 3 is allowed and is the last
+PASS  ... attempt 4 is refused: 'attempts_exhausted', nothing reserved, nothing charged   [1000000|0|0]
+PASS  cost monitoring: three lost attempts = 3 x 700 absorbed, customer charged 0   [attempts=3 absorbed_attempts=3 absorbed_micros=2100 customer_charged_micros=0 requests_out_of_retries=1]
+PASS  cost alert fires above the limit and stays quiet below it
+PASS  cost alert looks only at the chosen window
+PASS  idempotency: same key, same request while in progress -> 'in_progress', no second hold
+PASS  idempotency: same key with a DIFFERENT request -> 'conflict', nothing changes
+PASS  idempotency: after the result is saved, any number of retries get the saved result and one charge
+PASS  duplicate-charge protection: a second charge line for the same request is refused by the database
+PASS  duplicate-charge protection: marking a request settled twice is refused by the database
+PASS  duplicate-charge protection: a second saved result for the same request is refused
+PASS  duplicate-charge protection: a repeated commit with any ticket charges nothing more
+PASS  audit after limits, conflicts and refused duplicates   [ok]
+
+62/62 checks passed

@@ -1,0 +1,5 @@
+OK (19 tests)
+OK (39 tests)
+..........................................................................................disk full after 7286 frames: No space left on device
+recovered 7286 of 7286 frames written before the failure; problems=[]
+OK (90 tests)

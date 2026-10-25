@@ -1,0 +1,4 @@
+Kotlin parser check of 94 Kotlin files using the compiler bundled with Gradle.
+The Android libraries are not available here, so 'unresolved reference' style errors are expected and ignored.
+Total compiler messages: 15206. Messages that are SYNTAX errors: 0.
+THIS IS NOT AN ANDROID BUILD. It only proves the files parse.

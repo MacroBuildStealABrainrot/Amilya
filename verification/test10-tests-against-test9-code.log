@@ -1,0 +1,20 @@
+# The 1.8.5-test10 regression tests run against the UNCHANGED 1.8.5-test9 server code. Failures show the tests detect what changed.
+## test_report_retry_after_failure
+FAILED tests/test_report_retry_after_failure.py::test_retry_attempts_are_bounded
+1 failed, 4 passed in 1.52s
+## test_speech_loops
+E   ImportError: cannot import name 'carries_clinical_meaning' from 'server.providers' (/tmp/oldcheck/backend/server/providers.py)
+ERROR tests/test_speech_loops.py
+1 error in 0.71s
+## test_audio_overlap_and_visits
+ERROR tests/test_audio_overlap_and_visits.py
+1 error in 0.91s
+## test_stuck_credit_recovery
+ERROR tests/test_stuck_credit_recovery.py::test_a_dead_request_is_released_in_full_never_charged_and_the_retry_succeeds[sqlite]
+ERROR tests/test_stuck_credit_recovery.py::test_the_retry_limit_still_applies_after_interruptions[sqlite]
+ERROR tests/test_stuck_credit_recovery.py::test_a_non_report_request_says_try_again_and_a_new_request_works[sqlite]
+ERROR tests/test_stuck_credit_recovery.py::test_a_late_worker_whose_hold_was_released_cannot_charge_or_save[sqlite]
+ERROR tests/test_stuck_credit_recovery.py::test_heartbeat_only_extends_the_current_workers_lease[sqlite]
+ERROR tests/test_stuck_credit_recovery.py::test_the_batch_job_reports_first_never_charges_and_leaves_live_work_alone[sqlite]
+ERROR tests/test_stuck_credit_recovery.py::test_settle_racing_release_ends_exactly_one_way[sqlite]
+1 passed, 1 skipped, 7 errors in 1.65s
