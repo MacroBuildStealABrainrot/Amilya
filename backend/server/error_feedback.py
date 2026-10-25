@@ -15,6 +15,8 @@ MESSAGES = {
 
 # Exact application-owned messages, never arbitrary exception/provider text.
 PREFLIGHT = {
+    'Configured AI model is not in the approved price registry': ('MODEL_CONFIGURATION_INVALID', 'The configured model is not in the reviewed model registry.'),
+    'Deep Review requires a challenger from a different model developer': ('MODEL_CONFIGURATION_INVALID', 'Deep Review needs an independently developed challenger model.'),
     'Live AI is paused until the owner activates provider execution': ('AI_PAUSED', 'AI execution is paused in server settings. The owner must enable it.'),
     'AI is not configured; manual evidence and documentation are available': ('AI_NOT_CONFIGURED', 'The server has no configured AI API key. The owner must configure it.'),
     'This provider is awaiting clinical-data privacy approval': ('PROVIDER_APPROVAL_REQUIRED', 'This provider has not been approved for clinical-data processing.'),
@@ -26,6 +28,8 @@ PREFLIGHT = {
 }
 
 def preflight_error(status, detail):
+    if detail not in PREFLIGHT:
+        return HTTPException(status, 'AI configuration needs review.', headers={'X-WCP-Error':'MODEL_CONFIGURATION_INVALID','X-WCP-Retryable':'false'})
     code, _ = PREFLIGHT[detail]
     return HTTPException(status, detail, headers={'X-WCP-Error':code,'X-WCP-Retryable':'false'})
 

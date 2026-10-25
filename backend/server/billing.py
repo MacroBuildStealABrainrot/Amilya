@@ -174,9 +174,16 @@ def _safe_usage(usage: dict) -> dict:
     routing = usage.get('routing')
     if isinstance(routing, dict):
         from .kosmo import MODELS, VERSION
-        if isinstance(routing.get('effort_level'), str) and routing['effort_level'] in MODELS and routing.get('model') == MODELS[routing['effort_level']]:
+        from .providers import MODEL_PRICES
+        if isinstance(routing.get('effort_level'), str) and routing['effort_level'] in MODELS and isinstance(routing.get('model'), str) and routing['model'] in MODEL_PRICES:
             safe['routing'] = {key: routing[key] for key in ('model', 'effort_level')}
             safe['routing']['policy_version'] = VERSION
+    from .providers import MODEL_PRICES
+    reported = usage.get('reported_model')
+    if isinstance(reported, str) and reported in MODEL_PRICES:
+        safe['reported_model'] = reported
+    if usage.get('model_identity') in ('confirmed', 'unreported', 'mismatch'):
+        safe['model_identity'] = usage['model_identity']
     if type(usage.get('upstream_status')) is int and 100 <= usage['upstream_status'] <= 599:
         safe['upstream_status'] = usage['upstream_status']
     if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible', 'invalid_response', 'provider_timeout', 'provider_connection', 'response_processing'):

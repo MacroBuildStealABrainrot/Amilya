@@ -2,20 +2,20 @@
 #
 # SAFE BY DESIGN
 #  * Uses NO secrets, NO signing keys, NO AI keys and NO network service of yours. Nothing is deployed. Production, Cloud Run,
-#    clinical data and billing are never touched. The phone tests use the SANDBOX app, which can only reach a throw-away
-#    server started inside this job (fake data, AI off), through the emulator's adb link.
+#    clinical data and billing are never touched. No emulator is installed or run.
+#    Android instrumentation is compiled for later physical Samsung validation.
 #  * Put this in a PRIVATE repository. Run it from the Actions tab ("Run workflow") or by pushing.
 #
 # WHAT YOU GET (Actions run page > Artifacts):
 #  * amilya-apks: app-sandbox.apk, app-debug.apk, app-release-unsigned.apk, wear-sandbox.apk
 #  * amilya-build-evidence: Gradle unit-test reports, lint report, build-flag checks, backend test log (SQLite + PostgreSQL)
-#  * amilya-phone-test-evidence: instrumentation (emulator) test reports and logcat
+#  * Device execution is intentionally excluded at the owner's request.
 name: amilya-sandbox-ci
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, 'test/**' ]
+    branches: [ main, master, 'test/**', 'fix/server-diagnosis-*' ]
 
 permissions:
   contents: read
@@ -97,14 +97,13 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            :app:testSandboxUnitTest :wear-contract:test \
+            :app:testSandboxUnitTest :app:testPilotUnitTest :wear-contract:test \
             :app:assembleSandbox :app:assemblePilot :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
-      - name: Lint (sandbox) - report only
+      - name: Lint (sandbox + pilot)
         working-directory: android
-        continue-on-error: true
-        run: ./gradlew --no-daemon :app:lintSandbox
+        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot
       - name: Check build flags inside the built apps
         run: bash ci/verify-build-flags.sh | tee build-flags.log
       - name: Collect evidence
@@ -127,74 +126,4 @@ jobs:
         with:
           name: amilya-build-evidence
           path: "ci-out/*.log\nci-out/reports/"
-          retention-days: 30
-
-  phone-tests:
-    name: Sandbox app on an Android emulator (fake server, fake audio)
-    needs: android
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        api-level: [ 35 ]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Restore checksum-verified synthetic audio fixture
-        run: python3 ci/restore-large-fixture.py
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Use preinstalled Android SDK command-line tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
-          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
-            echo "::error::Android sdkmanager is missing on this runner"
-            exit 1
-          fi
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          "$SDKMANAGER" --version
-          yes | "$SDKMANAGER" --licenses >/dev/null || test ${PIPESTATUS[1]} -eq 0
-      - name: Android platform 36 and build tools
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Backend packages for the throw-away test servers
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-          python -m pip install -r backend/requirements.txt
-      - name: Enable KVM for the emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - name: Free unused hosted-runner SDKs for emulator storage
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL
-          sudo apt-get clean
-          df -h /
-      - name: Run phone tests on the emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: ${{ matrix.api-level }}
-          arch: x86_64
-          target: google_apis
-          # The emulator needs extra backing space beyond userdata; keep this within hosted-runner free disk.
-          disk-size: 2048M
-          heap-size: 512M
-          ram-size: 2048M
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -no-audio -no-metrics
-          script: bash ci/run-phone-tests.sh
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: amilya-phone-test-evidence-api${{ matrix.api-level }}
-          path: ci-out/
           retention-days: 30

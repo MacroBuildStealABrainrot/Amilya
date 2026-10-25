@@ -4,7 +4,7 @@ Rows use independent short transactions so business rollbacks cannot erase failu
 Client observations are explicitly distinguished from server/provider observations.
 """
 from __future__ import annotations
-import asyncio, contextvars, logging, math, time, uuid
+import asyncio, contextvars, json, logging, math, time, uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -27,6 +27,7 @@ active=contextvars.ContextVar('diagnostic_context',default=None)
 log=logging.getLogger('woundcopilot.diagnostics')
 write_failures=0
 _last_prune=0.0
+provider_log=logging.getLogger('woundcopilot.provider')
 TASKS={'transcription','audio_verification','nursing','soap','sbar','physician_update','referral_letter','handoff','custom','photo_assessment','ask_consultant','deep_review','clinical_review','document_save','recording','extract','document','quick_refine','improve_report','improve_assessment','external_flow','wear_control','unknown'}
 ERRORS={'HTTP_ERROR':'Upstream HTTP rejection','TIMEOUT':'Operation timed out','CONNECTION_FAILED':'Provider connection failed','CANCELLED':'Operation cancelled','INVALID_RESPONSE':'Response validation failed','INTERNAL_ERROR':'Operation failed','REQUEST_REJECTED':'Request rejected'}
 
@@ -121,6 +122,30 @@ def saved_document(document_id,generation_id):
 def safe_number(value):
     return value if type(value) in (int,float) and math.isfinite(value) and 0<=value<1e12 else None
 
+def cloud_event(data):
+    """Closed metadata only; remains available if diagnostic DB writes fail."""
+    from .providers import MODEL_PRICES, TASK_FILES, photo_error_headers
+    c=active.get()
+    if not c:return
+    try:request_id=str(uuid.UUID(str(c['id'])))
+    except (ValueError,TypeError):return
+    stage=data.get('stage')
+    if stage not in set(TASK_FILES) | {'transcription','audio_verification'}:return
+    record={'event':'ai_provider','request_id':request_id,'stage':stage,
+            'status':data.get('status') if data.get('status') in {'success','failed','cancelled'} else 'unknown'}
+    for key in ('selected_model','reported_model'):
+        value=data.get(key)
+        record[key]=value if isinstance(value,str) and value in MODEL_PRICES else None
+    value=data.get('provider')
+    record['provider']=value if value in {'openrouter','cloudflare','groq','deepgram'} else None
+    for key in ('http_status','duration_ms','retry_count'):
+        record[key]=safe_number(data.get(key))
+    code=data.get('error_code')
+    record['error_code']=code if code in ERRORS else None
+    if 'failure_reason' in data:
+        record['error_category']=photo_error_headers(data)['X-WCP-Error']
+    provider_log.info(json.dumps(record,sort_keys=True,separators=(',',':')))
+
 @contextmanager
 def measure(stage):
     start=time.perf_counter_ns();started_at=timestamp();status='success'
@@ -175,8 +200,13 @@ async def post(client,url,*,provider,model,stage,retry=0,fallback=False,original
             row=db.get(DiagnosticEvent,event_id)
             if row:row.data=data
         if active.get() and active.get()['user']:persist(save)
+        cloud_event(data)
 
 def outcome(stage,model,provider,success,usage,normalized,billed):
+    cloud_event({'stage':stage,'selected_model':model,'reported_model':usage.get('reported_model'),
+        'provider':provider,'status':'success' if success else 'failed',
+        **({} if success else {'failure_reason':usage.get('failure_reason')}),
+        'http_status':usage.get('upstream_status')})
     if stage == 'image':
         from .providers import photo_error_headers
         event({'source':'server','stage':'photo_result','selected_model':model,'provider':provider,
@@ -276,3 +306,4 @@ def detail(request_id:uuid.UUID,user:User=Depends(require_admin)):
         origin=row.data.get('generation_request_id',row.id)
         generation=[e for e in data if e['request_id']==origin and e.get('source') in {'provider','replay'} and e.get('stage') in {'quick_draft','quick_refine','quick_repair','improve_report','draft'}]
         return {'request_id':row.id,'job_id':row.job_id,'task':row.task,**row.data,'last_generation_model':generation[-1].get('selected_model') if generation else None,'generation_request_id':origin if generation else None,'client_retry_count':sum(e.get('stage')=='retry' for e in data),'provider_retry_count':sum(e.get('source')=='provider' and e.get('retry_count',0)>0 for e in data),'events':data}
+

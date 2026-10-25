@@ -45,6 +45,12 @@ from .kosmo import select_route
 from . import diagnostics
 
 router = APIRouter()
+
+
+class ModelIdentityError(ValueError):
+    """A gateway response does not identify the model that was requested."""
+
+
 request_operation: ContextVar[str | None] = ContextVar('request_operation', default=None)
 document_operations: ContextVar[list | None] = ContextVar('document_operations',default=None)
 PROMPTS = Path(__file__).parent / 'prompts'
@@ -510,6 +516,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
                               headers=retry_after_headers(usage))
+    except ModelIdentityError:
+        usage['failure_reason'] = 'request_incompatible'
+        error = HTTPException(502, 'The provider returned an unexpected model. The owner must review routing; no findings were accepted.')
     except (ValueError, KeyError, TypeError, IndexError):
         usage['failure_reason'] = 'invalid_response'
         error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.')
@@ -629,22 +638,26 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
             return raw
     async def perform():
-        if task not in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
-            return await perform_attempts()
-        # A report has at most four stages. Bound the whole network portion of
-        # each stage, including the single 429 retry/backoff, rather than only
-        # socket inactivity. Keep this inside metering so timeout settles safely.
+        # Socket timeouts alone allow a slow/dribbling response to run indefinitely.
+        # Bound every text/vision stage, including backoff, inside credit settlement.
+        timeout = settings.provider_timeout_seconds
+        if task in REPORT_STAGE_TASKS:
+            timeout = min(REPORT_STAGE_TIMEOUT_SECONDS, timeout)
         try:
-            return await asyncio.wait_for(perform_attempts(),
-                timeout=min(REPORT_STAGE_TIMEOUT_SECONDS, settings.provider_timeout_seconds))
+            return await asyncio.wait_for(perform_attempts(), timeout=timeout)
         except TimeoutError:
-            raise httpx.TimeoutException('The report stage exceeded its bounded wait') from None
+            raise httpx.TimeoutException('The AI stage exceeded its bounded wait') from None
     def measure(raw):
         vendor = raw.get('usage') or {}
         amount, safe = normalized_tokens(model, vendor)
+        reported = raw.get('model')
+        safe['reported_model'] = reported if isinstance(reported, str) and reported in MODEL_PRICES else None
+        safe['model_identity'] = 'confirmed' if reported == model else 'unreported' if reported is None else 'mismatch'
         if routing: safe['routing'] = routing
         return amount, safe, actual_cost(vendor)
     def validate(raw):
+        if raw.get('model') is not None and raw['model'] != model:
+            raise ModelIdentityError('Provider returned a different or unrecognized model')
         choice = raw['choices'][0]
         if choice.get('finish_reason') not in {'stop', None}: raise ValueError('Incomplete output')
         message = choice['message']
@@ -659,19 +672,26 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
 
 
+def configured_route(task, content):
+    """Keep automatic effort selection while honoring the owner's model settings."""
+    route = select_route(TASK_FAMILIES.get(task, task), content)
+    family = TASK_FAMILIES.get(task, task)
+    if task == 'image': selected = settings.model_vision
+    elif task == 'challenge': selected = settings.model_challenger
+    elif route['effort_level'] == 'high': selected = settings.model_frontier
+    elif family in {'draft', 'qa'}: selected = settings.model_documentation
+    elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
+    else: selected = settings.model_extraction
+    if selected not in MODEL_PRICES:
+        raise preflight_error(503, 'Configured AI model is not in the approved price registry')
+    return {**route, 'model': selected, 'reason': 'configured_' + task, 'effort_reason': route.get('reason')}
+
+
 @timed('ai_stage')
 async def routed(task, content, model=None, **kwargs):
-    if task not in {'quick_draft','quick_qa','quick_repair','quick_refine','improve_report'} and (diagnostics.active.get() or {}).get('task')!='deep_review':
+    if task not in REPORT_STAGE_TASKS and (diagnostics.active.get() or {}).get('task')!='deep_review':
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
-    route = select_route(TASK_FAMILIES.get(task, task), content)
-    # Explicit configured models must be respected for modality-specific and independent stages.
-    # All other tasks retain Kosmo's automatic complexity routing.
-    overrides = {'image': settings.model_vision, 'challenge': settings.model_challenger}
-    if task in overrides:
-        selected = overrides[task]
-        if selected not in MODEL_PRICES:
-            raise preflight_error(503, 'Configured AI model is not in the approved price registry')
-        route = {**route, 'model': selected, 'reason': 'configured_' + task}
+    route = configured_route(task, content)
     # Completion limits include hidden reasoning; preserve room for report text.
     kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']])
     return await structured(task, content, route['model'], routing=route, **kwargs)
@@ -761,21 +781,29 @@ async def draft_text(facts, template, mode, *, user, db=None, encounter_id, cust
 async def clinical_review(facts, mode, *, user, db=None, encounter_id):
     diagnostics.task('deep_review' if mode=='deep' else 'clinical_review')
     content = json.dumps({'case_facts': facts, 'mode': mode, 'instruction': 'Respect each confirmation_state. Unconfirmed evidence is an attributed suggestion, never a patient fact.'}, ensure_ascii=False, default=str)
+    if mode == 'deep':
+        primary = configured_route('review', content)['model']
+        challenger = configured_route('challenge', content)['model']
+        if primary.split('/')[0] == challenger.split('/')[0]:
+            raise preflight_error(503, 'Deep Review requires a challenger from a different model developer')
     first = await routed('review', content, settings.model_review, user=user, encounter_id=encounter_id)
     triggers = review_triggers(facts)
     first['routing'] = {**first.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': False}
-    if mode == 'fast' or not triggers: return first
+    if mode == 'fast' or not triggers and mode != 'deep': return first
     targeted = json.dumps({'case_facts': facts, 'material_questions': triggers, 'initial_considerations': first['considerations']}, ensure_ascii=False, default=str)
-    additional = await routed('escalation', targeted, settings.model_frontier, user=user, encounter_id=encounter_id)
-    stages = [first['usage'], additional['usage']]
-    opinions = [first['considerations'], additional['considerations']]
-    if mode == 'deep' and any('conflict' in x or 'vascular' in x for x in triggers):
-        challenged = await routed('challenge', targeted, settings.model_challenger, user=user, encounter_id=encounter_id)
+    stages = [first['usage']]
+    opinions = [first['considerations']]
+    if triggers:
+        additional = await routed('escalation', targeted, settings.model_frontier, user=user, encounter_id=encounter_id)
+        stages.append(additional['usage']); opinions.append(additional['considerations'])
+    if mode == 'deep':
+        # Independent assessment sees source evidence, not the first model's conclusions.
+        challenged = await routed('challenge', content, settings.model_challenger, user=user, encounter_id=encounter_id)
         opinions.append(challenged['considerations']); stages.append(challenged['usage'])
     reconciled = await routed('reconcile', json.dumps({'case_facts': facts, 'material_questions': triggers, 'interpretations': opinions}, ensure_ascii=False, default=str),
         settings.model_review, user=user, encounter_id=encounter_id)
     reconciled['usage']['stages'] = stages
-    reconciled['routing'] = {**reconciled.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': True}
+    reconciled['routing'] = {**reconciled.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': bool(triggers), 'independent_challenge': mode == 'deep'}
     return reconciled
 
 
@@ -1074,3 +1102,4 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+

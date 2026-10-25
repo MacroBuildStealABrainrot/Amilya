@@ -2,7 +2,7 @@
 import json
 import re
 
-VERSION = 'kosmo-2026-09-08.2'
+VERSION = 'kosmo-2026-10-25.1'
 MODELS = {'low': 'openai/gpt-6-luna', 'medium': 'openai/gpt-6.1-sol', 'high': 'openai/gpt-6-astra'}
 
 

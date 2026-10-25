@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio,logging,time,uuid
+import asyncio,logging,sys,time,uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI,Request
@@ -15,6 +15,11 @@ from server.performance import job_id as performance_job
 from server import diagnostics
 
 logger=logging.getLogger('woundcopilot')
+# Cloud Run ingests one JSON object per line as structured logs. This dedicated
+# logger receives only diagnostics.cloud_event's allowlisted technical metadata.
+if not diagnostics.provider_log.handlers:
+    diagnostics.provider_log.addHandler(logging.StreamHandler(sys.stdout))
+diagnostics.provider_log.setLevel(logging.INFO)
 
 
 @asynccontextmanager
@@ -121,3 +126,4 @@ def frontend(path:str):
         return FileResponse(asset,headers={'Cache-Control':'no-cache' if path.endswith(('sw.js','index.html')) else 'public, max-age=3600'})
     if not (FRONTEND/'index.html').exists():return JSONResponse({'service':'WoundCoPilot','frontend':'Build the frontend to open the app.'},status_code=503)
     return FileResponse(FRONTEND/'index.html',headers={'Cache-Control':'no-cache'})
+

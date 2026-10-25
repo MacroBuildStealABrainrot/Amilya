@@ -340,6 +340,7 @@ def test_cancelled_provider_call_releases_hold_and_allows_new_attempt(gateway):
 
 
 def test_reservation_commits_before_http_and_replay_is_encrypted_and_single_charge(gateway):
+    gateway.config.model_extraction = 'openai/gpt-6-luna'
     source = 'Synthetic private narrative with wound assessment.'
     def response(_):
         with gateway.sessions() as db:
@@ -503,7 +504,7 @@ def test_draft_requires_independent_qa_of_exact_proposed_text(gateway):
     result = asyncio.run(providers.draft_text(facts, 'nursing', 'auto', user=gateway.user, encounter_id='draft'))
     assert result['text'] == draft and result['qa']['passed'] is True
     assert result['effort_level'] == 'medium'
-    assert result['routing']['model'] == 'openai/gpt-6.1-sol'
+    assert result['routing']['model'] == gateway.config.model_documentation
     assert gateway.http.calls[0]['json']['reasoning']['effort'] == 'medium'
     qa_source = json.loads(gateway.http.calls[1]['json']['messages'][1]['content'])
     assert qa_source['case_facts'] == facts and qa_source['proposed_draft'] == draft
@@ -534,7 +535,7 @@ def test_review_escalation_is_triggered_and_reconciled_with_fact_states_preserve
     assert result['routing']['escalated'] is True
 
 
-@pytest.mark.parametrize('mode', ['fast', 'auto', 'advanced', 'deep'])
+@pytest.mark.parametrize('mode', ['fast', 'auto', 'advanced'])
 def test_review_without_material_trigger_uses_one_stage(gateway, mode):
     gateway.http.responses = [completion({'considerations': [], 'warnings': []})]
     result = asyncio.run(providers.clinical_review([], mode, user=gateway.user, encounter_id='simple-review'))
@@ -685,3 +686,4 @@ def test_verification_cannot_send_long_audio_or_bypass_execution_pause(gateway, 
     with pytest.raises(HTTPException) as caught:
         asyncio.run(providers.verify_speech_clip(b'synthetic-clip', user=gateway.user, encounter_id='verification'))
     assert caught.value.status_code == 503 and not operation_rows(gateway) and not gateway.http.calls
+
