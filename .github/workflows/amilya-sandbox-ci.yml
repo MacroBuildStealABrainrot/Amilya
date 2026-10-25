@@ -181,9 +181,11 @@ jobs:
           arch: x86_64
           target: google_apis
           # Limit the test emulator's userdata partition to fit on the runner's available disk.
-          disk-size: 2048M
+          disk-size: 4096M
+          heap-size: 512M
+          ram-size: 2048M
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -no-audio -no-metrics
           script: bash ci/run-phone-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
