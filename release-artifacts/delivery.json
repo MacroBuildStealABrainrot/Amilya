@@ -1,0 +1,41 @@
+[
+  {
+    "file": "WoundCoPilot-1.8.5-test1-phone.apk",
+    "version": "1.8.5-test1",
+    "version_code": 21,
+    "package": "com.woundcopilot.android.release",
+    "bytes": 24659393,
+    "sha256": "b2bfad305b879d4516ecc78a5c6f6750a98e8ae2a2c3e2fa6595a0996f933826",
+    "certificate_sha256": "8c6af1a1429155f57f9710e4e61327c8808eeea61da8d5fc7aab5575f44ee6e3",
+    "signature_verified": true,
+    "debuggable": false,
+    "known_secret_matches": 0,
+    "permissions": [
+      "android.permission.INTERNET",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
+      "android.permission.USE_BIOMETRIC",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+      "android.permission.POST_NOTIFICATIONS",
+      "com.woundcopilot.android.release.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    ]
+  },
+  {
+    "file": "Amilya-1.8.5-test1-watch.apk",
+    "version": "1.8.5-test1",
+    "version_code": 21,
+    "package": "com.woundcopilot.android.release",
+    "bytes": 22511929,
+    "sha256": "42d3ec002a467e7166c0ef033c94597c0868fd8737bff8ed5aa3a78a06ecc738",
+    "certificate_sha256": "8c6af1a1429155f57f9710e4e61327c8808eeea61da8d5fc7aab5575f44ee6e3",
+    "signature_verified": true,
+    "debuggable": false,
+    "known_secret_matches": 0,
+    "permissions": [
+      "com.woundcopilot.android.release.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    ]
+  }
+]
