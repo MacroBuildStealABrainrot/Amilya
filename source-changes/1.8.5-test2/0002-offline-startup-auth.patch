@@ -1,0 +1,132 @@
+--- a/android/app/src/main/java/com/woundcopilot/android/Api.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/Api.kt
+@@ -153,6 +153,12 @@
+     return if(detail is JSONArray)"The server rejected one or more submitted fields. Review your input. [REQUEST_VALIDATION_FAILED]" else (detail as? String).orEmpty()
+ }
+ 
++/** The CSRF token lives only in memory. After an offline start it is empty, so fetch it once, on demand,
++ *  before the first write. Never for sign-in routes, and never more often than every 5 seconds. */
++internal fun needsCsrfBootstrap(csrf:String,method:String,cookie:String,path:String,sinceLastAttemptMs:Long):Boolean =
++    csrf.isBlank() && method!="GET" && cookie.isNotBlank() && sinceLastAttemptMs>=5_000L &&
++    path !in setOf("/auth/login","/auth/signup","/auth/refresh","/auth/session")
++
+ class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
+ 
+ class Api(private val vault:Vault,baseUrl:String="https://woundcopilot-1039151887397.us-central1.run.app/api/v1") {
+@@ -170,6 +176,7 @@
+     @Volatile private var refreshToken=vault.read("$sessionKey-refresh") ?: ""
+     private val renewalLock=Any()
+     @Volatile var csrf=""
++    @Volatile private var lastCsrfBootstrapMs=-1L
+ 
+     fun clear(){cookie="";refreshToken="";csrf="";diagnosticJob=null;diagnosticGeneration=null;vault.remove(sessionKey);vault.remove("$sessionKey-refresh")}
+ 
+@@ -221,6 +228,16 @@
+ 
+         require(path.startsWith('/') && !path.startsWith("//")) { "Use a relative API path." }
+ 
++        if(!renewed){
++            val nowMs=System.nanoTime()/1_000_000
++            val sinceMs=if(lastCsrfBootstrapMs<0)Long.MAX_VALUE else nowMs-lastCsrfBootstrapMs
++            if(needsCsrfBootstrap(csrf,method,cookie,path,sinceMs)){
++                lastCsrfBootstrapMs=nowMs
++                // Best effort: if this fails (still offline) the real request below reports its own error.
++                runCatching{execute("/auth/session","GET",null,"application/json",null,true)}
++            }
++        }
++
+         val c=URL(base+path).openConnection() as HttpURLConnection
+         val requestCookie=cookie
+         val diagnosticRequestJob=if(path.startsWith("/encounters/"))diagnosticJob else null
+--- /dev/null
++++ b/android/app/src/test/java/com/woundcopilot/android/CsrfBootstrapTest.kt
+@@ -0,0 +1,46 @@
++package com.woundcopilot.android
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/** Item 2: when the in-memory CSRF token is missing, fetch it once before the first write, and only then. */
++class CsrfBootstrapTest {
++    private val cookie = "wcp_session=synthetic"
++    private val never = Long.MAX_VALUE
++
++    @Test fun fetchesTheTokenBeforeAWriteWhenItIsMissing() =
++        assertTrue(needsCsrfBootstrap("", "POST", cookie, "/quick/start", never))
++
++    @Test fun appliesToEveryWritingMethod() {
++        for (method in listOf("POST", "PUT", "PATCH", "DELETE")) {
++            assertTrue(method, needsCsrfBootstrap("", method, cookie, "/encounters/x/audio-parts", never))
++        }
++    }
++
++    @Test fun neverForReads() =
++        assertFalse(needsCsrfBootstrap("", "GET", cookie, "/work", never))
++
++    @Test fun neverWhenATokenIsAlreadyHeld() =
++        assertFalse(needsCsrfBootstrap("token", "POST", cookie, "/quick/start", never))
++
++    @Test fun neverWhenSignedOut() =
++        assertFalse(needsCsrfBootstrap("", "POST", "", "/quick/start", never))
++
++    @Test fun neverForRoutesThatCreateOrRenewTheSession() {
++        for (path in listOf("/auth/login", "/auth/signup", "/auth/refresh", "/auth/session")) {
++            assertFalse(path, needsCsrfBootstrap("", "POST", cookie, path, never))
++        }
++    }
++
++    @Test fun signOutAndLegalAcceptanceDoNeedTheToken() {
++        assertTrue(needsCsrfBootstrap("", "POST", cookie, "/auth/logout", never))
++        assertTrue(needsCsrfBootstrap("", "POST", cookie, "/auth/accept-legal", never))
++    }
++
++    @Test fun retriedAtMostOnceEveryFiveSeconds() {
++        assertFalse(needsCsrfBootstrap("", "POST", cookie, "/quick/start", 0L))
++        assertFalse(needsCsrfBootstrap("", "POST", cookie, "/quick/start", 4_999L))
++        assertTrue(needsCsrfBootstrap("", "POST", cookie, "/quick/start", 5_000L))
++    }
++}
+--- /dev/null
++++ b/android/app/src/androidTest/java/com/woundcopilot/android/CsrfAfterOfflineStartTest.kt
+@@ -0,0 +1,40 @@
++package com.woundcopilot.android
++
++import androidx.test.ext.junit.runners.AndroidJUnit4
++import androidx.test.platform.app.InstrumentationRegistry
++import kotlinx.coroutines.runBlocking
++import org.json.JSONObject
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertTrue
++import org.junit.Assume
++import org.junit.Test
++import org.junit.runner.RunWith
++import java.util.UUID
++
++/**
++ * Item 2, end to end. Real HTTP against the existing backend in an isolated local database, with its real CSRF
++ * check. A second Api instance starts from the saved session cookie only, exactly like an app that opened offline.
++ */
++@RunWith(AndroidJUnit4::class)
++class CsrfAfterOfflineStartTest {
++    private val local = "http://127.0.0.1:18766/api/v1"
++
++    @Test fun firstWriteAfterAColdStartFetchesTheTokenInsteadOfFailing() = runBlocking {
++        Assume.assumeTrue("Local HTTP is debug-only", BuildConfig.DEBUG)
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val signedIn = Api(Vault(context), local)
++        signedIn.clear()
++        val config = signedIn.call("/config") as JSONObject
++        signedIn.call("/auth/signup", "POST", obj(
++            "email" to "csrf-${UUID.randomUUID()}@example.invalid", "password" to "Synthetic-test-only-9714!",
++            "display_name" to "CSRF cold start test", "workspace_name" to "Isolated integration",
++            "accept_terms" to true, "terms_version" to config.str("legal_version"), "privacy_version" to config.str("legal_version")))
++        val coldStart = Api(Vault(context), local)           // the token is memory-only, so it starts empty
++        assertEquals("", coldStart.csrf)
++        val patient = coldStart.call("/patients", "POST", obj("display_name" to "Synthetic cold start", "external_ref" to "TEST ONLY")) as JSONObject
++        assertTrue(patient.str("id").isNotBlank())
++        assertTrue("token was fetched on demand", coldStart.csrf.isNotBlank())
++        coldStart.call("/auth/logout", "POST", JSONObject())  // sign-out also needs the token
++        coldStart.clear()
++    }
++}

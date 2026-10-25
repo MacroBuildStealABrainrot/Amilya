@@ -1,0 +1,31 @@
+--- a/android/app/src/androidTest/java/com/woundcopilot/android/CsrfAfterOfflineStartTest.kt
++++ b/android/app/src/androidTest/java/com/woundcopilot/android/CsrfAfterOfflineStartTest.kt
+@@ -38,7 +38,7 @@
+         coldStart.clear()
+     }
+ 
+-    @Test fun aStaleTokenIsRefreshedAndTheSameRequestIsResentOnce() = runBlocking {
++    @Test fun aStaleTokenIsRefreshedAndTheRequestIsResentExactlyOnce() = runBlocking {
+         Assume.assumeTrue("Local HTTP is debug-only", BuildConfig.DEBUG)
+         val context = InstrumentationRegistry.getInstrumentation().targetContext
+         val first = Api(Vault(context), local)
+@@ -50,12 +50,15 @@
+             "accept_terms" to true, "terms_version" to config.str("legal_version"), "privacy_version" to config.str("legal_version")))
+         val api = Api(Vault(context), local)
+         api.csrf = "stale-token"                              // the server rejects this with 403 before doing any work
+-        val key = UUID.randomUUID().toString()
+-        val patient = api.call("/patients", "POST", obj("display_name" to "Synthetic stale token", "external_ref" to "TEST ONLY"), key) as JSONObject
++        // POST /patients is NOT idempotent (the server has no replay protection for it), so this test never sends it
++        // twice on purpose. The only question: after the 403, did the app resend exactly once and did one record result?
++        val marker = "TEST-ONLY-" + UUID.randomUUID()
++        val patient = api.call("/patients", "POST", obj("display_name" to "Synthetic stale token", "external_ref" to marker)) as JSONObject
+         assertTrue(patient.str("id").isNotBlank())
+         assertTrue("a fresh token replaced the stale one", api.csrf.isNotBlank() && api.csrf != "stale-token")
+-        val replay = api.call("/patients", "POST", obj("display_name" to "Synthetic stale token", "external_ref" to "TEST ONLY"), key) as JSONObject
+-        assertEquals("the same key never creates a second record", patient.str("id"), replay.str("id"))
++        val listed = (api.call("/patients") as org.json.JSONArray).objects().filter { it.str("external_ref") == marker }
++        assertEquals("the rejected request was resent once, producing exactly one record", 1, listed.size)
++        assertEquals(patient.str("id"), listed.single().str("id"))
+         api.call("/auth/logout", "POST", JSONObject())
+         api.clear()
+     }

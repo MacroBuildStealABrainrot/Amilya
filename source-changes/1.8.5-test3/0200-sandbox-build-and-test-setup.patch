@@ -1,0 +1,359 @@
+
+--- a/android/README.md
++++ b/android/README.md
+@@ -68,3 +68,8 @@
+ ## Wear OS companion (1.8.0-test1)
+ 
+ The existing phone recorder now has a Wear OS remote companion in `wear`, with a small `wear-contract` protocol module. See [WEAR_OS.md](WEAR_OS.md) for architecture, authentication limits, matching APK installation, diagnostics, privacy and Galaxy Watch testing. The watch uses the phone microphone; starting from a locked/backgrounded phone is intentionally not enabled. No clinical prompts or backend processing pipeline were changed by this integration.
++
++
++## Safe test-only build (1.8.5-test3)
++
++Use the `sandbox` build type for all phone tests: `:app:assembleSandbox`, `:app:connectedSandboxAndroidTest`. Package `com.woundcopilot.android.sandbox`, named "WoundCoPilot SANDBOX". It can reach only the test server on this PC (`127.0.0.1:18766` through `adb reverse`); the live service address is refused in code (`isAllowedApiOrigin`, covered by `ApiOriginGuardTest`). The old note about a `woundcopilot-next` folder no longer applies: the backend is the `backend` folder of this project. See `RUN-ON-YOUR-PC.md` and the `sandbox` folder at the project root.
+
+--- a/android/app/build.gradle.kts
++++ b/android/app/build.gradle.kts
+@@ -1,14 +1,16 @@
+ plugins { id("com.android.application"); id("org.jetbrains.kotlin.plugin.compose") }
+ android {
+-    testBuildType = providers.gradleProperty("wcpTestBuildType").orElse("debug").get()
++    // Phone tests run on the SANDBOX build by default, so they can never run against the live-service debug app.
++    // (Release tests still work with -PwcpTestBuildType=release, as described in android/README.md.)
++    testBuildType = providers.gradleProperty("wcpTestBuildType").orElse("sandbox").get()
+     namespace = "com.woundcopilot.android"
+     compileSdk = 36
+     defaultConfig {
+         applicationId = "com.woundcopilot.android"
+         minSdk = 28
+         targetSdk = 36
+-        versionCode = 22
+-        versionName = "1.8.5-test2"
++        versionCode = 23
++        versionName = "1.8.5-test3"
+         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
+         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+@@ -16,9 +18,27 @@
+     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+     buildFeatures { compose = true; buildConfig = true }
+     buildTypes {
++        // Normal debug and release builds keep talking to the existing service, exactly as before.
++        getByName("debug") {
++            buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
++            buildConfigField("boolean", "SANDBOX", "false")
++        }
+         getByName("release") {
+             applicationIdSuffix = ".release"
+             isDebuggable = false
++            buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
++            buildConfigField("boolean", "SANDBOX", "false")
++        }
++        // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
++        // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
++        // production address is refused in code, so a recording can never be sent to the live service.
++        create("sandbox") {
++            initWith(getByName("debug"))
++            applicationIdSuffix = ".sandbox"
++            versionNameSuffix = "-sandbox"
++            buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:18766/api/v1\"")
++            buildConfigField("boolean", "SANDBOX", "true")
++            matchingFallbacks += listOf("debug")
+         }
+     }
+ }
+@@ -40,4 +60,6 @@
+     androidTestImplementation("androidx.test.ext:junit:1.1.5")
+     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+     debugImplementation("androidx.compose.ui:ui-test-manifest")
++    add("sandboxImplementation", "androidx.compose.ui:ui-tooling")
++    add("sandboxImplementation", "androidx.compose.ui:ui-test-manifest")
+ }
+
+--- a/android/app/src/main/java/com/woundcopilot/android/Api.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/Api.kt
+@@ -166,13 +166,20 @@
+ 
+ class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
+ 
+-class Api(private val vault:Vault,baseUrl:String="https://woundcopilot-1039151887397.us-central1.run.app/api/v1") {
++internal const val PRODUCTION_API_ORIGIN="https://woundcopilot-1039151887397.us-central1.run.app/api/v1"
++internal const val LOCAL_TEST_API_ORIGIN="http://127.0.0.1:18766/api/v1"
++
++/** Which server addresses a build may talk to. The sandbox build allows ONLY the fake test server on this PC. */
++internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean):Boolean{
++    val local=url==LOCAL_TEST_API_ORIGIN || url=="http://localhost:18766/api/v1"
++    return if(sandbox) local else url==PRODUCTION_API_ORIGIN || (debug && local)
++}
++
++class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
+     @Volatile var diagnosticJob:String?=null
+     @Volatile var diagnosticGeneration:String?=null
+ 
+-    val base=baseUrl.also { require(it=="https://woundcopilot-1039151887397.us-central1.run.app/api/v1" ||
+-
+-        BuildConfig.DEBUG && (it=="http://127.0.0.1:18766/api/v1" || it=="http://localhost:18766/api/v1")) { "Unsupported API origin." } }
++    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX)) { "Unsupported API origin." } }
+ 
+     private val sessionKey=if(base.startsWith("https://woundcopilot-"))"session" else "session-local-integration"
+ 
+
+--- a/android/app/src/sandbox/AndroidManifest.xml
++++ b/android/app/src/sandbox/AndroidManifest.xml
+@@ -0,0 +1,4 @@
++<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
++    <!-- Test-only build: clearly named on the phone, and plain HTTP allowed only to this PC (127.0.0.1) through adb reverse. -->
++    <application android:label="WoundCoPilot SANDBOX" android:networkSecurityConfig="@xml/sandbox_network" tools:replace="android:label" />
++</manifest>
+
+--- a/android/app/src/sandbox/res/xml/sandbox_network.xml
++++ b/android/app/src/sandbox/res/xml/sandbox_network.xml
+@@ -0,0 +1 @@
++<network-security-config><base-config cleartextTrafficPermitted="false"/><domain-config cleartextTrafficPermitted="true"><domain includeSubdomains="false">127.0.0.1</domain><domain includeSubdomains="false">localhost</domain></domain-config></network-security-config>
+
+--- a/android/app/src/test/java/com/woundcopilot/android/ApiOriginGuardTest.kt
++++ b/android/app/src/test/java/com/woundcopilot/android/ApiOriginGuardTest.kt
+@@ -0,0 +1,31 @@
++package com.woundcopilot.android
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/** The sandbox (test-only) build must be unable to reach the live service, whatever else changes. */
++class ApiOriginGuardTest {
++    private val production = PRODUCTION_API_ORIGIN
++    private val local = LOCAL_TEST_API_ORIGIN
++
++    @Test fun sandboxRefusesTheLiveService() = assertFalse(isAllowedApiOrigin(production, debug = true, sandbox = true))
++    @Test fun sandboxAllowsOnlyTheTestServerOnThisPc() {
++        assertTrue(isAllowedApiOrigin(local, debug = true, sandbox = true))
++        assertTrue(isAllowedApiOrigin("http://localhost:18766/api/v1", debug = true, sandbox = true))
++    }
++    @Test fun sandboxRefusesAnyOtherAddress() {
++        for (url in listOf("https://example.com/api/v1", "http://192.168.1.5:18766/api/v1", "http://127.0.0.1:8766/api/v1",
++            "http://127.0.0.1:18766/api/v1/", "https://woundcopilot-1039151887397.us-central1.run.app/api/v1/x", "")) {
++            assertFalse(url, isAllowedApiOrigin(url, debug = true, sandbox = true))
++        }
++    }
++    @Test fun releaseStillUsesTheLiveServiceAndNeverLocalHttp() {
++        assertTrue(isAllowedApiOrigin(production, debug = false, sandbox = false))
++        assertFalse(isAllowedApiOrigin(local, debug = false, sandbox = false))
++    }
++    @Test fun normalDebugBehavesAsBefore() {
++        assertTrue(isAllowedApiOrigin(production, debug = true, sandbox = false))
++        assertTrue(isAllowedApiOrigin(local, debug = true, sandbox = false))
++    }
++}
+
+--- a/android/tools/local_contract_server.py
++++ b/android/tools/local_contract_server.py
+@@ -5,14 +5,23 @@
+ import sys
+ 
+ root = Path(__file__).resolve().parents[2]
+-sys.path.insert(0, str(root / 'woundcopilot-next'))
+-database = root / 'android-contract-test.db'
++# The backend lives in the 'backend' folder of this project. WCP_BACKEND_DIR can point somewhere else.
++candidates = [Path(os.environ['WCP_BACKEND_DIR'])] if os.environ.get('WCP_BACKEND_DIR') else [root / 'backend', root / 'woundcopilot-next']
++backend = next((c for c in candidates if (c / 'server' / 'main.py').is_file()), None)
++if backend is None:
++    raise SystemExit('Backend folder not found. Expected ' + str(root / 'backend') + ' (with server/main.py).')
++sys.path.insert(0, str(backend))
++os.chdir(backend)
++
++database = root / 'sandbox' / 'work' / 'level1-test.db'
++database.parent.mkdir(parents=True, exist_ok=True)
++database.unlink(missing_ok=True)  # always start empty; this file holds fake test data only
+ os.environ.update(
+     WOUNDCOPILOT_ENV_FILE=str(root / 'nonexistent-android-test.env'),
+     DATABASE_URL='sqlite:///' + database.as_posix(),
+     APP_SECRET=secrets.token_urlsafe(48),
+     ENVIRONMENT='development', AUTO_CREATE_SCHEMA='true',
+-    PROVIDER_EXECUTION_ENABLED='false', BILLING_ENABLED='false',
++    PROVIDER_EXECUTION_ENABLED='false', BILLING_ENABLED='false', CLINICAL_DATA_ENABLED='false',
+     OPENROUTER_API_KEY='', GROQ_API_KEY='', DEEPGRAM_API_KEY='',
+     CLOUDFLARE_API_TOKEN='', STRIPE_SECRET_KEY='',
+     ALLOW_SIGNUP='true', SECURE_COOKIES='false',
+
+--- a/android/wear/build.gradle.kts
++++ b/android/wear/build.gradle.kts
+@@ -6,8 +6,8 @@
+   applicationId = "com.woundcopilot.android"
+   minSdk = 30
+   targetSdk = 36
+-  versionCode = 22
+-  versionName = "1.8.5-test2"
++  versionCode = 23
++  versionName = "1.8.5-test3"
+   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+
+--- a/sandbox/.gitignore
++++ b/sandbox/.gitignore
+@@ -0,0 +1,3 @@
++.venv/
++work/
++level3.env
+
+--- a/sandbox/Go-Offline.ps1
++++ b/sandbox/Go-Offline.ps1
+@@ -0,0 +1,4 @@
++# Makes the SANDBOX app "offline": cuts the USB link between the phone and the PC test server.
++# (Airplane mode does not work for this, because the sandbox app only talks to the PC through the USB link.)
++adb reverse --remove tcp:18766
++Write-Host 'Phone is now OFFLINE from the test server.' -ForegroundColor Yellow
+
+--- a/sandbox/Go-Online.ps1
++++ b/sandbox/Go-Online.ps1
+@@ -0,0 +1,3 @@
++# Restores the USB link so the SANDBOX app can reach the PC test server again.
++adb reverse tcp:18766 tcp:18766
++Write-Host 'Phone is ONLINE to the test server again.' -ForegroundColor Green
+
+--- a/sandbox/Level3-CreateTestOwner.ps1
++++ b/sandbox/Level3-CreateTestOwner.ps1
+@@ -0,0 +1,6 @@
++# Makes ONE local test account that has unlimited credits ON YOUR PC ONLY (local database, billing off).
++# Use a made-up email such as tester@example.invalid and a made-up password of 16+ characters.
++. "$PSScriptRoot\_level3_env.ps1"
++Assert-SetupDone
++Push-Location $BackendDir
++try { & $VenvPython -m scripts.bootstrap_owner } finally { Pop-Location }
+
+--- a/sandbox/Run-Level1-LocalAuth.ps1
++++ b/sandbox/Run-Level1-LocalAuth.ps1
+@@ -0,0 +1,7 @@
++# LEVEL 1 - the real backend code, empty throw-away database, AI switched OFF, billing OFF.
++# Good for: sign-in, token (CSRF) checks, saving. It can NOT transcribe or write a report.
++. "$PSScriptRoot\_common.ps1"
++Assert-SetupDone; Assert-PortFree
++Write-Host 'LEVEL 1: local backend, AI OFF, fake data only. Press Ctrl+C to stop.' -ForegroundColor Cyan
++Set-PhoneLink
++& $VenvPython (Join-Path $ProjectDir 'android\tools\local_contract_server.py')
+
+--- a/sandbox/Run-Level2-SimulatedPipeline.ps1
++++ b/sandbox/Run-Level2-SimulatedPipeline.ps1
+@@ -0,0 +1,8 @@
++# LEVEL 2 - a PRETEND server. It answers upload / transcript / report with fixed fake text, and can fail on purpose.
++# Good for: proving the phone app's offline -> reconnect -> upload -> report -> "recording kept" behaviour.
++# No AI, no cost, nothing leaves this PC. It does NOT prove the real AI or the real backend work.
++. "$PSScriptRoot\_common.ps1"
++Assert-SetupDone; Assert-PortFree
++Write-Host 'LEVEL 2: pretend server, fixed fake answers. Press Ctrl+C to stop.' -ForegroundColor Cyan
++Set-PhoneLink
++& $VenvPython (Join-Path $ProjectDir 'test-tools\controlled_pipeline_api.py')
+
+--- a/sandbox/Run-Level3-RealAI-SyntheticOnly.ps1
++++ b/sandbox/Run-Level3-RealAI-SyntheticOnly.ps1
+@@ -0,0 +1,14 @@
++# LEVEL 3 - real backend + REAL AI transcription and report writing, using FAKE (synthetic) speech only.
++# Fake audio is sent to the AI companies whose keys you put in level3.env. They may charge you.
++# Never play or record a real patient. Never use real names, dates of birth or health card numbers.
++. "$PSScriptRoot\_common.ps1"
++Assert-SetupDone; Assert-PortFree
++Write-Host ''
++Write-Host 'LEVEL 3 sends FAKE speech to outside AI companies using YOUR keys.' -ForegroundColor Yellow
++Write-Host 'Type SYNTHETIC ONLY to confirm you will use no real patient information:' -ForegroundColor Yellow
++if ((Read-Host) -cne 'SYNTHETIC ONLY') { throw 'Not confirmed. Nothing was started.' }
++. "$PSScriptRoot\_level3_env.ps1"
++Write-Host 'LEVEL 3: real AI, fake data only. Press Ctrl+C to stop.' -ForegroundColor Cyan
++Set-PhoneLink
++Push-Location $BackendDir
++try { & $VenvPython -m uvicorn server.main:app --host 127.0.0.1 --port 18766 --no-access-log } finally { Pop-Location }
+
+--- a/sandbox/Setup-Sandbox.ps1
++++ b/sandbox/Setup-Sandbox.ps1
+@@ -0,0 +1,14 @@
++# One-time setup. Installs Python packages into sandbox\.venv. Touches nothing outside this project folder.
++. "$PSScriptRoot\_common.ps1"
++$py = Get-Command python -ErrorAction SilentlyContinue
++if (-not $py) { throw 'Python 3.11 or newer is needed. Install it from python.org (tick "Add python.exe to PATH"), then run this again.' }
++$version = & python -c "import sys;print('%d.%d' % sys.version_info[:2])"
++if ([version]$version -lt [version]'3.11') { throw "Python $version found; 3.11 or newer is needed." }
++if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -or -not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
++    Write-Host 'ffmpeg/ffprobe not found. Install with: winget install Gyan.FFmpeg   then open a NEW PowerShell window. (Needed for audio checks in Level 3.)' -ForegroundColor Yellow
++}
++if (-not (Test-Path -LiteralPath $VenvPython)) { & python -m venv (Join-Path $SandboxDir '.venv') }
++& $VenvPython -m pip install --upgrade pip
++& $VenvPython -m pip install -r (Join-Path $BackendDir 'requirements.txt')
++if ($LASTEXITCODE -ne 0) { throw 'Python packages could not be installed.' }
++Write-Host 'Setup finished.' -ForegroundColor Green
+
+--- a/sandbox/_common.ps1
++++ b/sandbox/_common.ps1
+@@ -0,0 +1,24 @@
++# Shared helpers for the sandbox scripts. Not meant to be run on its own.
++$ErrorActionPreference = 'Stop'
++$script:SandboxDir = $PSScriptRoot
++$script:ProjectDir = Split-Path -Parent $PSScriptRoot
++$script:BackendDir = Join-Path $ProjectDir 'backend'
++$script:VenvPython = Join-Path $SandboxDir '.venv\Scripts\python.exe'
++$script:Port = 18766
++
++function Assert-SetupDone {
++    if (-not (Test-Path -LiteralPath $VenvPython)) { throw 'Run .\Setup-Sandbox.ps1 first (one time).' }
++    if (-not (Test-Path -LiteralPath (Join-Path $BackendDir 'server\main.py'))) { throw "Backend folder not found at $BackendDir" }
++}
++function Assert-PortFree {
++    $busy = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
++    if ($busy) { throw "Port $Port is already in use. Close the other sandbox window first (Ctrl+C)." }
++}
++function Set-PhoneLink {
++    $adb = Get-Command adb -ErrorAction SilentlyContinue
++    if (-not $adb) { Write-Host 'adb was not found. Add Android SDK platform-tools to PATH, then run: adb reverse tcp:18766 tcp:18766' -ForegroundColor Yellow; return }
++    $devices = & adb devices | Select-String -Pattern "`tdevice$"
++    if (-not $devices) { Write-Host 'No phone found by adb. Plug in the Samsung, allow USB debugging, then run: adb reverse tcp:18766 tcp:18766' -ForegroundColor Yellow; return }
++    & adb reverse tcp:18766 tcp:18766 | Out-Null
++    Write-Host 'Phone linked: the phone can reach this PC test server at 127.0.0.1:18766 (USB only).' -ForegroundColor Green
++}
+
+--- a/sandbox/_level3_env.ps1
++++ b/sandbox/_level3_env.ps1
+@@ -0,0 +1,32 @@
++# Builds the Level 3 settings. Safety values are forced here and cannot be overridden by level3.env.
++. "$PSScriptRoot\_common.ps1"
++$envFile = Join-Path $SandboxDir 'level3.env'
++if (-not (Test-Path -LiteralPath $envFile)) { throw 'Copy level3.env.example to level3.env and add your own AI keys first.' }
++$workDir = Join-Path $SandboxDir 'work'
++New-Item -ItemType Directory -Force -Path $workDir | Out-Null
++$secretFile = Join-Path $workDir 'level3-secret.txt'
++if (-not (Test-Path -LiteralPath $secretFile)) {
++    $bytes = New-Object byte[] 48
++    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
++    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
++    [System.IO.File]::WriteAllText($secretFile, [Convert]::ToBase64String($bytes))
++}
++if (-not ((Get-Content -LiteralPath $envFile) -match '^OPENROUTER_API_KEY=.+')) { Write-Host 'Note: OPENROUTER_API_KEY is empty in level3.env, so report writing will not work.' -ForegroundColor Yellow }
++$env:WOUNDCOPILOT_ENV_FILE = $envFile
++$env:APP_SECRET = (Get-Content -LiteralPath $secretFile -Raw).Trim()
++$env:ENVIRONMENT = 'development'
++$env:DATABASE_URL = 'sqlite:///' + ((Join-Path $workDir 'level3-test.db') -replace '\\', '/')
++$env:PUBLIC_BASE_URL = 'http://127.0.0.1:18766'
++$env:TRUSTED_HOSTS = '127.0.0.1,localhost'
++$env:SECURE_COOKIES = 'false'
++$env:ALLOW_SIGNUP = 'true'
++$env:AUTO_CREATE_SCHEMA = 'false'
++$env:BILLING_ENABLED = 'false'
++$env:STRIPE_SECRET_KEY = ''
++$env:CLINICAL_DATA_ENABLED = 'false'     # fake data only
++$env:PROVIDER_EXECUTION_ENABLED = 'true'  # the only thing Level 3 turns on: real AI for fake data
++Push-Location $BackendDir
++try {
++    & $VenvPython -m alembic upgrade head
++    if ($LASTEXITCODE -ne 0) { throw 'Test database setup failed.' }
++} finally { Pop-Location }
+
+--- a/sandbox/level3.env.example
++++ b/sandbox/level3.env.example
+@@ -0,0 +1,10 @@
++# Copy this file to level3.env and fill in YOUR OWN keys. level3.env stays on your PC.
++# Never paste these keys into a chat, an email, the app, or a ZIP you share.
++# Level 3 sends FAKE (synthetic) speech and text to these AI companies, and they may charge your account.
++OPENROUTER_API_KEY=
++CLOUDFLARE_API_TOKEN=
++CLOUDFLARE_ACCOUNT_ID=
++GROQ_API_KEY=
++DEEPGRAM_API_KEY=
++DEEPGRAM_ENABLED=false
++SPEECH_PROVIDER=auto

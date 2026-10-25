@@ -1,0 +1,134 @@
+--- a/android/app/src/main/java/com/woundcopilot/android/Api.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/Api.kt
+@@ -156,8 +156,13 @@
+ /** The CSRF token lives only in memory. After an offline start it is empty, so fetch it once, on demand,
+  *  before the first write. Never for sign-in routes, and never more often than every 5 seconds. */
+ internal fun needsCsrfBootstrap(csrf:String,method:String,cookie:String,path:String,sinceLastAttemptMs:Long):Boolean =
+-    csrf.isBlank() && method!="GET" && cookie.isNotBlank() && sinceLastAttemptMs>=5_000L &&
+-    path !in setOf("/auth/login","/auth/signup","/auth/refresh","/auth/session")
++    csrf.isBlank() && method!="GET" && cookie.isNotBlank() && sinceLastAttemptMs>=5_000L && path !in AUTH_ENTRY_PATHS
++
++/** Routes that create or renew the session; they never need (or can fetch) the security token first. */
++internal val AUTH_ENTRY_PATHS=setOf("/auth/login","/auth/signup","/auth/refresh","/auth/session")
++
++/** The server answers this before it does any work, so the same request can safely be sent again. */
++internal fun isCsrfRejection(status:Int,message:String)=status==403 && message.contains("request verification",ignoreCase=true)
+ 
+ class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
+ 
+@@ -289,6 +294,15 @@
+ 
+                 val message=apiErrorMessage(value)
+ 
++                // A stale or missing security token is rejected before any work happens, so fetch a fresh one and
++                // resend the identical request once. The Idempotency-Key is unchanged, so nothing can run twice.
++                if(isCsrfRejection(status,message) && !renewed && method!="GET" && cookie.isNotBlank() && path !in AUTH_ENTRY_PATHS){
++                    c.disconnect()
++                    csrf=""
++                    runCatching{execute("/auth/session","GET",null,"application/json",null,false)}
++                    if(csrf.isNotBlank()){perfStatus="CSRF_REFRESHED";return execute(path,method,data,type,key,true)}
++                }
++
+                 val pending=status==409 && message.contains("already processing or awaiting reconciliation")
+                 throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599})
+ 
+--- a/android/app/src/main/java/com/woundcopilot/android/ClinicianFeedback.kt
++++ b/android/app/src/main/java/com/woundcopilot/android/ClinicianFeedback.kt
+@@ -14,7 +14,7 @@
+ import java.io.IOException
+ 
+ internal fun canRetryRequest(error:Exception)=
+-    error !is javax.net.ssl.SSLException && (error is IOException || error is ApiException && error.retryAllowed!=false && (error.ambiguous || error.status in listOf(408,429,500,502,503,504)))
++    error !is javax.net.ssl.SSLException && (error is IOException || error is ApiException && error.retryAllowed!=false && (error.ambiguous || isCsrfRejection(error.status,error.message.orEmpty()) || error.status in listOf(408,429,500,502,503,504)))
+ 
+ internal fun clinicianError(error:Exception,purpose:String?=null):String {
+     val api=error as? ApiException
+@@ -37,6 +37,7 @@
+         code=="RETRY_LIMIT" -> "The retry limit for this request has been reached. Contact support before starting another attempt."
+         code=="RESPONSE_PROCESSING_FAILED" -> "The server could not process the provider response. Contact support with the request reference."
+         code=="PROVIDER_UNAVAILABLE" -> "The provider returned an unsuccessful response. Check the request diagnostics before retrying."
++        api!=null && isCsrfRejection(api.status,api.message.orEmpty()) -> {code="SESSION_TOKEN_REFRESH_FAILED";"The secure session token could not be refreshed. Check your connection and tap Try Again. Your recording is not affected."}
+         api?.status==401 -> "Your session is no longer authorized. Sign in again."
+         api?.status==402 -> "This app account needs AI entitlement or app credits. Provider funding alone does not activate app access."
+         api?.status==428 -> "Review the updated terms to continue."
+--- /dev/null
++++ b/android/app/src/test/java/com/woundcopilot/android/CsrfRecoveryTest.kt
+@@ -0,0 +1,49 @@
++package com.woundcopilot.android
++
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertTrue
++import org.junit.Test
++import java.io.IOException
++
++/** A rejected security token is recoverable (retry and clear message); other 403s and other errors are unchanged. */
++class CsrfRecoveryTest {
++    private val csrf = "Invalid request verification. Refresh and try again."
++
++    @Test fun recognisesOnlyTheTokenRejection() {
++        assertTrue(isCsrfRejection(403, csrf))
++        assertTrue(isCsrfRejection(403, "INVALID REQUEST VERIFICATION"))
++        assertFalse(isCsrfRejection(403, "Request origin is not permitted."))
++        assertFalse(isCsrfRejection(403, "Consent is required before processing the audio again"))
++        assertFalse(isCsrfRejection(401, csrf))
++        assertFalse(isCsrfRejection(200, csrf))
++    }
++
++    @Test fun aTokenRejectionOffersTryAgain() =
++        assertTrue(canRetryRequest(ApiException(403, csrf)))
++
++    @Test fun otherForbiddenAndPaymentErrorsStillDoNot() {
++        assertFalse(canRetryRequest(ApiException(403, "Request origin is not permitted.")))
++        assertFalse(canRetryRequest(ApiException(403, "Consent is required before processing the audio again")))
++        assertFalse(canRetryRequest(ApiException(402, "insufficient credits")))
++    }
++
++    @Test fun existingRetryRulesAreUnchanged() {
++        assertTrue(canRetryRequest(IOException("offline")))
++        assertTrue(canRetryRequest(ApiException(429, "limit")))
++        assertTrue(canRetryRequest(ApiException(503, "busy")))
++        assertFalse(canRetryRequest(javax.net.ssl.SSLException("tls")))
++        assertFalse(canRetryRequest(ApiException(503, "quota", category = "PROVIDER_QUOTA", retryAllowed = false)))
++    }
++
++    @Test fun theMessageIsClearAndSaysTheRecordingIsSafe() {
++        val text = clinicianError(ApiException(403, csrf), "audio")
++        assertTrue(text, text.contains("Try Again"))
++        assertTrue(text, text.contains("recording is not affected"))
++        assertTrue(text, text.contains("SESSION_TOKEN_REFRESH_FAILED"))
++    }
++
++    @Test fun signInRoutesAreNeverRecovered() {
++        for (path in listOf("/auth/login", "/auth/signup", "/auth/refresh", "/auth/session")) assertTrue(path, path in AUTH_ENTRY_PATHS)
++        assertFalse("/auth/logout" in AUTH_ENTRY_PATHS)
++    }
++}
+--- a/android/app/src/androidTest/java/com/woundcopilot/android/CsrfAfterOfflineStartTest.kt
++++ b/android/app/src/androidTest/java/com/woundcopilot/android/CsrfAfterOfflineStartTest.kt
+@@ -37,4 +37,26 @@
+         coldStart.call("/auth/logout", "POST", JSONObject())  // sign-out also needs the token
+         coldStart.clear()
+     }
++
++    @Test fun aStaleTokenIsRefreshedAndTheSameRequestIsResentOnce() = runBlocking {
++        Assume.assumeTrue("Local HTTP is debug-only", BuildConfig.DEBUG)
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        val first = Api(Vault(context), local)
++        first.clear()
++        val config = first.call("/config") as JSONObject
++        first.call("/auth/signup", "POST", obj(
++            "email" to "csrf-stale-${UUID.randomUUID()}@example.invalid", "password" to "Synthetic-test-only-9714!",
++            "display_name" to "CSRF stale token test", "workspace_name" to "Isolated integration",
++            "accept_terms" to true, "terms_version" to config.str("legal_version"), "privacy_version" to config.str("legal_version")))
++        val api = Api(Vault(context), local)
++        api.csrf = "stale-token"                              // the server rejects this with 403 before doing any work
++        val key = UUID.randomUUID().toString()
++        val patient = api.call("/patients", "POST", obj("display_name" to "Synthetic stale token", "external_ref" to "TEST ONLY"), key) as JSONObject
++        assertTrue(patient.str("id").isNotBlank())
++        assertTrue("a fresh token replaced the stale one", api.csrf.isNotBlank() && api.csrf != "stale-token")
++        val replay = api.call("/patients", "POST", obj("display_name" to "Synthetic stale token", "external_ref" to "TEST ONLY"), key) as JSONObject
++        assertEquals("the same key never creates a second record", patient.str("id"), replay.str("id"))
++        api.call("/auth/logout", "POST", JSONObject())
++        api.clear()
++    }
+ }
