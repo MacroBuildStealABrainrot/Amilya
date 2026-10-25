@@ -358,6 +358,13 @@ def test_reservation_return_across_cycle_does_not_resurrect_expired_plan(commerc
         assert account.plan_micros == 2500 and account.topup_micros == 1000 and account.reserved_micros == 0
 
 
+def test_webhook_non_ascii_signature_rejected(commerce):
+    env = commerce
+    with pytest.raises(HTTPException) as exc:
+        billing.verify_stripe_event(b"{}", "t=123,v1=\u00e9", env.config.stripe_webhook_secret)
+    assert exc.value.status_code == 400
+
+
 def test_cross_cycle_settle_preserves_unused_topup(commerce):
     env = commerce
     fund(env, 1000, topup=1000)
