@@ -37,6 +37,8 @@ jobs:
         options: --health-cmd "pg_isready -U wcp" --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
+      - name: Restore checksum-verified synthetic audio fixture
+        run: python3 ci/restore-large-fixture.py
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -67,6 +69,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Restore checksum-verified synthetic audio fixture
+        run: python3 ci/restore-large-fixture.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -123,6 +127,8 @@ jobs:
         api-level: [ 35 ]
     steps:
       - uses: actions/checkout@v4
+      - name: Restore checksum-verified synthetic audio fixture
+        run: python3 ci/restore-large-fixture.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
