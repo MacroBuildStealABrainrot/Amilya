@@ -129,7 +129,7 @@ def prompt(task: str) -> str:
 def scope_guard(text: str):
     # Explicit jailbreak attempts cannot become instructions to the model. Clinical
     # discussion of these words is still usable through manual evidence entry.
-    attack = re.search(r'(?is)(ignore|override|disregard).{0,35}(system|previous|instruction|safety)|reveal.{0,30}(prompt|secret|api.key)|(?:set|make).{0,20}(?:admin|unlimited)|(?:write|create).{0,20}(?:ransomware|malware)', text)
+    attack = re.search(r'(?is)\b(?:ignore|override|disregard)\s+(?:(?:all|the|any)\s+)?(?:previous\s+instructions?|system\s+(?:prompt|instructions?)|safety\s+(?:rules|instructions?))\b|\breveal\s+(?:the\s+)?(?:system\s+prompt|api\s*key|secret\s+key)\b|\b(?:set|make)\s+(?:me\s+)?(?:admin|unlimited)\b|\b(?:write|create)\s+(?:ransomware|malware)\b', text)
     if attack:
         raise HTTPException(422, 'This request contains instructions outside the clinical evidence workflow')
 

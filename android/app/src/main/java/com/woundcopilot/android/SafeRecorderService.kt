@@ -492,7 +492,9 @@ internal class SafeRecorderService : Service() {
         var failure: String? = null
         var wasPaused = false
         fun drain(untilEnd: Boolean): Boolean {
+            val deadline = if (untilEnd) SystemClock.elapsedRealtime() + 10_000L else Long.MAX_VALUE
             while (true) {
+                if (untilEnd && SystemClock.elapsedRealtime() >= deadline) throw java.io.IOException("Audio encoder did not finish within 10 seconds")
                 val index = codec.dequeueOutputBuffer(outInfo, if (untilEnd) 10_000 else 0)
                 if (index < 0) { if (untilEnd) continue else return false }
                 val out = codec.getOutputBuffer(index)
@@ -538,7 +540,9 @@ internal class SafeRecorderService : Service() {
             }
             // Flush what the encoder still holds, so the last seconds before Stop are not lost.
             var queued = false
+            val flushDeadline = SystemClock.elapsedRealtime() + 10_000L
             while (!queued) {
+                if (SystemClock.elapsedRealtime() >= flushDeadline) throw java.io.IOException("Audio encoder did not accept final frame within 10 seconds")
                 val inIndex = codec.dequeueInputBuffer(10_000)
                 if (inIndex >= 0) {
                     codec.queueInputBuffer(inIndex, 0, 0, samples * 1_000_000L / CrashSafeBackendImpl.SAMPLE_RATE, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
