@@ -1,0 +1,31 @@
+name: Amilya Source Backup
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/amilya-source-backup.yml'
+permissions:
+  contents: read
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package complete source at exact commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          git archive --format=zip --output=backup/Amilya-Complete-Source.zip HEAD
+          printf '%s\n' "${GITHUB_SHA}" > backup/SOURCE-COMMIT.txt
+          sha256sum backup/Amilya-Complete-Source.zip > backup/SHA256SUMS.txt
+          unzip -t backup/Amilya-Complete-Source.zip | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amilya-complete-source-backup
+          path: backup/
+          retention-days: 30
+          if-no-files-found: error
