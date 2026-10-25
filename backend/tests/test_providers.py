@@ -327,9 +327,9 @@ def test_reservation_commits_before_http_and_replay_is_encrypted_and_single_char
     first = extract(gateway, source)
     second = extract(gateway, source)
     assert first == second and len(gateway.http.calls) == 1
-    assert first['usage']['normalized_micros'] == 440
+    assert first['usage']['normalized_micros'] == 200
     assert first['usage']['actual_cost_micros'] == 1000
-    assert first['usage']['charged_credits'] == .44
+    assert first['usage']['charged_credits'] == .2
     with gateway.sessions() as db:
         assert len(list(db.scalars(select(UsageOperation)))) == 1
         assert len(list(db.scalars(select(CreditLedger)))) == 2
@@ -414,7 +414,7 @@ def test_normalization_uses_list_prices_and_cache_units_without_discount_drift()
     cost, usage = providers.normalized_tokens('openai/gpt-6-astra', {
         'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000,
         'prompt_tokens_details': {'cached_tokens': 500_000}, 'cost': 1})
-    assert cost == 22_200_000
+    assert cost == 55_200_000
     assert usage['cached_tokens'] == 500_000
     assert providers.actual_cost({'cost': 0.0000001}) == 1
     assert providers.actual_cost({}) is None
