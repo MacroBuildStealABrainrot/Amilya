@@ -38,7 +38,7 @@ def test_photo_metadata_failure_and_retry_do_not_copy_image_or_error_body(trace)
     assert len(inputs)==2 and inputs[0]['width']==40 and inputs[0]['height']==30
     attempts=[r for r in rows if r['stage']=='photo_attempt']
     assert [r['retry_count'] for r in attempts]==[0,1]
-    assert all(r['selected_model']=='openai/gpt-6-luna' for r in attempts)
+    assert all(r['selected_model']==trace.config.model_vision for r in attempts)
     assert any(r['stage']=='photo_result' and r['error_code']=='PROVIDER_UNAVAILABLE' for r in rows)
 
 def test_exact_outgoing_router_model_not_task_configuration(trace,monkeypatch):
