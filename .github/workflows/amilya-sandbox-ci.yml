@@ -97,7 +97,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            :app:testSandboxUnitTest :app:testDebugUnitTest :app:testReleaseUnitTest :wear-contract:test \
+            :app:testSandboxUnitTest :wear-contract:test \
             :app:assembleSandbox :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
