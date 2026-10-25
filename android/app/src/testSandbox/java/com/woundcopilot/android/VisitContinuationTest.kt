@@ -94,6 +94,30 @@ class VisitContinuationTest {
         assertEquals(1, router.part)
     }
 
+    @Test fun failedPrimerDoesNotCommitTheNextPartAndRetryKeepsAllFrames() {
+        val first = Fake("p1")
+        val created = mutableListOf<Fake>()
+        val committed = mutableListOf<String>()
+        var attempts = 0
+        val router = HandoffRouter(first, 50,
+            openNext = {
+                attempts++
+                Fake("p2-$attempts").also { candidate ->
+                    candidate.failWrites = attempts == 1
+                    created += candidate
+                }
+            },
+            onPartStarted = { committed += (it as Fake).name },
+            retryAfterFrames = 10)
+        for (i in 0 until 100) router.writeFrame(frame(i))
+        assertEquals(2, created.size)
+        assertTrue(created[0].abandoned)
+        assertEquals(listOf("p2-2"), committed)
+        assertEquals((0 until 60).toList(), first.frames)
+        assertEquals((59 until 100).toList(), created[1].frames)
+        assertEquals(2, router.part)
+    }
+
     @Test fun syncReachesTheCurrentPart() {
         val (sinks, router, _) = run(150, 100); router.syncToDisk(); assertEquals(0, sinks[0].syncs); assertEquals(1, sinks[1].syncs)
     }
