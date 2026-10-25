@@ -57,10 +57,11 @@ sys.exit(0 if total>0 and not missing else 1)
 PY_VERIFY
 }
 
-run_group() { # $1 label, $2 comma-separated instrumentation classes (empty = all)
-  local label="$1" classes="$2" rc=0
+run_group() { # $1 label, $2 comma-separated instrumentation classes (empty = all), $3 excluded classes
+  local label="$1" classes="$2" excluded="${3:-}" rc=0
   local args=()
   [[ -n "$classes" ]] && args+=("-Pandroid.testInstrumentationRunnerArguments.class=$classes")
+  [[ -n "$excluded" ]] && args+=("-Pandroid.testInstrumentationRunnerArguments.notClass=$excluded")
   # Eliminate any previous group's results; stale XML must not count as a fresh run.
   rm -rf "$TEST_RESULTS"
   (cd "$ROOT/android" && ./gradlew --no-daemon :app:connectedSandboxAndroidTest "${args[@]}") >"$OUT/$label.log" 2>&1 || rc=$?
@@ -97,8 +98,16 @@ else
   failed=1; stop_server
 fi
 
+if start_server "$ROOT/test-tools/controlled_pipeline_api.py" wearbridge; then
+  run_group wearbridge "$P.WearBridgeTest" || failed=1
+  stop_server
+else
+  echo 'wearbridge: SKIPPED — required controlled server failed' | tee -a "$OUT/summary.txt"
+  failed=1; stop_server
+fi
+
 if start_server "$ROOT/android/tools/local_contract_server.py" level1-all; then
-  run_group all-other-tests '' || echo 'all-other-tests: informational failure' | tee -a "$OUT/summary.txt"
+  run_group all-other-tests '' "$P.WearBridgeTest" || echo 'all-other-tests: informational failure' | tee -a "$OUT/summary.txt"
   stop_server
 else
   echo 'all-other-tests: informational server unavailable' | tee -a "$OUT/summary.txt"

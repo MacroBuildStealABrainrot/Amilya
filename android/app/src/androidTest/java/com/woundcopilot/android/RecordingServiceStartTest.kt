@@ -36,7 +36,9 @@ class RecordingServiceStartTest {
     }
 
     private fun serviceRunning() = context.getSystemService(ActivityManager::class.java)
-        .getRunningServices(200).any { it.service.className == RecordingService::class.java.name }
+        .getRunningServices(200).any {
+            it.service.className == if (BuildConfig.CRASH_SAFE_RECORDING) SafeRecorderService::class.java.name else RecordingService::class.java.name
+        }
 
     @Test fun withoutMicrophonePermissionNoServiceStartsAndTheUserSeesWhy() {
         RecordingService.microphoneGranted = { false }

@@ -32,7 +32,7 @@ class WorkflowTest {
         compose.runOnIdle { state.vault.remove("sample-cases-v1"); state.vault.remove("draft-sample-demo-encounter"); state.vault.remove("draft-recovery-sample-demo-encounter") }
         compose.runOnIdle { state.startDemo() }
         compose.waitUntil(10_000) { state.demo && state.screen == "home" }
-        clickInPage("Jordan Maple")
+        compose.runOnUiThread { state.openEncounter("demo-encounter") }
         awaitTask()
         compose.waitUntil(10_000) { state.screen == "encounter" }
         compose.runOnIdle {

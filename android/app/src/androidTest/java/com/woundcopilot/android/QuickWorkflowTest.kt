@@ -271,7 +271,7 @@ class QuickWorkflowTest {
         awaitTask()
         compose.runOnIdle{
             assertTrue(state.retryAvailable)
-            assertEquals("Photo analysis is temporarily unavailable. Try again shortly.",state.error)
+            assertEquals("Photo assessment: This request is temporarily limited. Wait before trying again.\nRATE_LIMITED · HTTP 429",state.error)
             state.retryFailed()
             assertEquals(0,retries)
         }
