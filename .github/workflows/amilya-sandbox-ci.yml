@@ -97,7 +97,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            :app:testSandboxUnitTest :app:testPilotUnitTest :wear-contract:test \
+            :app:test :wear-contract:test \
             :app:assembleSandbox :app:assemblePilot :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
@@ -119,7 +119,7 @@ jobs:
         if: always()
         with:
           name: amilya-apks
-          path: ci-out/apks/
+          path: "ci-out/apks/*.apk\nci-out/apks/SHA256SUMS.txt"
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
