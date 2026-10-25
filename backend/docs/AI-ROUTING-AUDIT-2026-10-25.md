@@ -49,7 +49,7 @@ The candidate sends JSON-schema response format; it omits temperature, top-p and
 - All structured AI stages have an absolute deadline, including retries and backoff. Timeout settlement still waives the customer charge; unknown vendor cost remains unknown.
 - Invalid configuration messages now map to safe application error codes rather than a dictionary lookup exception.
 - Allowlisted structured stdout records correlate provider attempts and validation outcomes by application request ID, even when the diagnostic database is unavailable. No bodies, image data, keys, patient names, raw provider errors, or arbitrary model strings are emitted.
-- CI no longer runs an emulator. It builds the APKs, compiles instrumentation, runs all configured app JVM tests plus wear-contract tests, and treats Sandbox/Pilot lint as a required check.
+- CI no longer runs an emulator. It builds the APKs, compiles instrumentation, runs all configured app JVM tests plus wear-contract tests, and treats Sandbox/Pilot lint as a required check. A separate 1 MB RAM disk activates the real storage-full regression without filling the runner filesystem. The legacy standalone storage helper now preserves failure exit codes; synthetic shell checks verified success and failure propagation.
 
 ## Fallback and approval limits
 
