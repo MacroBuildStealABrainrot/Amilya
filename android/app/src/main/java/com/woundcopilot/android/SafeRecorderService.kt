@@ -431,12 +431,8 @@ internal class SafeRecorderService : Service() {
                 "sampleRate" to CrashSafeBackendImpl.SAMPLE_RATE.toString(), "channels" to CrashSafeBackendImpl.CHANNELS.toString(),
                 "segmentSeconds" to SEGMENT_SECONDS.toString(),
             ) + VisitContinuation.settings(visitId, nextPart, previous))
-            val sink = PartSink(dir, name, key, newWriter(dir, key, rate))
-            try { registerRecording(name, File(root, name), ownerKeyForParts) } catch (error: Exception) { sink.abandon(); throw error }
-            // Tell the finished part where the visit continues BEFORE it is rebuilt, so its note says so.
-            partDirs.lastOrNull()?.let { SessionInfo(it).update("nextName", name) }
-            partNames += name; partDirs += dir
-            return sink
+            // Do not publish or link this part yet: the hand-off primer write can fail.
+            return PartSink(dir, name, key, newWriter(dir, key, rate))
         } catch (error: Exception) {
             runCatching { dir.deleteRecursively() }
             throw error
@@ -479,7 +475,16 @@ internal class SafeRecorderService : Service() {
         val first = PartSink(dir, partNames.last(), key, newWriter(dir, key, rate))
         val writer = HandoffRouter(
             first, VisitContinuation.framesPerPart(rate) .let { handOffFramesForTests ?: it },
-            openNext = { n -> openNextPart(n, rate).also { next -> sessionKey = (next as PartSink).key } },
+            openNext = { n -> openNextPart(n, rate) },
+            onPartStarted = { started ->
+                val next = started as PartSink
+                // Only commit after the repeated frame was successfully saved.
+                registerRecording(next.name, File(RecordingService.recordingsDirectory(this), next.name), ownerKeyForParts)
+                partDirs.lastOrNull()?.let { SessionInfo(it).update("nextName", next.name) }
+                partNames += next.name
+                partDirs += next.dir
+                sessionKey = next.key
+            },
             onPartFinished = ::partFinished,
         )
         thread = Thread({ captureLoop(record, codec, writer) }, "safe-recorder").also { it.start() }
