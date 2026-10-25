@@ -461,18 +461,20 @@ internal class SafeRecorderService : Service() {
         val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         check(minBuffer > 0) { "audio input unavailable" }
         val record = AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 4)
-        check(record.state == AudioRecord.STATE_INITIALIZED) { "audio input unavailable" }
-        val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, rate, CrashSafeBackendImpl.CHANNELS).apply {
-            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-            setInteger(MediaFormat.KEY_BIT_RATE, 32_000)
-            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
-        }
-        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
-        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        codec.start()
-        record.startRecording()
-        audio = record
-        val first = PartSink(dir, partNames.last(), key, newWriter(dir, key, rate))
+        var codec: MediaCodec? = null
+        try {
+            check(record.state == AudioRecord.STATE_INITIALIZED) { "audio input unavailable" }
+            val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, rate, CrashSafeBackendImpl.CHANNELS).apply {
+                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(MediaFormat.KEY_BIT_RATE, 32_000)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
+            }
+            codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+            val encoder = codec
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            encoder.start()
+            record.startRecording()
+            val first = PartSink(dir, partNames.last(), key, newWriter(dir, key, rate))
         val writer = HandoffRouter(
             first, VisitContinuation.framesPerPart(rate) .let { handOffFramesForTests ?: it },
             openNext = { n -> openNextPart(n, rate) },
@@ -487,7 +489,14 @@ internal class SafeRecorderService : Service() {
             },
             onPartFinished = ::partFinished,
         )
-        thread = Thread({ captureLoop(record, codec, writer) }, "safe-recorder").also { it.start() }
+            thread = Thread({ captureLoop(record, encoder, writer) }, "safe-recorder").also { it.start() }
+            audio = record
+        } catch (error: Exception) {
+            runCatching { record.stop() }
+            runCatching { record.release() }
+            codec?.let { encoder -> runCatching { encoder.stop() }; runCatching { encoder.release() } }
+            throw error
+        }
     }
 
     private fun captureLoop(record: AudioRecord, codec: MediaCodec, writer: HandoffRouter) {
