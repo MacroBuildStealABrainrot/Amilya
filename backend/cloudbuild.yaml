@@ -1,0 +1,15 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [pull, '${_CACHE_IMAGE}']
+  - name: gcr.io/cloud-builders/docker
+    args: [build, --cache-from, '${_CACHE_IMAGE}', -t, 'us-central1-docker.pkg.dev/$PROJECT_ID/wcp/app:${_RELEASE_TAG}', .]
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/wcp/app:${_RELEASE_TAG}'
+substitutions:
+  _RELEASE_TAG: release-6-0-0-final
+  _CACHE_IMAGE: us-central1-docker.pkg.dev/woundcopilot-20260905/wcp/app@sha256:0bed00bebc80484abc2df05289ddb76139dd53d999d4bbc547a3ed65c48309ee
+options:
+  machineType: E2_STANDARD_2
+  logging: GCS_ONLY
+logsBucket: gs://woundcopilot-20260905-builds/logs
+timeout: 1200s

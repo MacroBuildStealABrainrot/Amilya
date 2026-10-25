@@ -1,0 +1,29 @@
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: woundcopilot
+      POSTGRES_USER: woundcopilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a strong local database password}
+    volumes:
+      - clinical-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U woundcopilot']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://woundcopilot:${POSTGRES_PASSWORD}@database:5432/woundcopilot
+      PUBLIC_BASE_URL: http://localhost:8766
+      ENVIRONMENT: development
+      TRUSTED_HOSTS: localhost,127.0.0.1
+    ports:
+      - '127.0.0.1:8766:8080'
+    depends_on:
+      database:
+        condition: service_healthy
+volumes:
+  clinical-data:

@@ -1,0 +1,345 @@
+{
+  "status": "UNAPPLIED_PROPOSAL",
+  "project": "woundcopilot-20260905",
+  "region": "us-central1",
+  "zone": "us-central1-a",
+  "generated_network_calls": 0,
+  "automatic_apply_supported": false,
+  "zero_cost_guaranteed": false,
+  "disk_total_gb": 30,
+  "postgres_image": "us-central1-docker.pkg.dev/woundcopilot-20260905/wcp/postgres@sha256:7abf537131b66ed5af448d90653abf1679b0c7e9a1f07efdd4c3108a401b259a",
+  "exclusions": [
+    "Cloud SQL",
+    "external IPv4",
+    "Cloud NAT",
+    "VPC connector",
+    "load balancer",
+    "Cloud DNS",
+    "paid image scanning",
+    "automatic Cloud Build",
+    "clinical use before release approval"
+  ],
+  "unresolved": [
+    "No billing account linked or allowance inventory verified by this plan",
+    "Mirror both digest-pinned images; sum all retained registry layers across billing-account projects",
+    "Create secrets without putting values in arguments, repository, metadata, logs, or this plan",
+    "Bootstrap data filesystem, PostgreSQL TLS files and runtime role using docs/DEPLOYMENT.md",
+    "Replace default boot image family with a reviewed exact COS image before applying",
+    "Review actual project IAM and Google service-agent permissions; no broad editor grants",
+    "Complete migration, backup/restore, cookie/domain, privacy and operational readiness gates",
+    "Public service IAM and billing webhooks require a separate verified release step"
+  ],
+  "steps": [
+    {
+      "name": "Enable selected APIs",
+      "program": "gcloud",
+      "args": [
+        "services",
+        "enable",
+        "compute.googleapis.com",
+        "run.googleapis.com",
+        "artifactregistry.googleapis.com",
+        "secretmanager.googleapis.com",
+        "iap.googleapis.com",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Create isolated VPC",
+      "program": "gcloud",
+      "args": [
+        "compute",
+        "networks",
+        "create",
+        "wcp-vpc",
+        "--subnet-mode=custom",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Create private subnet",
+      "program": "gcloud",
+      "args": [
+        "compute",
+        "networks",
+        "subnets",
+        "create",
+        "wcp-private",
+        "--network=wcp-vpc",
+        "--range=10.30.0.0/26",
+        "--region=us-central1",
+        "--enable-private-ip-google-access",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Create runtime identity",
+      "program": "gcloud",
+      "args": [
+        "iam",
+        "service-accounts",
+        "create",
+        "wcp-run",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Create database identity",
+      "program": "gcloud",
+      "args": [
+        "iam",
+        "service-accounts",
+        "create",
+        "wcp-db",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Create regional image repository",
+      "program": "gcloud",
+      "args": [
+        "artifacts",
+        "repositories",
+        "create",
+        "wcp",
+        "--repository-format=docker",
+        "--location=us-central1",
+        "--immutable-tags",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "account_registry_storage_checked"
+      ]
+    },
+    {
+      "name": "Allow database VM to read regional images",
+      "program": "gcloud",
+      "args": [
+        "artifacts",
+        "repositories",
+        "add-iam-policy-binding",
+        "wcp",
+        "--location=us-central1",
+        "--member=serviceAccount:wcp-db@woundcopilot-20260905.iam.gserviceaccount.com",
+        "--role=roles/artifactregistry.reader",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Allow database VM to access only its password",
+      "program": "gcloud",
+      "args": [
+        "secrets",
+        "add-iam-policy-binding",
+        "wcp-db-owner",
+        "--member=serviceAccount:wcp-db@woundcopilot-20260905.iam.gserviceaccount.com",
+        "--role=roles/secretmanager.secretAccessor",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "secrets_created_out_of_band"
+      ]
+    },
+    {
+      "name": "Allow runtime access to wcp-app-env",
+      "program": "gcloud",
+      "args": [
+        "secrets",
+        "add-iam-policy-binding",
+        "wcp-app-env",
+        "--member=serviceAccount:wcp-run@woundcopilot-20260905.iam.gserviceaccount.com",
+        "--role=roles/secretmanager.secretAccessor",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "secrets_created_out_of_band"
+      ]
+    },
+    {
+      "name": "Allow runtime access to wcp-db-ca",
+      "program": "gcloud",
+      "args": [
+        "secrets",
+        "add-iam-policy-binding",
+        "wcp-db-ca",
+        "--member=serviceAccount:wcp-run@woundcopilot-20260905.iam.gserviceaccount.com",
+        "--role=roles/secretmanager.secretAccessor",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "secrets_created_out_of_band"
+      ]
+    },
+    {
+      "name": "Allow PostgreSQL from Cloud Run only",
+      "program": "gcloud",
+      "args": [
+        "compute",
+        "firewall-rules",
+        "create",
+        "wcp-run-to-db",
+        "--network=wcp-vpc",
+        "--direction=INGRESS",
+        "--action=ALLOW",
+        "--rules=tcp:5432",
+        "--source-tags=wcp-run",
+        "--target-tags=wcp-db",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Allow operator SSH through IAP",
+      "program": "gcloud",
+      "args": [
+        "compute",
+        "firewall-rules",
+        "create",
+        "wcp-iap-ssh",
+        "--network=wcp-vpc",
+        "--direction=INGRESS",
+        "--action=ALLOW",
+        "--rules=tcp:22",
+        "--source-ranges=35.235.240.0/20",
+        "--target-tags=wcp-db",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization"
+      ]
+    },
+    {
+      "name": "Create retained PostgreSQL data disk",
+      "program": "gcloud",
+      "args": [
+        "compute",
+        "disks",
+        "create",
+        "wcp-data",
+        "--zone=us-central1-a",
+        "--type=pd-standard",
+        "--size=20GB",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "account_compute_and_disk_allowance_checked"
+      ]
+    },
+    {
+      "name": "Create private database VM",
+      "program": "gcloud",
+      "args": [
+        "compute",
+        "instances",
+        "create",
+        "wcp-db",
+        "--zone=us-central1-a",
+        "--machine-type=e2-micro",
+        "--subnet=wcp-private",
+        "--private-network-ip=10.30.0.10",
+        "--no-address",
+        "--image-family=cos-stable",
+        "--image-project=cos-cloud",
+        "--boot-disk-type=pd-standard",
+        "--boot-disk-size=10GB",
+        "--disk=name=wcp-data,device-name=wcp-data,mode=rw,auto-delete=no",
+        "--service-account=wcp-db@woundcopilot-20260905.iam.gserviceaccount.com",
+        "--scopes=https://www.googleapis.com/auth/cloud-platform",
+        "--tags=wcp-db",
+        "--shielded-secure-boot",
+        "--shielded-vtpm",
+        "--shielded-integrity-monitoring",
+        "--deletion-protection",
+        "--metadata=enable-oslogin=TRUE,block-project-ssh-keys=TRUE",
+        "--metadata-from-file=startup-script=deployment/postgres-startup.sh",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "account_compute_and_disk_allowance_checked",
+        "reviewed_cos_image",
+        "postgres_image_mirrored"
+      ]
+    },
+    {
+      "name": "Deploy private application for validation",
+      "program": "gcloud",
+      "args": [
+        "run",
+        "deploy",
+        "woundcopilot",
+        "--region=us-central1",
+        "--image=us-central1-docker.pkg.dev/woundcopilot-20260905/wcp/app@sha256:1638ee0388e7337754f82e622444bf2e08eadce42c1356612788cdd0393305f1",
+        "--service-account=wcp-run@woundcopilot-20260905.iam.gserviceaccount.com",
+        "--network=wcp-vpc",
+        "--subnet=wcp-private",
+        "--vpc-egress=private-ranges-only",
+        "--network-tags=wcp-run",
+        "--min=0",
+        "--max=1",
+        "--min-instances=0",
+        "--max-instances=1",
+        "--cpu=1",
+        "--memory=1Gi",
+        "--cpu-throttling",
+        "--no-cpu-boost",
+        "--concurrency=8",
+        "--timeout=300",
+        "--port=8080",
+        "--no-allow-unauthenticated",
+        "--set-env-vars=WOUNDCOPILOT_ENV_FILE=/run/secrets/app.env",
+        "--set-secrets=/run/secrets/app.env=wcp-app-env:2,/run/db-ca/ca.crt=wcp-db-ca:1",
+        "--project=woundcopilot-20260905",
+        "--quiet"
+      ],
+      "requires": [
+        "owner_review_and_billing_authorization",
+        "image_digests_verified",
+        "account_run_and_network_allowance_checked",
+        "database_tls_and_roles_verified",
+        "migrations_applied",
+        "runtime_env_prepared",
+        "restore_drill_passed"
+      ]
+    }
+  ]
+}

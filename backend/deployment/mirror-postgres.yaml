@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [pull, 'postgres:17-alpine']
+  - name: gcr.io/cloud-builders/docker
+    args: [tag, 'postgres:17-alpine', 'us-central1-docker.pkg.dev/$PROJECT_ID/wcp/postgres:release-17']
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/wcp/postgres:release-17'
+options:
+  machineType: E2_STANDARD_2
+  logging: GCS_ONLY
+logsBucket: gs://woundcopilot-20260905-builds/logs
+timeout: 300s

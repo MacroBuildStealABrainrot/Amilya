@@ -1,0 +1,6 @@
+preflight.local.json
+*.pem
+*.key
+*.crt
+*.env
+*.local.*
