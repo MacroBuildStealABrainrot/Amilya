@@ -174,6 +174,11 @@ jobs:
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Free unused hosted-runner SDKs for emulator storage
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
       - name: Run phone tests on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:

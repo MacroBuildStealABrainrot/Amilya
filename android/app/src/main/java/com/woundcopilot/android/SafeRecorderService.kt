@@ -469,6 +469,9 @@ internal class SafeRecorderService : Service() {
     }
 
     private fun startCaptureThread(dir: File, key: SessionKey) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            throw SecurityException("Microphone permission is required to start recording")
+        }
         val rate = CrashSafeBackendImpl.SAMPLE_RATE
         val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         check(minBuffer > 0) { "audio input unavailable" }
