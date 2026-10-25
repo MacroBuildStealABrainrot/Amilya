@@ -227,8 +227,16 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         }
         if(!recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
         filtered.forEach{e->
-            val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
-            val name=if(quick)e.str("title")else s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")?:"Visit"
+            val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty()
+            val type=when(mode.lowercase()){
+                "photo","photo_assessment","image"->"Photo assessment"
+                "consultant","wound_consultant","ask_consultant"->"Wound consultant"
+                "document","report","nursing"->"Nursing visit"
+                else->"Visit"
+            }
+            val rawTitle=e.str("title").trim()
+            val name=if(rawTitle.isNotEmpty() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
+                rawTitle else "$type, ${localTime(e.str("updated_at"))}"
             GlassPanel(Modifier.fillMaxWidth().clickable(role=Role.Button){s.openEncounter(e.str("id"))}){
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
                     Box(Modifier.size(45.dp).background(c.primaryContainer,CircleShape),contentAlignment=Alignment.Center){Text(name.split(' ').mapNotNull{it.firstOrNull()}.take(2).joinToString(""),style=MaterialTheme.typography.titleMedium,color=c.onPrimaryContainer)}
