@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Receive a report · WoundCoPilot</title>
+  <style>
+    :root{color-scheme:light;--ink:#172e30;--muted:#536a6c;--accent:#17695e;--paper:#f5f7f3;--line:#dbe3dd}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,sans-serif}
+    main{max-width:780px;margin:auto;padding:40px 22px 64px}.brand{font-size:13px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+    h1{font-size:clamp(30px,6vw,46px);line-height:1.1;letter-spacing:-.045em;margin:30px 0 16px}h2{line-height:1.25;font-size:21px}p{color:var(--muted)}
+    .panel{margin-top:28px;padding:26px;border:1px solid var(--line);border-radius:22px;background:#fff;box-shadow:0 14px 36px #17332a08}
+    label{display:block;font-weight:650;margin-bottom:10px}input{display:block;width:100%;max-width:320px;background:var(--paper);border:1px solid #9eafa7;border-radius:12px;font:600 30px/1.5 ui-monospace,monospace;letter-spacing:.25em;padding:10px 14px;color:var(--ink)}
+    button{border:0;border-radius:12px;background:var(--accent);color:white;font:650 15px/1.3 system-ui,sans-serif;padding:15px 20px;min-height:48px;cursor:pointer}button:disabled{opacity:.55;cursor:wait}button:focus-visible,input:focus-visible{outline:3px solid #67bba9;outline-offset:3px}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.secondary{background:#e8efe9;color:var(--ink)}.small{font-size:13px}.status{min-height:24px;margin:16px 0 0}.error{color:#9a312d}.report{white-space:pre-wrap;overflow-wrap:anywhere;font:15px/1.65 system-ui,sans-serif;color:var(--ink)}
+    .metadata{font-size:13px;color:var(--muted)}.report-card{margin-top:22px;border-top:1px solid var(--line);padding-top:20px}[hidden]{display:none!important}
+    footer{margin-top:30px;font-size:12px;color:var(--muted)}@media print{body{background:white}main{max-width:none;margin:0;padding:0}.no-print,footer{display:none!important}.panel{padding:0;border:0;box-shadow:none}.report-card{break-before:page;border:0}.report-card:first-child{break-before:auto}.report{font-size:11pt}.metadata{font-size:9pt}}
+  </style>
+  <script src="/receive/app.js" defer></script>
+</head>
+<body><main>
+  <div class="brand no-print">WoundCoPilot · Report transfer</div>
+  <div id="intro" class="no-print"><h1>Your report.<br>On this phone.</h1>
+    <p>Enter the seven-digit code provided by the sender. No account or app is required.</p></div>
+  <section id="unlock" class="panel no-print" aria-label="Open report transfer">
+    <form id="pin-form">
+      <label for="code">One-time code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{7}" maxlength="7" minlength="7" required aria-describedby="expiry">
+      <p id="expiry" class="small">The link expires 15 minutes after creation and opens once. Five incorrect attempts lock it.</p>
+      <div class="actions"><button id="open" type="submit">Open reports</button></div>
+    </form>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </section>
+  <section id="received" hidden>
+    <div class="panel no-print"><h2>Reports received</h2>
+      <p>Save or copy the reports before closing this page. The transfer copy has been removed from the server and this link cannot open again. The sender’s originals are unchanged.</p>
+      <div class="actions"><button id="download-all">Download all as text</button><button id="print" class="secondary">Print / Save PDF</button><button id="clear" class="secondary">Clear this page</button></div>
+      <p class="small">Your browser or device manages downloaded files, clipboard contents and printed copies. Use your organization’s approved destination.</p>
+      <p id="action-status" role="status" aria-live="polite"></p>
+    </div>
+    <div id="documents" class="panel"></div>
+  </section>
+  <footer class="no-print">An exact copy of saved documentation. Draft reports remain drafts; receiving a report does not sign it.</footer>
+</main></body></html>

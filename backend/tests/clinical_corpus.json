@@ -1,0 +1,20 @@
+[
+  {"text":"Wound measures 20 x 10 x 2 mm.","expected":[{"name":"wound_measurement","value":{"length_cm":2.0,"width_cm":1.0,"depth_cm":0.2}}]},
+  {"text":"Wound measures 2 x 1 cm.","expected":[{"name":"wound_measurement","value":{"length_cm":2.0,"width_cm":1.0}}]},
+  {"text":"Wound measures 2 x 1 x 0 cm.","expected":[{"name":"wound_measurement","value":{"length_cm":2.0,"width_cm":1.0,"depth_cm":0.0}}]},
+  {"text":"Wound measures 2 x 1 x 0.2.","forbidden":["wound_measurement"]},
+  {"text":"Wound measures -2 x 1 x 0.2 cm.","forbidden":["wound_measurement"]},
+  {"text":"Right arm IV removed. Left heel wound.","expected":[{"name":"wound_location","value":{"site":"heel","laterality":"left"}}]},
+  {"text":"Patient reports moderate pain; the dressing is dry.","forbidden":["exudate"]},
+  {"text":"Please document no fever if assessed.","forbidden":["fever"]},
+  {"text":"Patient denies fever.","expected":[{"name":"fever","value":{"present":false,"text":"Patient denies fever."}}]},
+  {"text":"Patient reports pain 4/10.","expected":[{"name":"pain","value":{"score_0_10":4.0,"text":"Patient reports pain 4/10."}}]},
+  {"text":"Moderate serous exudate observed.","expected":[{"name":"exudate","value":{"text":"Moderate serous exudate observed."}}]},
+  {"text":"If fever develops, call the clinician.","forbidden":["fever"]},
+  {"text":"No diabetes.","expected":[{"name":"diabetes","value":{"present":false,"text":"No diabetes."}}]},
+  {"text":"Caregiver reports chills.","expected":[{"name":"chills","value":{"present":true,"text":"Caregiver reports chills."}}]},
+  {"text":"Bilateral heel wounds.","expected":[{"name":"wound_location","value":{"site":"heel","laterality":"bilateral"}}]},
+  {"text":"Patient denies pain.","expected":[{"name":"pain","value":{"present":false,"text":"Patient denies pain."}}]},
+  {"text":"Wound measures 2 x 1 x .3 cm.","expected":[{"name":"wound_measurement","value":{"length_cm":2.0,"width_cm":1.0,"depth_cm":0.3}}]},
+  {"text":"Compression is planned if vascular assessment is adequate.","forbidden":["treatment_performed","perfusion_assessment"]}
+]
