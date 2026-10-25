@@ -225,7 +225,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             Text("Nothing saved yet. Start a report from Home.")
             WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
         }
-        if(!recovery)TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading && filtered.isNotEmpty()){Text("Delete all saved work")}
+        if(!recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
         filtered.forEach{e->
             val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
             val name=if(quick)e.str("title")else s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")?:"Visit"
