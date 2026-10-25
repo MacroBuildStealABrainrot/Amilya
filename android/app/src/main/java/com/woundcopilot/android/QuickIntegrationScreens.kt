@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter
                 TextButton({s.resumeRecording(job)},enabled=!s.loading){Text(if(job.str("resume_from")=="REPORT_READY")"Review recovered report ${index+1}"else "${index+1} recording${if(index==0) "" else "s"} not finished")}
             }
             if(s.recordingJobs.size>3)DetailDisclosure("More saved recordings","${s.recordingJobs.size-3} more"){
-                s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Resume saved recording ${index+4}")}}
+                s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("${index+4} recording not finished")}}
             }
         },
         savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}
