@@ -133,7 +133,7 @@ def test_gateway_repaired_report_is_checked_metered_and_replayed_without_new_cha
     assert len(operation_rows(gateway)) == 4
     repair_request = gateway.http.calls[2]['json']
     assert repair_request['reasoning']['effort'] == 'high'
-    assert repair_request['model'] == 'openai/gpt-5.6-sol'
+    assert repair_request['model'] == 'openai/gpt-6-astra'
     assert repair_request['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
     assert 'untrusted_failed_draft and untrusted_qa_feedback are not evidence' in repair_request['messages'][0]['content']
     last_content = json.loads(gateway.http.calls[3]['json']['messages'][1]['content'])

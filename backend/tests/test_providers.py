@@ -92,8 +92,8 @@ def gateway(tmp_path, monkeypatch):
         openrouter_api_key='synthetic-openrouter-key', openrouter_base_url='https://provider.invalid/api/v1',
         public_base_url='https://woundcopilot.example.test', provider_timeout_seconds=7,
         model_extraction='meta/muse-spark-1.3', model_vision='meta/muse-spark-1.3',
-        model_documentation='openai/gpt-5.6-luna', model_review='meta/muse-spark-1.3',
-        model_frontier='openai/gpt-5.6-sol', model_challenger='anthropic/claude-fable-5.1',
+        model_documentation='openai/gpt-6-luna', model_review='meta/muse-spark-1.3',
+        model_frontier='openai/gpt-6-astra', model_challenger='anthropic/claude-sonnet-5.5',
         cloudflare_api_token='', cloudflare_account_id='', groq_api_key='', deepgram_api_key='',
         deepgram_enabled=False, speech_provider='auto', max_text_chars=40000,
         max_image_mb=12, max_document_mb=20, max_audio_mb=25, max_audio_seconds=1800)
@@ -122,7 +122,7 @@ def operation_rows(gateway):
 
 
 def test_openai_route_uses_compatible_output_limit_with_privacy_enforced(gateway):
-    gateway.config.model_extraction = 'openai/gpt-5.6-luna'
+    gateway.config.model_extraction = 'openai/gpt-6-luna'
     gateway.http.responses = [completion()]
     extract(gateway)
     payload = gateway.http.calls[0]['json']
@@ -165,7 +165,7 @@ def test_duplicate_qa_pass_cannot_override_failure(gateway):
     gateway.http.responses = [completion(), completion()]
     gateway.http.responses[0]['choices'][0]['message']['content'] = '{"passed":false,"passed":true,"discrepancies":[]}'
     with pytest.raises(HTTPException) as caught:
-        asyncio.run(providers.structured('qa', 'Synthetic draft', 'openai/gpt-5.6-luna', user=gateway.user, encounter_id='qa'))
+        asyncio.run(providers.structured('qa', 'Synthetic draft', 'openai/gpt-6-luna', user=gateway.user, encounter_id='qa'))
     assert caught.value.status_code == 502
     assert operation_rows(gateway)[0].usage['charge_waived'] is True
 
@@ -219,7 +219,7 @@ def test_unassessable_photo_succeeds_without_placeholder_findings(gateway):
     gateway.http.responses = [completion({'facts': [], 'warnings': ['No wound is visible.'],
         'quality': {'status': 'insufficient', 'reason': 'no_wound'}})]
     result = asyncio.run(providers.structured('image', 'Synthetic blank image',
-        'openai/gpt-5.6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
+        'openai/gpt-6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
     assert result['facts'] == [] and 'No wound is visible.' in result['warnings']
     assert result['quality']['retake_required'] is True and result['quality']['reason'] == 'no_wound'
     schema = gateway.http.calls[0]['json']['response_format']['json_schema']['schema']
@@ -235,7 +235,7 @@ def test_invented_photo_value_key_is_still_rejected(gateway):
         'quality': {'status': 'sufficient', 'reason': 'none'}})]
     with pytest.raises(HTTPException) as caught:
         asyncio.run(providers.structured('image', 'Synthetic image',
-            'openai/gpt-5.6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
+            'openai/gpt-6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
     assert caught.value.status_code == 502
 
 
@@ -411,7 +411,7 @@ def test_ordinary_clinical_instruction_word_remains_quoted_data(gateway):
 
 
 def test_normalization_uses_list_prices_and_cache_units_without_discount_drift():
-    cost, usage = providers.normalized_tokens('openai/gpt-5.6-sol', {
+    cost, usage = providers.normalized_tokens('openai/gpt-6-astra', {
         'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000,
         'prompt_tokens_details': {'cached_tokens': 500_000}, 'cost': 1})
     assert cost == 22_200_000
@@ -476,7 +476,7 @@ def test_draft_requires_independent_qa_of_exact_proposed_text(gateway):
     result = asyncio.run(providers.draft_text(facts, 'nursing', 'auto', user=gateway.user, encounter_id='draft'))
     assert result['text'] == draft and result['qa']['passed'] is True
     assert result['effort_level'] == 'medium'
-    assert result['routing']['model'] == 'openai/gpt-5.6-terra'
+    assert result['routing']['model'] == 'openai/gpt-6.1-sol'
     assert gateway.http.calls[0]['json']['reasoning']['effort'] == 'medium'
     qa_source = json.loads(gateway.http.calls[1]['json']['messages'][1]['content'])
     assert qa_source['case_facts'] == facts and qa_source['proposed_draft'] == draft
