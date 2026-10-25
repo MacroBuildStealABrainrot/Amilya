@@ -39,10 +39,17 @@ import java.time.format.DateTimeFormatter
         },
         savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}
             .sortedByDescending { it.str("updated_at") }.take(1).map { e ->
-            val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
-            val name=s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name").orEmpty()
-            SimpleSavedWork(e.str("id"),if(quick || name.isBlank())e.str("title")else name,
-                if(quick)localTime(e.str("updated_at"))else e.str("title"))
+            val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().lowercase()
+            val type=when(mode){
+                "photo","photo_assessment","image"->"Photo assessment"
+                "consultant","wound_consultant","ask_consultant"->"Wound consultant"
+                "document","report","nursing"->"Nursing visit"
+                else->"Visit"
+            }
+            val rawTitle=e.str("title").trim()
+            val title=if(rawTitle.isNotBlank() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
+                rawTitle else type
+            SimpleSavedWork(e.str("id"),title,localTime(e.str("updated_at")))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},
         onConsultant={s.startQuick("consultant")},onOpenWork={s.openEncounter(it)},
         onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
