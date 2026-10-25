@@ -456,11 +456,12 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                         # Replay the settled failure so a configured fallback can
                         # reach its cached success; never perform or charge again.
                         diagnostics.event({'source':'replay','stage':task,'status':'failed','selected_model':attempts[-1].get('model'),'provider':attempts[-1].get('provider'),'operation_id':operation,'new_provider_request':False,'error_code':code})
+                        exhausted = task == 'image' and resumed_attempt >= 3
                         message = ('We could not assess this photo after several attempts. Your photo is saved. Retake it, try later, or chart by hand.'
-                                   if task == 'image' else
-                                   'This AI request previously failed. No additional charge was made. Try again later or continue manual charting.')
+                                   if exhausted else
+                                   'This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.')
                         raise HTTPException(int(code), message,
-                            headers=photo_error_headers(previous.usage, task == 'image'))
+                            headers=photo_error_headers(previous.usage, exhausted))
             raise HTTPException(409, 'This AI request is already processing or awaiting reconciliation. Refresh the case before retrying.')
     if document_operations.get() is not None:document_operations.get().append(operation)
     started = time.monotonic()
