@@ -93,3 +93,10 @@ dependencies {
     add("sandboxImplementation", "androidx.compose.ui:ui-test-manifest")
 }
 
+
+// Optional CI-only bounded-disk fixture; never used by the application runtime.
+tasks.withType<Test>().configureEach {
+    providers.environmentVariable("WCP_STORAGE_FULL_TEST_DIR").orNull?.let {
+        systemProperty("full.dir", it)
+    }
+}
