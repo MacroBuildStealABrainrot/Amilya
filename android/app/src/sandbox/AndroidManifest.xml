@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- Test-only build: clearly named on the phone, and plain HTTP allowed only to this PC (127.0.0.1) through adb reverse. -->
+    <application android:label="WoundCoPilot SANDBOX" android:networkSecurityConfig="@xml/sandbox_network" tools:replace="android:label">
+        <!-- The crash-resistant recorder service is declared in the main manifest and switched ON here by the build (crashSafeRecording=true). -->
+    </application>
+</manifest>
