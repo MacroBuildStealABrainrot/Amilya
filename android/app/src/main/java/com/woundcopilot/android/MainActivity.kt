@@ -240,7 +240,15 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             GlassPanel(Modifier.fillMaxWidth().clickable(role=Role.Button){s.openEncounter(e.str("id"))}){
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
                     Box(Modifier.size(45.dp).background(c.primaryContainer,CircleShape),contentAlignment=Alignment.Center){Text(name.split(' ').mapNotNull{it.firstOrNull()}.take(2).joinToString(""),style=MaterialTheme.typography.titleMedium,color=c.onPrimaryContainer)}
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){Text(name,style=MaterialTheme.typography.titleLarge);Text(e.str("title"),style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
+                        Text(name,style=MaterialTheme.typography.titleLarge)
+                        val status=when(e.str("storage_state").lowercase()){
+                            "saved"->"Saved"
+                            "temporary"->"Temporary"
+                            else->"Recovery or older work"
+                        }
+                        Text(status,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)
+                    }
                     InstrumentIcon("arrow",tint=c.primary)
                 }
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){TextButton({s.deleteWorkId=e.str("id")}){Text("Delete")};Spacer(Modifier.weight(1f));Text(localTime(e.str("updated_at")),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
