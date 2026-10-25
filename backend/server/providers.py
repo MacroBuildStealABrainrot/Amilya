@@ -468,6 +468,13 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         raw = await perform()
         normalized, usage, billed = measure(raw)
         result = validate(raw)
+    except asyncio.CancelledError:
+        # Cancellation must not leave a reserved credit hold with no result.
+        if heartbeat is not None:
+            heartbeat.cancel()
+        with SessionLocal() as cancelled_db:
+            billing.release(cancelled_db, user, operation, "provider_cancelled")
+        raise
     except httpx.TimeoutException:
         usage['failure_reason'] = 'provider_timeout'
         error = HTTPException(504, 'The provider timed out. Refresh the case, then start a new attempt. Final provider cost may require reconciliation.')
