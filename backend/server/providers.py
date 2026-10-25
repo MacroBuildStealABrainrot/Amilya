@@ -5,6 +5,7 @@ holds a business write lock. Encrypted replay results prevent duplicate inferenc
 """
 from __future__ import annotations
 
+import logging
 import asyncio
 import base64
 from contextvars import ContextVar
@@ -562,9 +563,15 @@ def _start_lease(user, operation_id):
     async def renew():
         while True:
             await asyncio.sleep(max(1, getattr(settings, 'ai_lease_seconds', 120) // 3))
-            with SessionLocal() as db:
-                if not billing.lease_heartbeat(db, user.workspace_id, operation_id, token):
-                    return
+            try:
+                with SessionLocal() as db:
+                    if not billing.lease_heartbeat(db, user.workspace_id, operation_id, token):
+                        return  # lease no longer belongs to this worker
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Transient database failures must not permanently end lease renewal.
+                logging.getLogger(__name__).warning("AI lease heartbeat failed; retrying", exc_info=True)
     return asyncio.create_task(renew())
 
 
