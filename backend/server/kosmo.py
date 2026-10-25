@@ -3,7 +3,7 @@ import json
 import re
 
 VERSION = 'kosmo-2026-09-08.2'
-MODELS = {'low': 'openai/gpt-5.6-luna', 'medium': 'openai/gpt-5.6-terra', 'high': 'openai/gpt-5.6-sol'}
+MODELS = {'low': 'openai/gpt-6-luna', 'medium': 'openai/gpt-6.1-sol', 'high': 'openai/gpt-6-astra'}
 
 
 def select_route(task, content):

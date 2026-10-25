@@ -51,10 +51,10 @@ PRICE_VERSION = 'normalized-2026-09-05'
 # USD per million tokens: durable list-price normalization, independent of discounts.
 MODEL_PRICES = {
     'meta/muse-spark-1.3': ('1.25', '4.25', '.15'),
-    'openai/gpt-5.6-luna': ('.20', '1.20', '.02'),
-    'openai/gpt-5.6-terra': ('2', '12', '.2'),
-    'openai/gpt-5.6-sol': ('4', '20', '.4'),
-    'anthropic/claude-fable-5.1': ('10', '50', '.25'),
+    'openai/gpt-6-luna': ('.10', '.50', '.02'),
+    'openai/gpt-6.1-sol': ('2', '10', '.2'),
+    'openai/gpt-6-astra': ('10', '50', '.4'),
+    'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
 }
 SPEECH_PRICES = {'cloudflare': Decimal('510'), 'groq': Decimal('40000') / 60,
                  'deepgram': Decimal('7700')}  # microUSD per minute, medical reserve uses configurable cap
@@ -646,6 +646,14 @@ async def routed(task, content, model=None, **kwargs):
     if task not in {'quick_draft','quick_qa','quick_repair','quick_refine','improve_report'} and (diagnostics.active.get() or {}).get('task')!='deep_review':
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
     route = select_route(TASK_FAMILIES.get(task, task), content)
+    # Explicit configured models must be respected for modality-specific and independent stages.
+    # All other tasks retain Kosmo's automatic complexity routing.
+    overrides = {'image': settings.model_vision, 'challenge': settings.model_challenger}
+    if task in overrides:
+        selected = overrides[task]
+        if selected not in MODEL_PRICES:
+            raise preflight_error(503, 'Configured AI model is not in the approved price registry')
+        route = {**route, 'model': selected, 'reason': 'configured_' + task}
     # Completion limits include hidden reasoning; preserve room for report text.
     kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']])
     return await structured(task, content, route['model'], routing=route, **kwargs)

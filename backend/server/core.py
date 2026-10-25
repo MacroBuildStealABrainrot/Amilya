@@ -41,12 +41,12 @@ class Settings(BaseSettings):
     deepgram_phi_approved: bool = False
     deepgram_enabled: bool = False
     speech_provider: str = 'auto'
-    model_extraction: str = 'openai/gpt-5.6-luna'
-    model_documentation: str = 'openai/gpt-5.6-luna'
-    model_vision: str = 'openai/gpt-5.6-luna'
-    model_review: str = 'openai/gpt-5.6-sol'
-    model_frontier: str = 'openai/gpt-5.6-sol'
-    model_challenger: str = 'anthropic/claude-fable-5.1'
+    model_extraction: str = 'openai/gpt-6-luna'
+    model_documentation: str = 'openai/gpt-6.1-sol'
+    model_vision: str = 'openai/gpt-6.1-sol'
+    model_review: str = 'openai/gpt-6.1-sol'
+    model_frontier: str = 'openai/gpt-6-astra'
+    model_challenger: str = 'anthropic/claude-sonnet-5.5'
     provider_timeout_seconds: int = 60
     provider_execution_enabled: bool = False
     # Stuck-credit recovery (1.8.5-test10, development only; OFF by default). See STUCK-REQUEST-LEASE-PLAN.md.
