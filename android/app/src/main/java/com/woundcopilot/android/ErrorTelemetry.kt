@@ -83,8 +83,8 @@ object ErrorTelemetry {
             runCatching {
                 val eventId = UUID.randomUUID().toString().replace("-", "")
                 val timestamp = java.time.Instant.now().toString()
-                val envelope = JSONObject().put("event_id", eventId).put("dsn", dsn).toString() + "\\n" +
-                    JSONObject().put("type", "event").toString() + "\\n" +
+                val envelope = JSONObject().put("event_id", eventId).put("dsn", dsn).toString() + "\n" +
+                    JSONObject().put("type", "event").toString() + "\n" +
                     JSONObject().put("event_id", eventId)
                         .put("timestamp", timestamp)
                         .put("platform", "java")
@@ -93,7 +93,7 @@ object ErrorTelemetry {
                         .put("fingerprint", org.json.JSONArray(listOf("amilya", stage, code)))
                         .put("tags", JSONObject().put("component", "android")
                             .put("stage", stage).put("outcome", outcome).put("code", code))
-                        .toString() + "\\n"
+                        .toString() + "\n"
                 val connection = URL(endpoint).openConnection() as HttpURLConnection
                 try {
                     connection.requestMethod = "POST"
