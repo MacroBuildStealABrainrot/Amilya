@@ -726,7 +726,7 @@ async def routed(task, content, model=None, **kwargs):
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
     route = configured_route(task, content)
     # Extraction emits structured facts, not a short summary. A live 2,426-token
-    # source exhausted the old 1,800-token completion cap (2026-10-26). Keep low
+    # input exhausted the old 1,800-token completion cap (2026-10-26). Keep low
     # reasoning effort while allowing bounded room for complete JSON and evidence.
     minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
     if task in {'extract', 'document'}:

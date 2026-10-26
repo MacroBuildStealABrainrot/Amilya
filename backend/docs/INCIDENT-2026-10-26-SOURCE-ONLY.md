@@ -71,7 +71,6 @@ Catalog support does not establish successful execution under this account or ap
 
 ## Validation and production boundary
 
-New regression cases cover response budgets, a completion larger than the old cap, refusal of partial results, replay without extra calls, preservation of actual provider costs, trusted snapshot identities and rejection of arbitrary metadata. Android tests cover the new category, user message and retry prohibition. Run results are recorded in the associated commit's CI artifacts.
+New regression cases cover response budgets, a completion larger than the old cap, refusal of partial results, replay without extra calls, preservation of actual provider costs, trusted snapshot identities and rejection of arbitrary metadata. Android tests cover the new category, user message and retry prohibition. CI run [40289058142](https://github.com/MacroBuildStealABrainrot/Amilya/actions/runs/40289058142) passed: 760 backend tests (one SQLite-specific skip), 151 Android app tests and 39 Wear contract tests. Local backend: 752 passed, one PostgreSQL-only skip. See [test12 validation and signing limits](../../VALIDATION-test12.md).
 
 No production deployment, paid live AI request, administrator promotion, balance change, provider-setting change, recording deletion, prompt logging enablement or patient-data enablement occurred. The existing Pilot APK can exercise the old server, but installing an APK alone does not apply this backend correction. Production approval must name the reviewed commit and be followed by synthetic text/photo/report acceptance checks before any wider use.
-
