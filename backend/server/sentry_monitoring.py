@@ -8,6 +8,29 @@ import os
 
 _client = None
 
+_ALLOWED = {
+    ("server", "request_failed"),
+    ("ai_extraction", "extraction_failed"),
+    ("report", "fallback_without_ai"),
+    ("transcription", "network_failure"),
+}
+
+def _safe_event(event, hint):
+    """Discard all SDK context and permit only static, preapproved categories."""
+    msg = event.get("message", "")
+    if not isinstance(msg, str) or not msg.startswith("amilya."):
+        return None
+    fields = msg.split(".")
+    if len(fields) != 3 or (fields[1], fields[2]) not in _ALLOWED:
+        return None
+    return {
+        "message": "Amilya technical failure",
+        "level": "warning" if fields[2] in ("fallback_without_ai", "network_failure") else "error",
+        "fingerprint": ["amilya", fields[1], fields[2]],
+        "tags": {"component": "backend", "stage": fields[1], "code": fields[2]},
+    }
+
+
 def configure() -> bool:
     global _client
     dsn = os.getenv("AMILYA_SENTRY_DSN", "")
@@ -24,17 +47,13 @@ def configure() -> bool:
         attach_stacktrace=False,
         traces_sample_rate=0.0,
         max_breadcrumbs=0,
-        before_send=lambda event, hint: None,  # fail-closed: no SDK error payloads
+        before_send=_safe_event,
+        max_request_body_size="never",
+        enable_logs=False,
+        before_breadcrumb=lambda breadcrumb, hint: None,
     )
     _client = sentry_sdk
     return True
-
-_ALLOWED = {
-    ("server", "request_failed"),
-    ("ai_extraction", "extraction_failed"),
-    ("report", "fallback_without_ai"),
-    ("transcription", "network_failure"),
-}
 
 def report(stage: str, code: str) -> bool:
     if _client is None or (stage, code) not in _ALLOWED:
