@@ -20,6 +20,22 @@ At candidate `a939c7fcf64658e9de96cf2635a99a77dd0eda00`, Android `AppState.draft
 
 The backend also has a source-only recovery path in `quick_workflows.quick_report`. Multiple failure classes reach these paths. Consequently, the recovered text alone cannot identify an authentication, quota, model, timeout or schema failure. The live HTTP status and deployed revision were not established.
 
+## Clarification: the sole app login and administrator access
+
+The user confirms this is the only app login and nobody else has used the app. The previous suggestion that a separate owner login existed was unsupported and is withdrawn.
+
+The repository distinguishes workspace ownership from platform administration:
+
+- `identity.signup` creates a membership with `role='owner'` but explicitly creates the user with `is_platform_admin=False`.
+- `identity.require_admin` checks only `user.is_platform_admin` and returns the misleadingly broad message `Owner access is required.` if it is false.
+- `billing.has_unlimited_credits` can exempt an explicitly configured user ID without granting platform privileges.
+- `identity.bootstrap_owner` creates a new platform administrator but deliberately refuses to promote an existing account. It must not be used to create a replacement account or bypass the existing account's controls.
+- The declared `admin_email` setting is not referenced by the inspected application code. Changing that setting alone is not an established remedy.
+
+These source facts explain how the sole workspace owner can encounter the observed diagnostic-access denial. They do not establish how this production account was originally provisioned, the full live account inventory, or the cause of the AI failure.
+
+Continue diagnosis through authorized read-only access to the existing Google Cloud project and request logs. No second app login is required as a diagnostic assumption. Any correction to the existing account's production administrator flag requires a reviewed, explicitly approved production change; the denial is not permission to bypass it.
+
 ## Status and next access requirement
 
 The pasted source was preserved, but the AI workflow failed. The underlying provider/server cause remains **unconfirmed**. The absence of the newer diagnostic endpoint establishes a live/development capability difference; it does not identify the deployed revision or prove that a particular code change will resolve this request.
