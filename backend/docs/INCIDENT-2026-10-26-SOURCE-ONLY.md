@@ -36,10 +36,42 @@ These source facts explain how the sole workspace owner can encounter the observ
 
 Continue diagnosis through authorized read-only access to the existing Google Cloud project and request logs. No second app login is required as a diagnostic assumption. Any correction to the existing account's production administrator flag requires a reviewed, explicitly approved production change; the denial is not permission to bypass it.
 
-## Status and next access requirement
+## Confirmed provider metadata and code defect (authenticated follow-up)
 
-The pasted source was preserved, but the AI workflow failed. The underlying provider/server cause remains **unconfirmed**. The absence of the newer diagnostic endpoint establishes a live/development capability difference; it does not identify the deployed revision or prove that a particular code change will resolve this request.
+After the owner completed sign-in, OpenRouter's read-only activity and request views showed:
 
-Owner-authorized read access to provider settings and request logs is the remaining blocker. Do not promote the current app account, change balances, relax privacy controls, trigger paid live requests or deploy merely to diagnose this failure. After obtaining evidence, reproduce the confirmed failure with synthetic data, correct it on a development branch, and seek explicit production approval for the reviewed change.
+- At **2026-10-26 06:50:20.987 UTC (02:50:20 Eastern)**, generation `gen-1792997421-ATteCDQGIQmKPfUAG9Zz` requested `openai/gpt-5.6-luna`, reported `openai/gpt-5.6-luna-20260709`, and used Azure. There were 2,426 prompt tokens and exactly 1,800 completion tokens. The finish reason was **length**, with native reason **max_output_tokens**.
+- The inspected main-branch source sets the low-effort completion allowance to 1,800. Its validator rejects a length-limited completion. This is a confirmed truncation defect that matches the extraction-unavailable warning and the screenshot time. OpenRouter metadata does not contain the app request UUID, so exact linkage to that specific screen remains a time/source correlation.
+- Subsequent Terra/Sol calls at 02:50–02:51 show `stop`. Transport completion is not proof that the application's clinical/schema checks passed. Prompt/completion logging is disabled and was left disabled. The final report-check failure cannot be reconstructed from metadata alone.
+- The Luna upstream attempt at **Oct 25, 17:30 Eastern**, `gen-1792963836-L5XU4x4tJ4HwttLppKDg`, shows Azure transport HTTP 200 and one attempt. Opening the generation reports **No generation found with that ID**. The same occurs for the Oct 26, 03:12 Luna attempt `gen-1792998743-kU54bmppUoDlDgkm0bPp`. Neither supplies the final error body. These cannot be conclusively joined to app request `2a9bc999-5629-43c8-9bca-b5e273febe67`.
+- The logs do **not** establish a privacy-policy rejection, exhausted account balance, unsupported vision model, or invalid API key as the root cause. Consultant success does not independently rule those causes out for every route.
 
-No new APK, application-code change, deployment, provider request, recording deletion, patient-data enablement or billing change was performed during this follow-up. Earlier automated build success is not live AI-service acceptance.
+Google Cloud Console remained unavailable in this task browser after one reload. The photo HTTP 502 and final report-check root causes therefore remain **unconfirmed**. No guessed diagnosis should be promoted to a confirmed finding.
+
+## Development correction
+
+The separate development branch now provides:
+
+- Structured text extraction output allowance of 8,000–16,000 tokens, scaled by bounded source length; photo extraction gets 8,000. Low reasoning effort, zero-retention filtering, data-collection denial and schema/clinical checks remain enforced.
+- A distinct `OUTPUT_LIMIT` failure. Truncated content is never admitted as facts or stored as a successful result. Failed operations waive the app charge while retaining reported provider cost. Retrying the same request and budget cannot repeatedly spend.
+- Closed metadata fields for output allowance and finish reason, without prompts, transcripts, photos or arbitrary provider errors.
+- Exact reviewed OpenRouter canonical snapshot aliases for the four candidate models, preventing a valid dated identifier from being incorrectly rejected by model-identity verification. No wildcard suffix acceptance or cross-model substitution.
+- Android recognition and plain-language feedback for this failure; Pilot version `1.8.5-test12`.
+
+Canonical IDs were checked against OpenRouter's public `/api/v1/models/{model}/endpoints` catalog on 26 October:
+
+| Configured model | Reviewed reported snapshot |
+| --- | --- |
+| openai/gpt-6-luna | openai/gpt-6-luna-20260922 |
+| openai/gpt-6.1-sol | openai/gpt-6.1-sol-20260929 |
+| openai/gpt-6-astra | openai/gpt-6-astra-20260903 |
+| anthropic/claude-sonnet-5.5 | anthropic/claude-sonnet-5.5-20260928 |
+
+Catalog support does not establish successful execution under this account or approval for identifiable patient data. Live synthetic acceptance after an approved deployment is still required.
+
+## Validation and production boundary
+
+New regression cases cover response budgets, a completion larger than the old cap, refusal of partial results, replay without extra calls, preservation of actual provider costs, trusted snapshot identities and rejection of arbitrary metadata. Android tests cover the new category, user message and retry prohibition. Run results are recorded in the associated commit's CI artifacts.
+
+No production deployment, paid live AI request, administrator promotion, balance change, provider-setting change, recording deletion, prompt logging enablement or patient-data enablement occurred. The existing Pilot APK can exercise the old server, but installing an APK alone does not apply this backend correction. Production approval must name the reviewed commit and be followed by synthetic text/photo/report acceptance checks before any wider use.
+

@@ -11,8 +11,8 @@ android {
         applicationId = "com.woundcopilot.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.8.5-test11"
+        versionCode = 32
+        versionName = "1.8.5-test12"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
         // Crash-resistant recorder: compiled into every build, switched ON only in sandbox. Turning it on for debug/release later is one

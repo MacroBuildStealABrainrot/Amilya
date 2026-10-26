@@ -47,6 +47,10 @@ from . import diagnostics
 router = APIRouter()
 
 
+class OutputLimitError(ValueError):
+    """The provider exhausted its output allowance; partial findings are unusable."""
+
+
 class ModelIdentityError(ValueError):
     """A gateway response does not identify the model that was requested."""
 
@@ -63,6 +67,25 @@ MODEL_PRICES = {
     'openai/gpt-6-astra': ('10', '50', '.4'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
 }
+# Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
+# Exact aliases only: never accept arbitrary date suffixes or another model.
+MODEL_SNAPSHOTS = {
+    'openai/gpt-6-luna': frozenset({'openai/gpt-6-luna-20260922'}),
+    'openai/gpt-6.1-sol': frozenset({'openai/gpt-6.1-sol-20260929'}),
+    'openai/gpt-6-astra': frozenset({'openai/gpt-6-astra-20260903'}),
+    'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
+}
+FINISH_REASONS = frozenset({'stop', 'length', 'content_filter', 'tool_calls', 'function_call'})
+
+
+def known_model_id(value):
+    return isinstance(value, str) and (value in MODEL_PRICES or any(value in ids for ids in MODEL_SNAPSHOTS.values()))
+
+
+def model_identity_matches(selected, reported):
+    return reported is None or isinstance(reported, str) and (reported == selected or reported in MODEL_SNAPSHOTS.get(selected, ()))
+
+
 SPEECH_PRICES = {'cloudflare': Decimal('510'), 'groq': Decimal('40000') / 60,
                  'deepgram': Decimal('7700')}  # microUSD per minute, medical reserve uses configurable cap
 GROQ_FULL_WHISPER_MICROS_PER_MINUTE = Decimal('111000') / 60
@@ -343,9 +366,9 @@ def photo_error_headers(usage, exhausted=False):
         'route_unavailable':'MODEL_UNAVAILABLE', 'request_incompatible':'REQUEST_INCOMPATIBLE',
         'provider_timeout':'PROVIDER_TIMEOUT', 'invalid_response':'INVALID_RESPONSE',
         'provider_connection':'NETWORK_UNAVAILABLE', 'provider_rate_limit':'RATE_LIMITED',
-        'response_processing':'RESPONSE_PROCESSING_FAILED',
+        'response_processing':'RESPONSE_PROCESSING_FAILED', 'output_limit':'OUTPUT_LIMIT',
     }.get(usage.get('failure_reason'), 'PROVIDER_UNAVAILABLE')
-    permanent = category in {'PROVIDER_QUOTA','PROVIDER_AUTH','MODEL_UNAVAILABLE','REQUEST_INCOMPATIBLE'}
+    permanent = category in {'PROVIDER_QUOTA','PROVIDER_AUTH','MODEL_UNAVAILABLE','REQUEST_INCOMPATIBLE','OUTPUT_LIMIT'}
     return {**(retry_after_headers(usage) or {}),
             'X-WCP-Error': 'RETRY_LIMIT' if exhausted and not permanent else category,
             'X-WCP-Retryable': 'false' if permanent or exhausted else 'true',
@@ -409,7 +432,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     # without charge. Let the same request key try again (bounded),
                     # instead of replaying the old failure forever. Permanent
                     # configuration failures (credits, access, routing) never advance.
-                    if previous.usage.get('failure_reason') in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                    if previous.usage.get('failure_reason') in {'provider_credits','provider_access','route_unavailable','request_incompatible','output_limit'}:
                         break
                     attempts = previous.usage.get('attempts', [])
                     if not attempts or attempts[-1].get('error_code') not in {'502','503','504'}:
@@ -420,7 +443,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     # A success, unknown charge or running request never advances.
                     reason = previous.usage.get('failure_reason')
                     if replay_invalid_failure and reason == 'invalid_response':break
-                    if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                    if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible','output_limit'}:
                         break
                     if retry_after_headers(previous.usage):
                         raise HTTPException(503, 'Photo assessment is waiting for provider capacity.',
@@ -516,6 +539,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
                               headers=retry_after_headers(usage))
+    except OutputLimitError:
+        usage['failure_reason'] = 'output_limit'
+        error = HTTPException(502, 'The AI response reached its output limit before completion. No partial findings were accepted. The source is preserved; the administrator must review the output allowance.')
     except ModelIdentityError:
         usage['failure_reason'] = 'request_incompatible'
         error = HTTPException(502, 'The provider returned an unexpected model. The owner must review routing; no findings were accepted.')
@@ -651,14 +677,21 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         vendor = raw.get('usage') or {}
         amount, safe = normalized_tokens(model, vendor)
         reported = raw.get('model')
-        safe['reported_model'] = reported if isinstance(reported, str) and reported in MODEL_PRICES else None
-        safe['model_identity'] = 'confirmed' if reported == model else 'unreported' if reported is None else 'mismatch'
+        safe['reported_model'] = reported if known_model_id(reported) else None
+        safe['model_identity'] = 'unreported' if reported is None else 'confirmed' if model_identity_matches(model, reported) else 'mismatch'
+        safe['max_output_tokens'] = max_tokens
+        choices = raw.get('choices')
+        choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+        finish = choice.get('finish_reason')
+        if isinstance(finish, str) and finish in FINISH_REASONS:
+            safe['finish_reason'] = finish
         if routing: safe['routing'] = routing
         return amount, safe, actual_cost(vendor)
     def validate(raw):
-        if raw.get('model') is not None and raw['model'] != model:
+        if not model_identity_matches(model, raw.get('model')):
             raise ModelIdentityError('Provider returned a different or unrecognized model')
         choice = raw['choices'][0]
+        if choice.get('finish_reason') == 'length': raise OutputLimitError('Output limit reached')
         if choice.get('finish_reason') not in {'stop', None}: raise ValueError('Incomplete output')
         message = choice['message']
         if message.get('tool_calls') or message.get('refusal'): raise ValueError('Non-clinical response')
@@ -692,8 +725,15 @@ async def routed(task, content, model=None, **kwargs):
     if task not in REPORT_STAGE_TASKS and (diagnostics.active.get() or {}).get('task')!='deep_review':
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
     route = configured_route(task, content)
-    # Completion limits include hidden reasoning; preserve room for report text.
-    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']])
+    # Extraction emits structured facts, not a short summary. A live 2,426-token
+    # source exhausted the old 1,800-token completion cap (2026-10-26). Keep low
+    # reasoning effort while allowing bounded room for complete JSON and evidence.
+    minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
+    if task in {'extract', 'document'}:
+        minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
+    elif task == 'image':
+        minimum = max(minimum, 8000)
+    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), minimum)
     return await structured(task, content, route['model'], routing=route, **kwargs)
 
 

@@ -124,7 +124,7 @@ def safe_number(value):
 
 def cloud_event(data):
     """Closed metadata only; remains available if diagnostic DB writes fail."""
-    from .providers import MODEL_PRICES, TASK_FILES, photo_error_headers
+    from .providers import MODEL_PRICES, TASK_FILES, photo_error_headers, known_model_id, FINISH_REASONS
     c=active.get()
     if not c:return
     try:request_id=str(uuid.UUID(str(c['id'])))
@@ -135,11 +135,13 @@ def cloud_event(data):
             'status':data.get('status') if data.get('status') in {'success','failed','cancelled'} else 'unknown'}
     for key in ('selected_model','reported_model'):
         value=data.get(key)
-        record[key]=value if isinstance(value,str) and value in MODEL_PRICES else None
+        record[key]=value if known_model_id(value) and (key=='reported_model' or value in MODEL_PRICES) else None
     value=data.get('provider')
     record['provider']=value if value in {'openrouter','cloudflare','groq','deepgram'} else None
-    for key in ('http_status','duration_ms','retry_count'):
+    for key in ('http_status','duration_ms','retry_count','max_output_tokens'):
         record[key]=safe_number(data.get(key))
+    finish=data.get('finish_reason')
+    if isinstance(finish,str) and finish in FINISH_REASONS:record['finish_reason']=finish
     code=data.get('error_code')
     record['error_code']=code if code in ERRORS else None
     if 'failure_reason' in data:
@@ -177,9 +179,9 @@ async def post(client,url,*,provider,model,stage,retry=0,fallback=False,original
                 data['cost_usd']=safe_number(usage.get('cost'))
                 if data['cost_usd'] is not None:data['cost_basis']='provider_reported'
             # Provider metadata is untrusted too: never copy arbitrary returned strings.
-            from .providers import MODEL_PRICES
+            from .providers import known_model_id
             reported=raw.get('model')
-            data['reported_model']=reported if isinstance(reported,str) and reported in MODEL_PRICES else None
+            data['reported_model']=reported if known_model_id(reported) else None
             data['reported_model_unrecognized']=reported is not None and data['reported_model'] is None
             if 'error' in raw or raw.get('success') is False:
                 data['status']='failed'
@@ -206,7 +208,8 @@ def outcome(stage,model,provider,success,usage,normalized,billed):
     cloud_event({'stage':stage,'selected_model':model,'reported_model':usage.get('reported_model'),
         'provider':provider,'status':'success' if success else 'failed',
         **({} if success else {'failure_reason':usage.get('failure_reason')}),
-        'http_status':usage.get('upstream_status')})
+        'http_status':usage.get('upstream_status'), 'max_output_tokens':usage.get('max_output_tokens'),
+        'finish_reason':usage.get('finish_reason')})
     if stage == 'image':
         from .providers import photo_error_headers
         event({'source':'server','stage':'photo_result','selected_model':model,'provider':provider,

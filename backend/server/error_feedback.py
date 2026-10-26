@@ -6,6 +6,7 @@ MESSAGES = {
     'MODEL_UNAVAILABLE': 'No provider endpoint matches the configured model and privacy settings. The administrator must check routing.',
     'REQUEST_INCOMPATIBLE': 'The provider rejected the request format or model parameters. The integration needs correction.',
     'PROVIDER_TIMEOUT': 'The AI provider did not respond before the timeout. Check request status before retrying.',
+    'OUTPUT_LIMIT': 'The AI response reached its output limit before completion. No partial findings were accepted. The administrator must review the output allowance.',
     'INVALID_RESPONSE': 'The AI response failed structure or clinical-data validation. Its findings were not accepted.',
     'NETWORK_UNAVAILABLE': 'The server could not connect to the AI provider. Retry when the provider connection is restored.',
     'RATE_LIMITED': 'The AI provider rate-limited the request. Wait before retrying.',

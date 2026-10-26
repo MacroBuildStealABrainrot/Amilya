@@ -165,7 +165,7 @@ def reserve(db: Session, user: User, operation_id: str, estimated_micros: int,
         raise
 
 
-_USAGE_NUMBERS = {"input_tokens", "output_tokens", "cached_tokens", "total_tokens", "audio_seconds", "audio_minutes", "media_units", "image_units", "gateway_overhead_micros", "provider_list_cost_micros", "latency_ms", "attempt_count"}
+_USAGE_NUMBERS = {"input_tokens", "output_tokens", "cached_tokens", "total_tokens", "audio_seconds", "audio_minutes", "media_units", "image_units", "gateway_overhead_micros", "provider_list_cost_micros", "latency_ms", "attempt_count", "max_output_tokens"}
 
 
 def _safe_usage(usage: dict) -> dict:
@@ -178,15 +178,18 @@ def _safe_usage(usage: dict) -> dict:
         if isinstance(routing.get('effort_level'), str) and routing['effort_level'] in MODELS and isinstance(routing.get('model'), str) and routing['model'] in MODEL_PRICES:
             safe['routing'] = {key: routing[key] for key in ('model', 'effort_level')}
             safe['routing']['policy_version'] = VERSION
-    from .providers import MODEL_PRICES
+    from .providers import known_model_id, FINISH_REASONS
     reported = usage.get('reported_model')
-    if isinstance(reported, str) and reported in MODEL_PRICES:
+    if known_model_id(reported):
         safe['reported_model'] = reported
+    finish = usage.get('finish_reason')
+    if isinstance(finish, str) and finish in FINISH_REASONS:
+        safe['finish_reason'] = finish
     if usage.get('model_identity') in ('confirmed', 'unreported', 'mismatch'):
         safe['model_identity'] = usage['model_identity']
     if type(usage.get('upstream_status')) is int and 100 <= usage['upstream_status'] <= 599:
         safe['upstream_status'] = usage['upstream_status']
-    if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible', 'invalid_response', 'provider_timeout', 'provider_connection', 'response_processing'):
+    if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible', 'invalid_response', 'provider_timeout', 'provider_connection', 'response_processing', 'output_limit'):
         safe['failure_reason'] = usage['failure_reason']
     retry_deadline = usage.get('retry_not_before')
     if type(retry_deadline) in (int, float) and 0 < retry_deadline < 10**12:

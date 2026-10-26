@@ -126,7 +126,7 @@ def test_openai_route_uses_compatible_output_limit_with_privacy_enforced(gateway
     gateway.http.responses = [completion()]
     extract(gateway)
     payload = gateway.http.calls[0]['json']
-    assert payload['max_completion_tokens'] == 1800
+    assert payload['max_completion_tokens'] == 8000
     assert 'max_tokens' not in payload
     assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
     assert operation_rows(gateway)[0].usage['routing']['effort_level'] == 'low'
