@@ -12,7 +12,7 @@ from server.core import settings
 from server.db import Base,engine,SessionLocal
 from server import identity,audit,providers,transfer_models
 from server.performance import job_id as performance_job
-from server import diagnostics
+from server import diagnostics,monitoring,sentry_monitoring
 
 logger=logging.getLogger('woundcopilot')
 
@@ -51,6 +51,7 @@ async def boundary(request:Request,call_next):
         raise
     except Exception:
         logger.error('request_failed request_id=%s method=%s',request_id,request.method)
+        monitoring.emit('server','failed','request_failed')
         response=JSONResponse({'detail':'The request could not be completed. Refresh the case to check its current state.','request_id':request_id},status_code=500)
     finally:providers.request_operation.reset(operation_token);performance_job.reset(performance_token)
     diagnostics.finish(response.status_code)

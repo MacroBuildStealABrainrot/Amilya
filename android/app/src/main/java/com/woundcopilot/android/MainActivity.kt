@@ -57,11 +57,12 @@ class MainActivity:ComponentActivity(){
             val file=if(type==ExternalKind.CAMERA)java.io.File(java.io.File(filesDir,"captures").apply{check(exists()||mkdirs())},"photo-${java.util.UUID.randomUUID()}.jpg")else null
             if(!state.externalCapture.begin(type,media,purpose,file))return
             registerCapture(type,state.externalCapture.operationId!!,true,file)
-        }catch(_:Exception){state.externalCapture.clear();state.error="The system picker or camera could not open. Please try again."}
+        }catch(_:Exception){ErrorTelemetry.record(applicationContext,"photo","failed","launch_failed");state.externalCapture.clear();state.error="The system picker or camera could not open. Please try again."}
     }
     private fun deviceLocked()=getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked || !getSystemService(android.os.PowerManager::class.java).isInteractive
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
+        ErrorTelemetry.installCrashReporting(applicationContext)
         state.wearBridge
         state.externalCapture.operationId?.let{id->state.externalCapture.kind?.let{registerCapture(it,id)}}
         if(!BuildConfig.DEBUG && !BuildConfig.ALLOW_SCREEN_CAPTURE)window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)

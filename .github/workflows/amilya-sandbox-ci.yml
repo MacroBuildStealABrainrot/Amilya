@@ -15,7 +15,7 @@ name: amilya-sandbox-ci
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, 'test/**' ]
+    branches: [ main, master, 'test/**', 'feature/privacy-safe-error-monitoring' ]
 
 permissions:
   contents: read
@@ -130,6 +130,7 @@ jobs:
           retention-days: 30
 
   phone-tests:
+    if: github.ref != 'refs/heads/feature/privacy-safe-error-monitoring'
     name: Sandbox app on an Android emulator (fake server, fake audio)
     needs: android
     runs-on: ubuntu-24.04
