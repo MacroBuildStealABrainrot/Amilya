@@ -35,6 +35,7 @@ object ErrorTelemetry {
 
     fun record(context: Context, stage: String, outcome: String, code: String) {
         if (stage !in stages || outcome !in outcomes || code !in codes) return
+        sendSentry(stage, outcome, code)
         // Only this separate Pilot variant may emit diagnostics.
         if (BuildConfig.APPLICATION_ID != "com.woundcopilot.android.pilot") return
         val host = BuildConfig.TELEMETRY_HOST
@@ -63,6 +64,44 @@ object ErrorTelemetry {
                     connection.doOutput = true
                     connection.setRequestProperty("Content-Type", "application/json")
                     connection.outputStream.use { it.write(event.toString().toByteArray(Charsets.UTF_8)) }
+                    connection.inputStream.use { it.close() }
+                } finally { connection.disconnect() }
+            }
+        }
+    }
+
+    /** Minimal Sentry envelope: no SDK auto-capture, breadcrumbs, payloads or identifiers. */
+    private fun sendSentry(stage: String, outcome: String, code: String) {
+        if (BuildConfig.APPLICATION_ID != "com.woundcopilot.android.pilot") return
+        val dsn = BuildConfig.SENTRY_DSN
+        val uri = runCatching { java.net.URI(dsn) }.getOrNull() ?: return
+        if (uri.scheme != "https" || uri.host == null || uri.userInfo.isNullOrBlank()) return
+        val project = uri.path.trim('/').takeIf { it.matches(Regex("[0-9]+")) } ?: return
+        val key = uri.userInfo.substringBefore(':').takeIf { it.matches(Regex("[A-Za-z0-9]+")) } ?: return
+        val endpoint = "https://${uri.host}/api/$project/envelope/"
+        worker.execute {
+            runCatching {
+                val eventId = UUID.randomUUID().toString().replace("-", "")
+                val timestamp = java.time.Instant.now().toString()
+                val envelope = JSONObject().put("event_id", eventId).put("dsn", dsn).toString() + "\\n" +
+                    JSONObject().put("type", "event").toString() + "\\n" +
+                    JSONObject().put("event_id", eventId)
+                        .put("timestamp", timestamp)
+                        .put("platform", "java")
+                        .put("level", if (outcome == "recovered") "warning" else "error")
+                        .put("message", JSONObject().put("formatted", "Amilya technical failure"))
+                        .put("fingerprint", org.json.JSONArray(listOf("amilya", stage, code)))
+                        .put("tags", JSONObject().put("component", "android")
+                            .put("stage", stage).put("outcome", outcome).put("code", code))
+                        .toString() + "\\n"
+                val connection = URL(endpoint).openConnection() as HttpURLConnection
+                try {
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 4000
+                    connection.readTimeout = 4000
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/x-sentry-envelope")
+                    connection.outputStream.use { it.write(envelope.toByteArray(Charsets.UTF_8)) }
                     connection.inputStream.use { it.close() }
                 } finally { connection.disconnect() }
             }
