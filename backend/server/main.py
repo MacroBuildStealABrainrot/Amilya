@@ -12,7 +12,7 @@ from server.core import settings
 from server.db import Base,engine,SessionLocal
 from server import identity,audit,providers,transfer_models
 from server.performance import job_id as performance_job
-from server import diagnostics,monitoring
+from server import diagnostics,monitoring,sentry_monitoring
 
 logger=logging.getLogger('woundcopilot')
 
