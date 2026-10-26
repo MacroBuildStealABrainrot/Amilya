@@ -33,8 +33,8 @@ def _safe_event(event, hint):
 
 def configure() -> bool:
     global _client
-    dsn = os.getenv("AMILYA_SENTRY_DSN", "")
-    if not dsn or os.getenv("AMILYA_SENTRY_APPROVED", "") != "true" or os.getenv("AMILYA_MONITORING_ENV", "") != "pilot":
+    dsn = os.getenv("AMILYA_SENTRY_DSN", "") or os.getenv("SENTRY_DSN", "")
+    if not dsn or os.getenv("AMILYA_SENTRY_APPROVED", "") != "true" or (os.getenv("AMILYA_MONITORING_ENV", "") != "pilot" and os.getenv("SENTRY_ENVIRONMENT", "") != "pc-test"):
         return False
     import sentry_sdk
     sentry_sdk.init(
