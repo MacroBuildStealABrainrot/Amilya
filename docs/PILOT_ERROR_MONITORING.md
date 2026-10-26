@@ -23,3 +23,10 @@ For a backend monitoring pilot, provide the same env variables only to a **non-p
 - Verify PostHog actually receives an intentionally triggered failure in a synthetic, non-clinical Pilot encounter.
 - Firebase Crashlytics is not installed or configured by this branch.
 - Monitoring is not yet wired to **every** recording, transcription, report and photo failure path. Additional source-level coverage must be completed and tested before claiming full coverage.
+
+## Sentry private configuration (DSNs must never be committed)
+- Android `amilya-android`: put `wcpSentryDsn=<Android-project-DSN>` into the local user-level `~/.gradle/gradle.properties` file (on Windows, `C:\\Users\\<your-user>\\.gradle\\gradle.properties`). Only the side-by-side Pilot build reads this Gradle property. The actual value is not stored in the GitHub branch or CI build by default.
+- Test server `amilya-backend`: keep `SENTRY_DSN=<backend-project-DSN>` and `SENTRY_ENVIRONMENT=pc-test` inside the local untracked `sandbox/sentry.env` file; add `AMILYA_SENTRY_APPROVED=true` only after confirming synthetic/test data and privacy configuration.
+- Start the test server with its environment file explicitly loaded; the backend does **not** automatically parse `sandbox/sentry.env`. No production Cloud Run configuration has been changed.
+- Sentry monitoring reports **only** scrubbed allowlisted diagnostic categories, not raw stack traces or PHI; it is not yet comprehensive crash tracking.
+- Compile and run backend/Android tests, install a newly built Pilot APK, generate a synthetic failure, then confirm the event in the intended Sentry project before calling the setup operational.
