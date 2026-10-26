@@ -24,6 +24,9 @@ def emit(stage: str, outcome: str, code: str) -> bool:
     """Return False if disabled/invalid. Never block a clinical operation."""
     if stage not in _STAGES or outcome not in _OUTCOMES or code not in _CODES:
         return False
+    # Sentry receives only static, reviewed categories; never raw exceptions.
+    from . import sentry_monitoring
+    sentry_monitoring.report(stage, code)
     host = os.environ.get("AMILYA_POSTHOG_HOST", "").rstrip("/")
     token = os.environ.get("AMILYA_POSTHOG_PROJECT_TOKEN", "")
     parts = urlparse(host)
