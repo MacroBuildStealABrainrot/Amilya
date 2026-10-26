@@ -8,8 +8,8 @@ android {
     namespace = "com.woundcopilot.android"
     compileSdk = 36
     defaultConfig {
-        buildConfigField("String", "TELEMETRY_HOST", "\\"\\"")
-        buildConfigField("String", "TELEMETRY_TOKEN", "\\"\\"")
+        buildConfigField("String", "TELEMETRY_HOST", "\"\"")
+        buildConfigField("String", "TELEMETRY_TOKEN", "\"\"")
         applicationId = "com.woundcopilot.android"
         minSdk = 28
         targetSdk = 36
@@ -57,8 +57,8 @@ android {
             // Pilot-only opt-in configuration; CI and production builds default to disabled.
             val diagnosticHost = providers.environmentVariable("AMILYA_POSTHOG_HOST").orElse("").get()
             val diagnosticToken = providers.environmentVariable("AMILYA_POSTHOG_PROJECT_TOKEN").orElse("").get()
-            buildConfigField("String", "TELEMETRY_HOST", "\\\"${diagnosticHost}\\\"")
-            buildConfigField("String", "TELEMETRY_TOKEN", "\\\"${diagnosticToken}\\\"")
+            buildConfigField("String", "TELEMETRY_HOST", "\"${diagnosticHost}\"")
+            buildConfigField("String", "TELEMETRY_TOKEN", "\"${diagnosticToken}\"")
             matchingFallbacks += listOf("debug")
         }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
