@@ -16,6 +16,11 @@ import java.util.concurrent.Executors
  */
 object ErrorTelemetry {
     private val worker = Executors.newSingleThreadExecutor()
+    @Volatile private var appContext: Context? = null
+
+    fun record(stage: String, outcome: String, code: String) {
+        appContext?.let { record(it, stage, outcome, code) }
+    }
     private val stages = setOf(
         "app", "recording", "recording_handover", "transcription",
         "report", "photo", "server", "ai_extraction"
@@ -66,6 +71,7 @@ object ErrorTelemetry {
 
     /** No exception detail is retained; failures are recorded by category only. */
     fun installCrashReporting(context: Context) {
+        appContext = context.applicationContext
         if (BuildConfig.APPLICATION_ID != "com.woundcopilot.android.pilot") return
         val preferences = context.applicationContext.getSharedPreferences("amilya_diagnostic", Context.MODE_PRIVATE)
         if (preferences.getBoolean("previous_crash", false)) {
