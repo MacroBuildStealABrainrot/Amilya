@@ -22,7 +22,7 @@ Photo root cause remains unconfirmed. The 03:12 HTTP 200 / stop / 125-token gene
 
 96 focused provider tests passed, including the new synthetic output-budget cases, rejection of still-truncated responses, waived charges and HTTP-200 error-envelope diagnostics. The original focused baseline had 5 failures and 86 passes; the new budget tests had 4 failures and 1 pass before repair.
 
-A broader comparison uses an archived backend with matching core.py and kosmo.py, but not every archive file is proven identical to production. Both unmodified and repaired broader runs show failures; they must not be described as a clean production regression suite. Results are pending comparison. The earlier development-branch CI results apply to that different candidate, not this narrow artifact.
+A broader comparison uses an archived backend with matching core.py and kosmo.py, but not every archive file is proven identical to production. Both unmodified and repaired broader runs show failures; they must not be described as a clean production regression suite. Both runs stalled near 66% and were interrupted after approximately seven minutes. Neither completed; no full-suite success or complete failure-delta claim is made. The earlier development-branch CI results apply to that different candidate, not this narrow artifact.
 
 ## Release gate
 

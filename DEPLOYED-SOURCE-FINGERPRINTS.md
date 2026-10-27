@@ -1,4 +1,4 @@
-# Identified live source and unresolved retrieval
+# Identified live source and verified provider repair
 
 Evidence supplied by the owner through Cloud Shell screenshots:
 
@@ -16,7 +16,7 @@ Exact SHA-256 fingerprints read by the owner from that source archive:
 | server/kosmo.py | 3405631677a75d6df395d2a91bd27c80c86358f6d1a43a2f8673c87b63bbe3ca |
 | server/providers.py | d2ec7ac83872485f3f1a9b24dd60fb4dd85d1d5ef0e345171375d96d8718ceb7 |
 
-The owner extracted providers.py into a uniquely named Python file in Cloud Shell home. Phone download/attachment did not succeed.
+The owner extracted providers.py into a uniquely named Python file in Cloud Shell home and subsequently attached it. Its bytes independently match the live provider fingerprint above.
 
 ## Independent checks completed
 
@@ -28,8 +28,9 @@ Reversing the included test1 pipeline-recovery patch on a scratch copy produced 
 
 Direct browser attempts to the service Console, standalone shell.cloud.google.com and the identified storage.cloud.google.com source object all returned Site Unavailable / Unable to access this site. The private source object was not downloaded in this Work session. No exposed source URL, access credential or public sharing was created.
 
-The exact live providers.py is still unavailable here. Do not deploy the broad development candidate as a presumed minimal patch against an unverified baseline. Do not treat OpenRouter's streaming metadata as proof of source-level stream configuration, or the 03:12 Terra generation as proven to be the photo request.
+The exact live providers.py has now been received and inspected; it explicitly sets stream to false. A narrow tested repair is preserved under repairs/live-00021-lrx, separate from the broader candidate runtime. Do not deploy the broad development candidate as a presumed minimal patch against an unverified baseline. Do not treat OpenRouter's streaming metadata as proof of source-level stream configuration, or the 03:12 Terra generation as proven to be the photo request.
 
 ## Boundary
 
-No production deployment, billing change, privacy change, source deletion, recording deletion or live paid AI request occurred. A working authorized Cloud execution connection or the matching source file remains necessary for the live-specific repair. Existing development tests/builds remain documented in VALIDATION-test12.md; this investigation made no runtime change and required no repeat of those tests.
+No production deployment, billing change, privacy change, source deletion, recording deletion or live paid AI request occurred. A working authorized Cloud connection remains necessary for the photo request log correlation and parent-image verification before an approved production rollout. The isolated repair passed 96 focused provider tests. Broader archive comparison runs were interrupted after stalling near 66% with failures in both copies; they are incomplete, not passing. Existing broader development tests/builds remain documented in VALIDATION-test12.md and apply to that separate candidate.
+
