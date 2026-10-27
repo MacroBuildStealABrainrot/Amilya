@@ -1,0 +1,37 @@
+# Isolated synthetic test hosting only. Does not alter Cloud Run or Android URLs.
+# The existing empty free database was created in hazem's workspace, Ohio.
+services:
+  - type: web
+    name: amilya-repair-test
+    runtime: docker
+    plan: free
+    region: ohio
+    repo: https://github.com/MacroBuildStealABrainrot/Amilya
+    branch: fix/server-diagnosis-20261025
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python scripts/render_test_start.py
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: AMILYA_RENDER_TEST
+        value: 'true'
+      - key: APP_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: amilya-repair-test-db
+          property: connectionString
+      - key: AMILYA_RENDER_DB_HOST
+        fromDatabase:
+          name: amilya-repair-test-db
+          property: host
+      - key: CLINICAL_DATA_ENABLED
+        value: 'false'
+      - key: BILLING_ENABLED
+        value: 'false'
+      - key: PROVIDER_EXECUTION_ENABLED
+        value: 'false'
+      - key: ALLOW_SIGNUP
+        value: 'false'
