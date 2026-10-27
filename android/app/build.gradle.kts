@@ -11,6 +11,7 @@ android {
         applicationId = "com.woundcopilot.android"
         minSdk = 28
         targetSdk = 36
+        buildConfigField("boolean", "REPAIR_SERVER", "false")
         versionCode = 32
         versionName = "1.8.5-test12"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
@@ -58,6 +59,7 @@ android {
         create("repair") {
             initWith(getByName("pilot"))
             applicationIdSuffix = ".repair"
+            buildConfigField("boolean", "REPAIR_SERVER", "true")
             versionNameSuffix = "-photo-repair13"
             buildConfigField("String", "API_BASE_URL", "\"https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1\"")
             matchingFallbacks += listOf("pilot", "debug")

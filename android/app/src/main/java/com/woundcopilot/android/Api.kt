@@ -179,19 +179,20 @@ internal fun isCsrfRejection(status:Int,message:String)=status==403 && message.c
 class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
 
 internal const val PRODUCTION_API_ORIGIN="https://woundcopilot-1039151887397.us-central1.run.app/api/v1"
+internal const val REPAIR_API_ORIGIN="https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1"
 internal const val LOCAL_TEST_API_ORIGIN="http://127.0.0.1:18766/api/v1"
 
 /** Which server addresses a build may talk to. The sandbox build allows ONLY the fake test server on this PC. */
-internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean):Boolean{
+internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean,repair:Boolean=false):Boolean{
     val local=url==LOCAL_TEST_API_ORIGIN || url=="http://localhost:18766/api/v1"
-    return if(sandbox) local else url==PRODUCTION_API_ORIGIN || (debug && local)
+    return if(sandbox) local else if(repair) url==REPAIR_API_ORIGIN else url==PRODUCTION_API_ORIGIN || (debug && local)
 }
 
 class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
     @Volatile var diagnosticJob:String?=null
     @Volatile var diagnosticGeneration:String?=null
 
-    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX)) { "Unsupported API origin." } }
+    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX,BuildConfig.REPAIR_SERVER)) { "Unsupported API origin." } }
 
     private val sessionKey=if(base.startsWith("https://woundcopilot-"))"session" else "session-local-integration"
 

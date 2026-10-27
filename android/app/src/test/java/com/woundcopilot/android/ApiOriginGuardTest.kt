@@ -28,4 +28,12 @@ class ApiOriginGuardTest {
         assertTrue(isAllowedApiOrigin(production, debug = true, sandbox = false))
         assertTrue(isAllowedApiOrigin(local, debug = true, sandbox = false))
     }
+    @Test fun repairOnlyAllowsExactRepairEndpoint() {
+        assertTrue(isAllowedApiOrigin(REPAIR_API_ORIGIN, true, false, true))
+        for (url in listOf(PRODUCTION_API_ORIGIN, LOCAL_TEST_API_ORIGIN, "https://example.com/api/v1", REPAIR_API_ORIGIN + "/x")) {
+            assertFalse(isAllowedApiOrigin(url, true, false, true))
+        }
+        assertFalse(isAllowedApiOrigin(REPAIR_API_ORIGIN, true, true, true))
+        assertFalse(isAllowedApiOrigin(REPAIR_API_ORIGIN, true, false))
+    }
 }
