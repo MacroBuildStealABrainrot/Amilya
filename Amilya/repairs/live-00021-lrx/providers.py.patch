@@ -9,7 +9,34 @@
  from pathlib import Path
  import re
  import secrets
-@@ -328,8 +330,80 @@
+@@ -174,9 +176,12 @@
+         for model in (Measurement, Location, Tissue, Pain, Observation):
+             names = sorted(name for name in allowed if special.get(name, Observation) is model)
+             if names:
++                value_schema = model.model_json_schema()
++                if task == 'image':
++                    value_schema.get('properties', {}).pop('observed_on', None)
+                 variants.append({'type': 'object', 'additionalProperties': False,
+                     'properties': {'name': {'type': 'string', 'enum': names},
+-                                   'value': model.model_json_schema(), 'quote': {'type': 'string'}},
++                                   'value': value_schema, 'quote': {'type': 'string'}},
+                     'required': ['name', 'value', 'quote']})
+         properties = {'facts': {'type': 'array', 'maxItems': 100, 'items': {'anyOf': variants}},
+                       'warnings': {'type': 'array', 'items': {'type': 'string'}}}
+@@ -231,6 +236,12 @@
+             if source is not None and (not quote.strip() or quote not in source):
+                 warnings.append('A suggestion without an exact source quotation was excluded.')
+                 continue
++            if task == 'image' and isinstance(value, dict) and 'observed_on' in value:
++                # Dates cannot be established from image pixels. Exclude only this
++                # unsupported metadata; keep all other typed validation strict.
++                value = {key: val for key, val in value.items() if key != 'observed_on'}
++                if 'An observation date supplied by the photo provider was excluded.' not in warnings:
++                    warnings.append('An observation date supplied by the photo provider was excluded.')
+             facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
+         result = {'facts': facts, 'warnings': warnings + extra[:16]}
+         if quality:
+@@ -328,8 +339,80 @@
      return max(.25, delay)
  
  
@@ -90,7 +117,7 @@
  
  
  async def metered_call(*, user: User, encounter_id: str, task: str, provider: str, model: str, payload_hash: str,
-@@ -404,11 +478,15 @@
+@@ -404,11 +487,15 @@
          elif code == 400:
              reason = 'request_incompatible'
              detail = 'The AI provider rejected the request format or model parameters. The owner must review the integration; manual charting remains available.'
@@ -110,7 +137,7 @@
      except httpx.HTTPError:
          error = HTTPException(503, 'The provider connection failed. Your source remains available for retry.')
      except HTTPException as exc: error = exc
-@@ -457,10 +535,12 @@
+@@ -457,10 +544,12 @@
                  response = await client.post(settings.openrouter_base_url.rstrip('/') + '/chat/completions',
                      headers={'Authorization': 'Bearer ' + settings.openrouter_api_key, 'HTTP-Referer': settings.public_base_url, 'X-Title': 'WoundCoPilot'}, json=payload)
                  delay = rate_limit_retry_delay(response) if attempt == 0 else None
@@ -124,7 +151,7 @@
                  await rate_limit_backoff(delay)
              response.raise_for_status()
              raw = parse_provider_json(response.text)
-@@ -472,13 +552,13 @@
+@@ -472,13 +561,13 @@
                  if isinstance(code, str) and code.isascii() and code.isdigit(): code = int(code)
                  if type(code) is not int or not 400 <= code <= 599: code = 502
                  delay = retry_after_delay(response)
@@ -140,7 +167,7 @@
              return await perform_attempts()
          # A report has at most four stages. Bound the whole network portion of
          # each stage, including the single 429 retry/backoff, rather than only
-@@ -487,7 +567,7 @@
+@@ -487,7 +576,7 @@
              return await asyncio.wait_for(perform_attempts(),
                  timeout=min(REPORT_STAGE_TIMEOUT_SECONDS, settings.provider_timeout_seconds))
          except TimeoutError:
@@ -149,7 +176,7 @@
      def measure(raw):
          vendor = raw.get('usage') or {}
          amount, safe = normalized_tokens(model, vendor)
-@@ -510,8 +590,15 @@
+@@ -510,8 +599,15 @@
  
  async def routed(task, content, model=None, **kwargs):
      route = select_route(TASK_FAMILIES.get(task, task), content)

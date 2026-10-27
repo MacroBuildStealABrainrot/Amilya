@@ -176,9 +176,12 @@ def result_schema(task: str) -> dict:
         for model in (Measurement, Location, Tissue, Pain, Observation):
             names = sorted(name for name in allowed if special.get(name, Observation) is model)
             if names:
+                value_schema = model.model_json_schema()
+                if task == 'image':
+                    value_schema.get('properties', {}).pop('observed_on', None)
                 variants.append({'type': 'object', 'additionalProperties': False,
                     'properties': {'name': {'type': 'string', 'enum': names},
-                                   'value': model.model_json_schema(), 'quote': {'type': 'string'}},
+                                   'value': value_schema, 'quote': {'type': 'string'}},
                     'required': ['name', 'value', 'quote']})
         properties = {'facts': {'type': 'array', 'maxItems': 100, 'items': {'anyOf': variants}},
                       'warnings': {'type': 'array', 'items': {'type': 'string'}}}
@@ -233,6 +236,12 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
             if source is not None and (not quote.strip() or quote not in source):
                 warnings.append('A suggestion without an exact source quotation was excluded.')
                 continue
+            if task == 'image' and isinstance(value, dict) and 'observed_on' in value:
+                # Dates cannot be established from image pixels. Exclude only this
+                # unsupported metadata; keep all other typed validation strict.
+                value = {key: val for key, val in value.items() if key != 'observed_on'}
+                if 'An observation date supplied by the photo provider was excluded.' not in warnings:
+                    warnings.append('An observation date supplied by the photo provider was excluded.')
             facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
         result = {'facts': facts, 'warnings': warnings + extra[:16]}
         if quality:
