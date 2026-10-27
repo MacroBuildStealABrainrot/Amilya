@@ -328,6 +328,30 @@ def rate_limit_retry_delay(response):
     return max(.25, delay)
 
 
+def image_gateway_retry_delay(response):
+    """Retry one explicit gateway failure without evidence of generation.
+
+    Do not retry ambiguous transport failures, successful response envelopes,
+    quota failures, or responses carrying generated output or usage.
+    """
+    if response.status_code not in {502, 503, 504}:
+        return None
+    try:
+        body = parse_provider_json(response.text)
+    except (ValueError, UnicodeError):
+        return None
+    if (not isinstance(body, dict) or 'error' not in body
+            or any(key in body for key in ('usage', 'choices', 'id'))
+            or quota_rejection(response) is not False):
+        return None
+    if response.headers.get('Retry-After') is None:
+        return 1.0 + secrets.randbelow(251) / 1000
+    delay = retry_after_delay(response)
+    if delay is None or delay > MAX_RATE_LIMIT_WAIT_SECONDS:
+        return None
+    return max(.25, delay)
+
+
 async def rate_limit_backoff(seconds):
     await asyncio.sleep(seconds)
 
@@ -457,10 +481,12 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 response = await client.post(settings.openrouter_base_url.rstrip('/') + '/chat/completions',
                     headers={'Authorization': 'Bearer ' + settings.openrouter_api_key, 'HTTP-Referer': settings.public_base_url, 'X-Title': 'WoundCoPilot'}, json=payload)
                 delay = rate_limit_retry_delay(response) if attempt == 0 else None
+                if delay is None and attempt == 0 and task == 'image':
+                    delay = image_gateway_retry_delay(response)
                 if delay is None:
                     break
                 prior_attempts.append({'provider': 'openrouter', 'model': model, 'status': 'failed',
-                                       'error_code': '429', 'normalized_micros': 0})
+                                       'error_code': str(response.status_code), 'normalized_micros': 0})
                 await rate_limit_backoff(delay)
             response.raise_for_status()
             raw = parse_provider_json(response.text)
@@ -478,7 +504,7 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
             return raw
     async def perform():
-        if task not in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
+        if task not in {'image', 'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
             return await perform_attempts()
         # A report has at most four stages. Bound the whole network portion of
         # each stage, including the single 429 retry/backoff, rather than only
@@ -487,7 +513,7 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
             return await asyncio.wait_for(perform_attempts(),
                 timeout=min(REPORT_STAGE_TIMEOUT_SECONDS, settings.provider_timeout_seconds))
         except TimeoutError:
-            raise httpx.TimeoutException('The report stage exceeded its bounded wait') from None
+            raise httpx.TimeoutException('The AI stage exceeded its bounded wait') from None
     def measure(raw):
         vendor = raw.get('usage') or {}
         amount, safe = normalized_tokens(model, vendor)
