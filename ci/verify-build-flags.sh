@@ -19,5 +19,6 @@ check "$(ls $APKS/debug/*.apk | head -1)" com.woundcopilot.android false
 check "$(ls $APKS/sandbox/*.apk | head -1)" com.woundcopilot.android.sandbox true
 # Pilot keeps the original recorder until clinical and device compatibility approval.
 check "$(ls $APKS/pilot/*.apk | head -1)" com.woundcopilot.android.pilot false
+check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair false
 [ $fail -eq 0 ] && echo "ALL BUILD-FLAG CHECKS PASSED"
 exit $fail

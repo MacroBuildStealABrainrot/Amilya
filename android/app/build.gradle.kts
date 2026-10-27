@@ -54,6 +54,14 @@ android {
             buildConfigField("boolean", "RETAIN_UNRESOLVED", "false")
             matchingFallbacks += listOf("debug")
         }
+        // Isolated repair verification app: never replaces a recording-bearing install.
+        create("repair") {
+            initWith(getByName("pilot"))
+            applicationIdSuffix = ".repair"
+            versionNameSuffix = "-photo-repair13"
+            buildConfigField("String", "API_BASE_URL", "\"https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
         // production address is refused in code, so a recording can never be sent to the live service.
