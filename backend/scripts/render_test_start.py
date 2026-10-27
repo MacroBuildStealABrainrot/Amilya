@@ -34,6 +34,9 @@ def runtime_environment(source):
             raise ValueError()
     except ValueError:
         raise ConfigurationError('ISOLATED_DATABASE_REQUIRED') from None
+    if not re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]{0,62}', parsed.username):
+        raise ConfigurationError('ISOLATED_DATABASE_ROLE_REQUIRED')
+    env['WCP_DB_RUNTIME_ROLE'] = parsed.username
     if len(env.get('APP_SECRET', '')) < 32:
         raise ConfigurationError('APP_SECRET_REQUIRED')
     port = env.get('PORT', '10000')
