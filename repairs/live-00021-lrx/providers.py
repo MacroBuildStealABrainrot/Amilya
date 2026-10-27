@@ -15,6 +15,8 @@ from email.utils import parsedate_to_datetime
 import io
 import json
 import math
+import logging
+from pydantic import ValidationError
 from pathlib import Path
 import re
 import secrets
@@ -174,9 +176,12 @@ def result_schema(task: str) -> dict:
         for model in (Measurement, Location, Tissue, Pain, Observation):
             names = sorted(name for name in allowed if special.get(name, Observation) is model)
             if names:
+                value_schema = model.model_json_schema()
+                if task == 'image':
+                    value_schema.get('properties', {}).pop('observed_on', None)
                 variants.append({'type': 'object', 'additionalProperties': False,
                     'properties': {'name': {'type': 'string', 'enum': names},
-                                   'value': model.model_json_schema(), 'quote': {'type': 'string'}},
+                                   'value': value_schema, 'quote': {'type': 'string'}},
                     'required': ['name', 'value', 'quote']})
         properties = {'facts': {'type': 'array', 'maxItems': 100, 'items': {'anyOf': variants}},
                       'warnings': {'type': 'array', 'items': {'type': 'string'}}}
@@ -231,6 +236,12 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
             if source is not None and (not quote.strip() or quote not in source):
                 warnings.append('A suggestion without an exact source quotation was excluded.')
                 continue
+            if task == 'image' and isinstance(value, dict) and 'observed_on' in value:
+                # Dates cannot be established from image pixels. Exclude only this
+                # unsupported metadata; keep all other typed validation strict.
+                value = {key: val for key, val in value.items() if key != 'observed_on'}
+                if 'An observation date supplied by the photo provider was excluded.' not in warnings:
+                    warnings.append('An observation date supplied by the photo provider was excluded.')
             facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
         result = {'facts': facts, 'warnings': warnings + extra[:16]}
         if quality:
@@ -260,6 +271,57 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
     if not isinstance(warnings, list) or len(warnings) > 16 or any(not isinstance(x, str) or len(x) > 1000 for x in warnings):
         raise ValueError('Invalid review warnings')
     return {'considerations': values, 'warnings': warnings}
+
+
+# Only documented technical codes may leave this parser. Provider messages,
+# native codes, raw metadata and generated content can contain clinical data.
+PROVIDER_ERROR_STATUS = {
+    'authentication': 401, 'permission_denied': 403, 'payment_required': 402,
+    'rate_limit_exceeded': 429, 'provider_overloaded': 503,
+    'provider_unavailable': 502, 'timeout': 504, 'server': 500,
+    'content_policy_violation': 403, 'refusal': 403,
+    'context_length_exceeded': 400, 'max_tokens_exceeded': 400,
+    'token_limit_exceeded': 400, 'string_too_long': 400,
+    'invalid_request': 400, 'invalid_prompt': 400, 'not_found': 404,
+    'precondition_failed': 400, 'payload_too_large': 413, 'unprocessable': 422,
+    'invalid_image': 400, 'image_too_large': 400, 'image_too_small': 400,
+    'unsupported_image_format': 400, 'image_not_found': 404,
+    'image_download_failed': 400, 'unmapped': 502,
+}
+
+
+def provider_error_response(response, raw):
+    """Normalize top-level/choice errors without retaining their sensitive body.
+
+    HTTP 200 does not prove generation succeeded. Never retry an error envelope:
+    partial generation and vendor cost may be unknown.
+    """
+    if not isinstance(raw, dict):
+        return None
+    info = raw.get('error')
+    if info is None:
+        choices = raw.get('choices')
+        if isinstance(choices, list):
+            info = next((choice['error'] for choice in choices
+                         if isinstance(choice, dict) and choice.get('error') is not None), None)
+    if info is None:
+        return None
+    metadata = info.get('metadata') if isinstance(info, dict) else None
+    category = metadata.get('error_type') if isinstance(metadata, dict) else None
+    if not isinstance(category, str) or category not in PROVIDER_ERROR_STATUS:
+        category = 'unknown'
+    code = info.get('code') if isinstance(info, dict) else None
+    if isinstance(code, str) and code.isascii() and code.isdigit() and len(code) <= 3:
+        code = int(code)
+    if category in PROVIDER_ERROR_STATUS:
+        code = PROVIDER_ERROR_STATUS[category]
+    elif type(code) is not int or not 400 <= code <= 599:
+        code = 502
+    delay = retry_after_delay(response)
+    return httpx.Response(code, request=response.request,
+        extensions={'wcp_transport_status': response.status_code, 'wcp_error_type': category},
+        headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
+        json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
 
 
 def quota_rejection(response):
@@ -356,6 +418,54 @@ async def rate_limit_backoff(seconds):
     await asyncio.sleep(seconds)
 
 
+# Only fixed application/schema labels may leave the validation boundary.
+logger = logging.getLogger('wcp.providers')
+_VALIDATION_CODES = {
+    'Incomplete output': 'OUTPUT_CUT_OFF', 'Non-clinical response': 'TOOL_OR_REFUSAL',
+    'Expected object': 'NOT_OBJECT', 'Invalid facts': 'FACTS_SHAPE',
+    'Invalid warnings': 'WARNINGS_SHAPE', 'Invalid finding': 'FINDING_SHAPE',
+    'Unknown field': 'UNKNOWN_FIELD_NAME', 'Invalid supporting quote': 'QUOTE_INVALID',
+    'Missing or invalid photo quality decision': 'QUALITY_MISSING',
+    'Unknown photo quality decision': 'QUALITY_UNKNOWN',
+    'Contradictory photo quality decision': 'QUALITY_CONTRADICTORY',
+    'Duplicate provider JSON field': 'JSON_DUPLICATE_KEY',
+    'Non-finite provider JSON value': 'JSON_NONFINITE',
+}
+_VALIDATION_FIELDS = frozenset({
+    'text', 'present', 'observed_on', 'length_cm', 'width_cm', 'depth_cm',
+    'site', 'laterality', 'granulation', 'slough', 'eschar', 'epithelial',
+    'score_0_10', 'facts', 'warnings', 'quality', 'status', 'reason', 'name',
+    'value', 'quote',
+})
+_VALIDATION_TYPES = frozenset({
+    'extra_forbidden', 'missing', 'value_error', 'bool_type', 'date_parsing',
+    'date_from_datetime_parsing', 'date_from_datetime_inexact', 'date_type',
+    'string_type', 'string_too_long', 'string_too_short', 'literal_error',
+    'float_type', 'float_parsing', 'finite_number', 'greater_than',
+    'greater_than_equal', 'less_than', 'less_than_equal', 'model_type',
+    'dict_type', 'list_type',
+})
+
+
+def validation_category(exc):
+    """No input values, arbitrary keys, exception messages or clinical text."""
+    if isinstance(exc, ValidationError):
+        errors = exc.errors(include_url=False, include_input=False, include_context=False)
+        if not errors: return 'VALUE:unknown:-'
+        error = errors[0]
+        kind = error.get('type')
+        kind = kind if kind in _VALIDATION_TYPES else 'unknown'
+        location = '.'.join(part if isinstance(part, str) and part in _VALIDATION_FIELDS
+                            else 'index' if type(part) is int else 'x'
+                            for part in error.get('loc', ()))[:80]
+        return 'VALUE:' + kind + ':' + (location or '-')
+    if isinstance(exc, json.JSONDecodeError): return 'JSON_PARSE'
+    if isinstance(exc, KeyError): return 'MISSING_KEY'
+    if isinstance(exc, TypeError): return 'TYPE_ERROR'
+    if isinstance(exc, IndexError): return 'INDEX_ERROR'
+    return _VALIDATION_CODES.get(str(exc), 'VALUE_OTHER')
+
+
 async def metered_call(*, user: User, encounter_id: str, task: str, provider: str, model: str, payload_hash: str,
                        estimate: int, perform, measure, validate, prior_attempts=None) -> dict:
     privacy_guard(provider)
@@ -428,11 +538,32 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         elif code == 400:
             reason = 'request_incompatible'
             detail = 'The AI provider rejected the request format or model parameters. The owner must review the integration; manual charting remains available.'
+        category = exc.response.extensions.get('wcp_error_type', 'unknown')
+        if category not in PROVIDER_ERROR_STATUS:
+            category = 'unknown'
+        if category in {'content_policy_violation', 'refusal'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider declined this assessment. No findings were accepted. Manual charting remains available.'
+        elif category in {'invalid_image', 'image_too_large', 'image_too_small', 'unsupported_image_format', 'image_not_found', 'image_download_failed'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider could not read the uploaded image. No findings were accepted. Manual charting remains available.'
+        elif category in {'context_length_exceeded', 'max_tokens_exceeded', 'token_limit_exceeded', 'string_too_long'}:
+            reason = 'output_limit'
+            detail = 'The AI provider reached a token or length limit. No partial findings were accepted. Manual charting remains available.'
+        elif category == 'timeout':
+            reason = 'provider_timeout'
+        logging.getLogger('wcp.providers').warning('provider_request_failed transport=%d status=%d category=%s',
+            exc.response.extensions.get('wcp_transport_status', code), code, category)
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
-                              headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status'])})
-    except (ValueError, KeyError, TypeError, IndexError):
-        error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.')
+                              headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status']),
+                                       'X-WCP-Provider-Error': category, **({'X-WCP-Retryable': 'false'} if exc.response.extensions.get('wcp_transport_status') == 200 else {})})
+    except (ValueError, KeyError, TypeError, IndexError) as exc:
+        category = validation_category(exc)
+        usage['failure_reason'] = 'invalid_response'
+        logger.warning('provider_validation_failed category=%s', category)
+        error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.',
+                              headers={'X-WCP-Validation': category})
     except httpx.HTTPError:
         error = HTTPException(503, 'The provider connection failed. Your source remains available for retry.')
     except HTTPException as exc: error = exc
@@ -490,17 +621,8 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 await rate_limit_backoff(delay)
             response.raise_for_status()
             raw = parse_provider_json(response.text)
-            # Some gateways return HTTP 200 with an error object. Normalize it
-            # through the same safe failure/waived-charge path as HTTP failures.
-            if isinstance(raw, dict) and 'error' in raw:
-                info = raw['error']
-                code = info.get('code') if isinstance(info, dict) else None
-                if isinstance(code, str) and code.isascii() and code.isdigit(): code = int(code)
-                if type(code) is not int or not 400 <= code <= 599: code = 502
-                delay = retry_after_delay(response)
-                synthetic = httpx.Response(code, request=response.request, extensions={'wcp_transport_status': response.status_code},
-                    headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
-                    json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+            synthetic = provider_error_response(response, raw)
+            if synthetic is not None:
                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
             return raw
     async def perform():
@@ -538,6 +660,8 @@ async def routed(task, content, model=None, **kwargs):
     route = select_route(TASK_FAMILIES.get(task, task), content)
     # Structured evidence needs room beyond the old 1,800-token cap.
     minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
+    if task in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
+        minimum = max(minimum, 8000)
     if task in {'extract', 'document'}:
         minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
     elif task == 'image':
@@ -843,3 +967,4 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+

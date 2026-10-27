@@ -316,6 +316,57 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
     return {'considerations': values, 'warnings': warnings}
 
 
+# Only documented technical codes may leave this parser. Provider messages,
+# native codes, raw metadata and generated content can contain clinical data.
+PROVIDER_ERROR_STATUS = {
+    'authentication': 401, 'permission_denied': 403, 'payment_required': 402,
+    'rate_limit_exceeded': 429, 'provider_overloaded': 503,
+    'provider_unavailable': 502, 'timeout': 504, 'server': 500,
+    'content_policy_violation': 403, 'refusal': 403,
+    'context_length_exceeded': 400, 'max_tokens_exceeded': 400,
+    'token_limit_exceeded': 400, 'string_too_long': 400,
+    'invalid_request': 400, 'invalid_prompt': 400, 'not_found': 404,
+    'precondition_failed': 400, 'payload_too_large': 413, 'unprocessable': 422,
+    'invalid_image': 400, 'image_too_large': 400, 'image_too_small': 400,
+    'unsupported_image_format': 400, 'image_not_found': 404,
+    'image_download_failed': 400, 'unmapped': 502,
+}
+
+
+def provider_error_response(response, raw):
+    """Normalize top-level/choice errors without retaining their sensitive body.
+
+    HTTP 200 does not prove generation succeeded. Never retry an error envelope:
+    partial generation and vendor cost may be unknown.
+    """
+    if not isinstance(raw, dict):
+        return None
+    info = raw.get('error')
+    if info is None:
+        choices = raw.get('choices')
+        if isinstance(choices, list):
+            info = next((choice['error'] for choice in choices
+                         if isinstance(choice, dict) and choice.get('error') is not None), None)
+    if info is None:
+        return None
+    metadata = info.get('metadata') if isinstance(info, dict) else None
+    category = metadata.get('error_type') if isinstance(metadata, dict) else None
+    if not isinstance(category, str) or category not in PROVIDER_ERROR_STATUS:
+        category = 'unknown'
+    code = info.get('code') if isinstance(info, dict) else None
+    if isinstance(code, str) and code.isascii() and code.isdigit() and len(code) <= 3:
+        code = int(code)
+    if category in PROVIDER_ERROR_STATUS:
+        code = PROVIDER_ERROR_STATUS[category]
+    elif type(code) is not int or not 400 <= code <= 599:
+        code = 502
+    delay = retry_after_delay(response)
+    return httpx.Response(code, request=response.request,
+        extensions={'wcp_transport_status': response.status_code, 'wcp_error_type': category},
+        headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
+        json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+
+
 def quota_rejection(response):
     """Inspect a bounded error body transiently; never return/log its contents."""
     if len(response.content) > 16384:
@@ -536,9 +587,26 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         elif code == 400:
             reason = 'request_incompatible'
             detail = 'The AI provider rejected the request format or model parameters. The owner must review the integration; manual charting remains available.'
+        category = exc.response.extensions.get('wcp_error_type', 'unknown')
+        if category not in PROVIDER_ERROR_STATUS:
+            category = 'unknown'
+        if category in {'content_policy_violation', 'refusal'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider declined this assessment. No findings were accepted. Manual charting remains available.'
+        elif category in {'invalid_image', 'image_too_large', 'image_too_small', 'unsupported_image_format', 'image_not_found', 'image_download_failed'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider could not read the uploaded image. No findings were accepted. Manual charting remains available.'
+        elif category in {'context_length_exceeded', 'max_tokens_exceeded', 'token_limit_exceeded', 'string_too_long'}:
+            reason = 'output_limit'
+            detail = 'The AI provider reached a token or length limit. No partial findings were accepted. Manual charting remains available.'
+        elif category == 'timeout':
+            reason = 'provider_timeout'
+        logging.getLogger('wcp.providers').warning('provider_request_failed transport=%d status=%d category=%s',
+            exc.response.extensions.get('wcp_transport_status', code), code, category)
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
-                              headers=retry_after_headers(usage))
+                              headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status']),
+                                       'X-WCP-Provider-Error': category, **({'X-WCP-Retryable': 'false'} if exc.response.extensions.get('wcp_transport_status') == 200 else {})})
     except OutputLimitError:
         usage['failure_reason'] = 'output_limit'
         error = HTTPException(502, 'The AI response reached its output limit before completion. No partial findings were accepted. The source is preserved; the administrator must review the output allowance.')
@@ -586,7 +654,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         ledger_db.commit()
     if error:
         if usage.get('failure_reason'):
-            error.headers = {**(error.headers or {}), **photo_error_headers(usage, task == 'image' and resumed_attempt >= 3)}
+            error.headers = {**photo_error_headers(usage, task == 'image' and resumed_attempt >= 3), **(error.headers or {})}
         raise error
     return result
 
@@ -650,17 +718,8 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 await rate_limit_backoff(delay)
             response.raise_for_status()
             raw = parse_provider_json(response.text)
-            # Some gateways return HTTP 200 with an error object. Normalize it
-            # through the same safe failure/waived-charge path as HTTP failures.
-            if isinstance(raw, dict) and 'error' in raw:
-                info = raw['error']
-                code = info.get('code') if isinstance(info, dict) else None
-                if isinstance(code, str) and code.isascii() and code.isdigit(): code = int(code)
-                if type(code) is not int or not 400 <= code <= 599: code = 502
-                delay = retry_after_delay(response)
-                synthetic = httpx.Response(code, request=response.request, extensions={'wcp_transport_status':response.status_code},
-                    headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
-                    json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+            synthetic = provider_error_response(response, raw)
+            if synthetic is not None:
                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
             return raw
     async def perform():
@@ -1142,4 +1201,5 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+
 
