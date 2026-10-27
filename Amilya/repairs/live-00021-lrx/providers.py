@@ -557,7 +557,8 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
                               headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status']),
-                                       'X-WCP-Provider-Error': category, **({'X-WCP-Retryable': 'false'} if exc.response.extensions.get('wcp_transport_status') == 200 else {})})
+                                       **({'X-WCP-Provider-Error': category} if task == 'image' or category != 'unknown' else {}),
+                                       **({'X-WCP-Retryable': 'false'} if task == 'image' and exc.response.extensions.get('wcp_transport_status') == 200 else {})})
     except (ValueError, KeyError, TypeError, IndexError) as exc:
         category = validation_category(exc)
         usage['failure_reason'] = 'invalid_response'

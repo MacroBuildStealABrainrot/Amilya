@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: amilya-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   backend:
@@ -137,3 +137,93 @@ jobs:
           name: amilya-build-evidence
           path: "ci-out/*.log\nci-out/reports/"
           retention-days: 30
+
+  repair-automation-tests:
+    name: Repair deployment safety tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install synthetic-check test dependencies
+        run: python3 -m pip install httpx==0.28.1 Pillow==12.3.0
+      - name: Test zero-traffic deployment and rollback controls
+        run: python3 -m unittest discover -s ci/tests -v
+
+  repair-deploy:
+    name: Repair server deployment
+    needs: [backend, android, repair-automation-tests]
+    if: github.event_name == 'push' && github.repository == 'MacroBuildStealABrainrot/Amilya' && github.ref == 'refs/heads/fix/server-diagnosis-20261025'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment: amilya-repair
+    permissions:
+      contents: read
+      id-token: write
+    # Never cancel a job while it could be restoring the service template.
+    concurrency:
+      group: amilya-repair-cloud
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Reject superseded commit before cloud authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current="$(gh api repos/MacroBuildStealABrainrot/Amilya/branches/fix/server-diagnosis-20261025 --jq .commit.sha)"
+          test "$current" = "$GITHUB_SHA" || { echo "::error::Commit was superseded; no cloud deployment attempted."; exit 1; }
+      - name: Check one-time connection configuration
+        id: connection
+        env:
+          AMILYA_GCP_WIF_PROVIDER: ${{ vars.AMILYA_GCP_WIF_PROVIDER }}
+          AMILYA_GCP_DEPLOY_ACCOUNT: ${{ vars.AMILYA_GCP_DEPLOY_ACCOUNT }}
+          AMILYA_REPAIR_DEPLOY_ENABLED: ${{ vars.AMILYA_REPAIR_DEPLOY_ENABLED }}
+          AMILYA_SMOKE_WORKSPACE_ID: ${{ vars.AMILYA_SMOKE_WORKSPACE_ID }}
+          AMILYA_SMOKE_EMAIL: ${{ secrets.AMILYA_SMOKE_EMAIL }}
+          AMILYA_SMOKE_PASSWORD: ${{ secrets.AMILYA_SMOKE_PASSWORD }}
+        run: python3 ci/repair_connection.py
+      - name: Authenticate with short-lived Google credentials
+        id: cloud_auth
+        if: steps.connection.outputs.ready == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.AMILYA_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.AMILYA_GCP_DEPLOY_ACCOUNT }}
+          project_id: woundcopilot-20260905
+          create_credentials_file: true
+      - name: Set up Google Cloud CLI
+        if: steps.connection.outputs.ready == 'true'
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          project_id: woundcopilot-20260905
+      - name: Install synthetic-check dependencies
+        if: steps.connection.outputs.ready == 'true'
+        run: |
+          python3 -m pip install httpx==0.28.1 Pillow==12.3.0
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng
+          espeak-ng -w "$RUNNER_TEMP/amilya-synthetic.wav" "Synthetic software test only. Pain score is two out of ten. The dressing was changed."
+      - name: Build pinned repair image, test candidate, update repair tag
+        if: steps.connection.outputs.ready == 'true'
+        env:
+          AMILYA_SMOKE_EMAIL: ${{ secrets.AMILYA_SMOKE_EMAIL }}
+          AMILYA_SMOKE_PASSWORD: ${{ secrets.AMILYA_SMOKE_PASSWORD }}
+          AMILYA_SMOKE_WORKSPACE_ID: ${{ vars.AMILYA_SMOKE_WORKSPACE_ID }}
+        run: |
+          export AMILYA_SMOKE_AUDIO="$RUNNER_TEMP/amilya-synthetic.wav"
+          python3 ci/repair_deploy.py --state "$RUNNER_TEMP/amilya-repair-private/state.json"
+      - name: Recover template and previous repair tag if interrupted
+        if: always() && steps.cloud_auth.outcome == 'success'
+        run: python3 ci/repair_deploy.py --recover --state "$RUNNER_TEMP/amilya-repair-private/state.json"
+      - name: Save connection status only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: amilya-repair-connection
+          path: repair-connection-status.json
+          if-no-files-found: ignore
+          retention-days: 7
+
