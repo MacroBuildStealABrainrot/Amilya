@@ -1,0 +1,39 @@
+--- a/server/providers.py
++++ b/server/providers.py
+@@ -404,9 +404,9 @@
+         elif code == 400:
+             reason = 'request_incompatible'
+             detail = 'The AI provider rejected the request format or model parameters. The owner must review the integration; manual charting remains available.'
+-        usage.update({'upstream_status': code, 'failure_reason': reason})
++        usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
+         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
+-                              headers=retry_after_headers(usage))
++                              headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status'])})
+     except (ValueError, KeyError, TypeError, IndexError):
+         error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.')
+     except httpx.HTTPError:
+@@ -472,7 +472,7 @@
+                 if isinstance(code, str) and code.isascii() and code.isdigit(): code = int(code)
+                 if type(code) is not int or not 400 <= code <= 599: code = 502
+                 delay = retry_after_delay(response)
+-                synthetic = httpx.Response(code, request=response.request,
++                synthetic = httpx.Response(code, request=response.request, extensions={'wcp_transport_status': response.status_code},
+                     headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
+                     json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
+@@ -510,8 +510,13 @@
+ 
+ async def routed(task, content, model=None, **kwargs):
+     route = select_route(TASK_FAMILIES.get(task, task), content)
+-    # Completion limits include hidden reasoning; preserve room for report text.
+-    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']])
++    # Structured evidence needs room beyond the old 1,800-token cap.
++    minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
++    if task in {'extract', 'document'}:
++        minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
++    elif task == 'image':
++        minimum = max(minimum, 8000)
++    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), minimum)
+     return await structured(task, content, route['model'], routing=route, **kwargs)
+ 
+ 
