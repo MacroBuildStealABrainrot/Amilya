@@ -1,5 +1,36 @@
 # Isolated Render test hosting — 27 October 2026
 
+## Completed hosting/access update
+
+The test service is now LIVE at https://amilya-repair-test.onrender.com.
+The initial-preparation notes below describe the earlier state; this update
+supersedes their statements that dashboard access or service creation is pending.
+
+- Render's GitHub installation is restricted to Amilya only.
+- Blueprint: exs-dbgh6kbl550s73b5jnjg.
+- Web service: srv-dbgh73o8v5cc73ccufk0, Free plan, Ohio.
+- Deployed code: ec695d22c66507283180d1af1c47ce4d2b43be19.
+- Successful deploy: dep-dbghedc9v7es73aulgpg, 27 October at 17:28 EDT.
+- GitHub run 40585185147 passed Android, backend, and deployment-safety checks.
+  Backend: 854 passed, 1 skipped. The new fresh-Postgres migration test passed.
+  The Google Cloud job performed readiness reporting only; no cloud deployment
+  credentials were configured and its authentication/deploy steps skipped.
+- HTTP 200 verified for /api/v1/health, /api/v1/config, /, and two frontend assets.
+- Clinical data, AI, photo, transcription, billing, and signup remain disabled.
+- The first deployment failed because migrations assumed the Cloud Run wcp_app
+  database role. The Render launcher now supplies its validated managed database
+  user through WCP_DB_RUNTIME_ROLE. Both migrations preserve wcp_app as their
+  default for existing deployments. CI verified upgrade to revision 0008 and
+  the intended function permission on a fresh PostgreSQL database.
+- Render automatically deployed the correction after CI passed; no manual Cloud
+  Shell or redeploy command was required.
+
+This verifies hosting and access only. Provider credentials, an isolated test
+account with owner-managed legal acceptance, synthetic photo/report/transcription
+tests, Samsung hardware validation, a Render-targeted APK, production migration,
+durable production storage, and signing continuity remain unfinished. Existing
+APKs and Google Cloud production were not changed. No real photo was sent.
+
 This is a separate test-hosting setup, not a production migration or a verified
 fix for the Samsung photo failure. The existing Android repair APK still targets
 the Google Cloud repair URL. No APK endpoint, Cloud Run traffic, existing database,
