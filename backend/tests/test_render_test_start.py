@@ -1,6 +1,7 @@
 """The Render test launcher must reject live/unsafe settings before migration."""
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -52,3 +53,31 @@ def test_existing_google_settings_cannot_override_render_origin():
     assert env['PUBLIC_BASE_URL'] == 'https://amilya-repair-test.onrender.com'
     assert '*' not in env['TRUSTED_HOSTS']
     assert env['WOUNDCOPILOT_ENV_FILE'] != '/run/secrets/app.env'
+
+
+def test_private_probe_cannot_enable_public_ai_or_print_child_secrets(monkeypatch, capsys):
+    config = source() | {'AMILYA_RENDER_SYNTHETIC_PROBE': 'photo-report-v1',
+                         'OPENROUTER_API_KEY': 'synthetic-private-key'}
+    monkeypatch.setattr(launcher.os, 'environ', config)
+    calls = []
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        if 'alembic' in args:
+            return SimpleNamespace(returncode=0)
+        return SimpleNamespace(returncode=1,
+            stdout=b'private-key-or-provider-body\nAMILYA_SYNTHETIC_PROBE stage=photo status=FAIL code=HTTP_502\n')
+    class Started(Exception):
+        pass
+    def execute(path, args, env):
+        assert env['PROVIDER_EXECUTION_ENABLED'] == env['CLINICAL_DATA_ENABLED'] == env['BILLING_ENABLED'] == 'false'
+        assert 'server.main:app' in args
+        raise Started()
+    monkeypatch.setattr(launcher.subprocess, 'run', run)
+    monkeypatch.setattr(launcher.os, 'execve', execute)
+    monkeypatch.setattr(launcher.os, 'chdir', lambda *args: None)
+    with pytest.raises(Started):
+        launcher.main()
+    assert len(calls) == 2
+    assert calls[1][1]['timeout'] == 240
+    assert calls[1][1]['env']['PROVIDER_EXECUTION_ENABLED'] == 'false'
+    assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE stage=photo status=FAIL code=HTTP_502\n'

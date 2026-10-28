@@ -1,5 +1,34 @@
 # Isolated Render test hosting — 27 October 2026
 
+## Approved private provider check
+
+The owner approved a separate OpenRouter key named `Amilya Render synthetic test`,
+US$1 total cap, no reset, expiry one day after creation. Email verification
+succeeded and the key was saved directly in the Render service's secret settings;
+it is not in source, chat, artifacts, or these notes. `OPENROUTER_API_KEY` is
+Dashboard-owned and omitted from the Blueprint; later Blueprint syncs preserve it.
+No test key was used to change the existing production provider key.
+
+`AMILYA_RENDER_SYNTHETIC_PROBE=photo-report-v1` opts into a private startup check.
+It runs only on the validated isolated Render service, after migrations, in a
+separate short-lived process. The public app remains provider-disabled. The check
+sends only built-in coloured geometric shapes and fictional visit text through
+the actual image preparation, gateway, validation, extraction, and checked report
+functions. It retains ZDR routing and a bounded timeout. It has no upload or HTTP
+entry point and cannot accept arbitrary source material.
+
+A unique nonclinical marker in the isolated database claims this version before
+any provider request, so restarts cannot repeat it. Local temporary SQLite holds
+only synthetic fixture users and accounting while checking the real gateway. No
+login session, legal acceptance, paid subscription, or patient record is created.
+Only fixed stage/status/error codes are forwarded to deployment logs. The child
+has a 240-second total bound and cannot activate providers in the web process.
+
+This is provider-integration diagnostics, not phone UI certification or proof of
+the original Samsung failure's cause. Record actual deployed results separately.
+There is still no Render-targeted APK, transcription provider key, or production
+migration. Real clinical data, public signup and billing remain disabled.
+
 ## Completed hosting/access update
 
 The test service is now LIVE at https://amilya-repair-test.onrender.com.

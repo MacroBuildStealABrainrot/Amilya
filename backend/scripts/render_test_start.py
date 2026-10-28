@@ -78,6 +78,17 @@ def main():
     if result.returncode:
         print('Render test startup blocked: MIGRATION_FAILED', file=sys.stderr)
         return 1
+    if env.get('AMILYA_RENDER_SYNTHETIC_PROBE'):
+        # A separate process, fixed inputs and a durable once-only claim. Never
+        # activate provider execution in this public HTTP application's settings.
+        try:
+            probe = subprocess.run([sys.executable, str(root / 'scripts/render_synthetic_probe.py')],
+                                   cwd=root, env=env, capture_output=True, timeout=240)
+            for line in probe.stdout.decode('utf-8', errors='replace').splitlines():
+                if re.fullmatch(r'AMILYA_SYNTHETIC_PROBE (?:stage=(?:photo|extract|report) )?status=(?:PASS|FAIL|BLOCKED|ALREADY_CLAIMED)(?: code=[A-Z0-9_]{1,40})?', line):
+                    print(line, flush=True)
+        except (subprocess.TimeoutExpired, OSError):
+            print('AMILYA_SYNTHETIC_PROBE status=FAIL code=TIMEOUT', flush=True)
     os.chdir(root)
     os.execve(sys.executable, [sys.executable, '-m', 'uvicorn', 'server.main:app',
               '--host', '0.0.0.0', '--port', env['PORT'], '--no-access-log',
