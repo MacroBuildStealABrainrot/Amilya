@@ -1,5 +1,40 @@
 # Isolated Render test hosting — 27 October 2026
 
+## Verified provider results and final test configuration
+
+The approved key was created after secure email verification and transferred
+directly to Render without exposing its value. Its total limit is US$1, never
+resets, and it expires 28 October at 20:52 EDT. OpenRouter reported US$0.023
+used after these checks. No new funds or recurring payment was added.
+
+- Photo: PASS on the built-in nonclinical geometric image. The app accepted the
+  structured insufficient-quality response, required a retake and accepted no
+  invented wound findings. This is not validation on a real wound or Samsung UI.
+- Report: PASS on fictional visit text, including the complete report QA pipeline.
+- Extraction: Luna returned HTTP 502; its exact cause remains unproven. A separate
+  once-only check with Sol passed on the same fictional text at 21:22 EDT.
+  No validation rule was weakened or unsupported result accepted.
+- The Sol check ran in deploy `dep-dbgkseou01pc73advje0`, code
+  `2e9ce76745d99017b11f7eb00e48d1536fa9f6f2`.
+- CI 40613486277 passed Android build, unit tests, lint and flag checks,
+  deployment safety, and backend tests: 874 passed, 1 skipped. PostgreSQL
+  migration integration passed. All Google Cloud authentication/deploy steps
+  skipped; the Google Cloud job reported connection readiness only.
+- The test service's Dashboard-owned `MODEL_EXTRACTION` now selects
+  `openai/gpt-6.1-sol`. The diagnostic trigger was cleared after the checks;
+  durable claims also prevent repeats. These omitted Blueprint variables are
+  preserved by subsequent Blueprint syncs.
+- Final configuration deploy `dep-dbgkt1gae00c73co6930` (same checked code)
+  became LIVE at 21:23 EDT. No further diagnostic calls appeared after it.
+
+Public AI, audio, clinical-data use, billing and signup remain disabled. No test
+login or legal acceptance was created. The installed repair APK still points to
+Google Cloud. A Render-connected Android build, authenticated full-app testing,
+transcription setup, Samsung hardware checks and signing continuity remain open.
+The original Samsung photo failure is not certified fixed by these server tests.
+This isolated test setup is not a production migration or a final APK release.
+
+
 ## Approved private provider check
 
 First live provider result (27 October, 21:08 EDT): on commit
