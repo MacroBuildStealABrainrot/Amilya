@@ -14,7 +14,7 @@ from test_providers import gateway, completion, operation_rows
     ('extract','model_extraction','low'), ('document','model_extraction','low'),
     ('quick_draft','model_documentation','medium'), ('quick_qa','model_documentation','medium'),
     ('review','model_review','medium'), ('consult','model_review','medium'),
-    ('image','model_vision','low'), ('challenge','model_challenger','high'),
+    ('image','model_vision','high'), ('challenge','model_challenger','high'),
     ('escalation','model_frontier','high'), ('reconcile','model_frontier','high'),
 ])
 def test_configured_models_are_used_without_changing_effort(gateway, task, setting, effort):
@@ -31,7 +31,7 @@ def test_photo_wire_request_uses_verified_vision_route_and_safe_parameters(gatew
     assess(gateway)
     payload=gateway.http.calls[0]['json']
     assert payload['model']=='openai/gpt-6.1-sol'
-    assert payload['reasoning']['effort']=='low'
+    assert payload['reasoning']['effort']=='high'
     assert payload['provider']=={'zdr':True,'data_collection':'deny','require_parameters':True}
     assert 'temperature' not in payload and 'models' not in payload
     assert payload['messages'][1]['content'][1]['type']=='image_url'
