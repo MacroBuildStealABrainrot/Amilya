@@ -38,3 +38,35 @@ clinical accuracy, phone camera behavior or a successful Samsung assessment.
 Exact generation prompt (built-in ImageGen, no CLI/API key):
 
 > Use case: scientific-educational. Asset type: entirely artificial medical software test image, not a real patient. Generate one photorealistic fictional clinical training photograph showing only an adult lower leg and ankle with a small shallow open skin ulcer. Close-up, wound fills about a quarter of the frame, fully visible sharp focus, even natural clinical lighting, normal perspective, no identifying features. Show a visibly moist red wound bed with a small patch of pale yellow surface material and mildly pink surrounding skin, realistic skin texture, intact visible wound margins. No fresh bleeding, no exposed bone or tendon, no severe injury, no instruments, no dressing covering the wound, no face, no labels, no text, no logo, no watermark, no ruler. Square composition. This is synthetic fictional test data for testing a photo-upload validation workflow; it is not a diagnostic illustration or a real medical record.
+
+## Verified live, October 28, 2026
+
+Functional source `38af71923775de732e58f90a4523d9cfb3a06f6c` passed CI
+`40782157818`: 940 backend tests passed / 1 skipped, Android build/unit/lint and
+build-flag checks passed, and deployment safety tests passed. Google Cloud
+readiness succeeded but authentication, CLI setup and deployment remained skipped.
+
+The automatic source deploy `dep-dbh7qdlckfvc73bgr9cg` became live at 22:55:55 UTC.
+Only after all CI checks, enable the fixed once-only `wound-http-v6` probe and pin
+vision, extraction, documentation and review to the already reviewed Sol model.
+Probe deploy `dep-dbh7s7nb9u1s73e7q5l0` logged all four fixed categories PASS at
+22:59:57 UTC: unsuitable photo, generated wound, extraction, and checked report.
+Owner eligibility logged READY at 23:00:01 UTC; the deployment became live at
+23:00:21 UTC. No output text, image contents, key, password or patient information
+was written into these proof logs. The separate audio-to-report live proof is in
+`RENDER-TRANSCRIPTION.md`.
+
+Clear the probe opt-in after the successful single run. Its durable marker remains
+in place and is not reset or deleted. Cleanup deployment and public capability
+verification are recorded below.
+
+Cleanup deployment `dep-dbh7t8nlk1mc73aofs7g` logged owner READY at 23:01:38 UTC
+and became live at 23:01:53 UTC with the probe disabled. After it was live, HTTP
+checks passed: health 200/ok, config 200 with AI/photo/document/audio enabled,
+anonymous session 401, signup closed, clinical data and billing off, optional
+medical speech off. The synthetic-only allowance still expires at Unix
+1793235000 (October 28, 20:50 Toronto), with the same US$1 total provider cap.
+No key renewal, cap increase or expiry extension was made. No APK was replaced.
+The installed Test14 uses these server changes without reinstalling or deleting
+any recording. A physical Samsung assessment and clinical accuracy remain
+unverified. Normal Google Cloud traffic and its production settings were untouched.
