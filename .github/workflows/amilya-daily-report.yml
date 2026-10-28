@@ -1,0 +1,65 @@
+# Amilya daily report: one short plain-English comment per day on the "Amilya daily report" issue.
+#
+# READ-ONLY BY DESIGN
+#  * Reads GitHub test runs/APKs/PRs, the public health endpoint, and optionally Sentry and Google Cloud.
+#  * Never deploys, never changes Cloud Run traffic, billing, databases or app settings.
+#  * Google Cloud is used only when the repository variables AMILYA_REPORT_WIF_PROVIDER and
+#    AMILYA_REPORT_ACCOUNT exist (read-only identity created by ci/report_bootstrap.sh).
+#    Sentry is used only when the secret SENTRY_AUTH_TOKEN exists. Otherwise those sections say "not connected".
+#  * On pull requests it runs its own tests and prints the report to the run summary without posting.
+name: amilya-daily-report
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 07:00 Toronto in summer, 06:00 in winter
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ci/daily_report.py
+      - ci/tests/test_daily_report.py
+      - .github/workflows/amilya-daily-report.yml
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: read
+  id-token: write
+
+concurrency:
+  group: amilya-daily-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Report script tests
+        run: |
+          python -m pip install -q pytest
+          python -m pytest -q -p no:cacheprovider ci/tests/test_daily_report.py
+      - name: Connect to Google Cloud (read-only)
+        id: gcp
+        if: ${{ vars.AMILYA_REPORT_WIF_PROVIDER != '' && vars.AMILYA_REPORT_ACCOUNT != '' && github.event_name != 'pull_request' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.AMILYA_REPORT_WIF_PROVIDER }}
+          service_account: ${{ vars.AMILYA_REPORT_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: ${{ steps.gcp.outcome == 'success' }}
+      - name: Build and post the report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          AMILYA_REPORT_GCP: ${{ steps.gcp.outcome == 'success' && '1' || '0' }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python ci/daily_report.py --dry-run
+          else
+            python ci/daily_report.py
+          fi
