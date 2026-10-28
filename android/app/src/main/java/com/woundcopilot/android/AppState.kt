@@ -812,6 +812,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         require(editor.isNotBlank()&&editor.length<=60000){"Enter document text within 60,000 characters."}
         require(amendId==null||amendReason.isNotBlank()){"An amendment requires a reason."}
         val before=localRevision
+        if(!demo && editorCaseRevision!=revision) {
+            persistEditor()
+            reloadCase()
+            require(editorCaseRevision==revision) {"The encounter changed after this draft was written. Your text is preserved. Review the updated sources before saving."}
+        }
         val p=obj("text" to editor,"template" to editorTemplate,"expected_revision" to editorCaseRevision,"amends_id" to amendId,"reason" to amendReason.ifBlank{null})
         if(editorTemplate=="custom"){require(customName.trim().length in 1..120 && customInstructions.trim().length in 1..2000){"Enter a custom template name and layout instructions."};p.put("custom_template",obj("name" to customName.trim(),"instructions" to customInstructions.trim()))}
         val d=if(demo){
