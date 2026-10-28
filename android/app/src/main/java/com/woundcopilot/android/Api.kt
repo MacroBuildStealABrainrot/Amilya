@@ -210,6 +210,28 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
     }
 
+    /** The server's short-lived copy of an uploaded photo, or null once it has expired or was never kept. */
+    suspend fun photo(evidenceId:String):ByteArray? = withContext(Dispatchers.IO) { photoBytes(evidenceId,false) }
+
+    private fun photoBytes(evidenceId:String,renewed:Boolean):ByteArray? {
+        val requestCookie=cookie
+        val c=URL(base+"/evidence/${java.net.URLEncoder.encode(evidenceId,"UTF-8")}/photo").openConnection() as HttpURLConnection
+        try {
+            c.requestMethod="GET";c.connectTimeout=20000;c.readTimeout=60000;c.instanceFollowRedirects=false
+            c.setRequestProperty("Accept","image/jpeg");c.setRequestProperty("X-WCP-Client","android")
+            if(requestCookie.isNotBlank())c.setRequestProperty("Cookie",requestCookie)
+            val status=c.responseCode
+            if(status==401 && !renewed && refreshToken.isNotBlank()){
+                c.disconnect()
+                synchronized(renewalLock){if(cookie==requestCookie)execute("/auth/refresh","POST","{}".toByteArray(),"application/json",null,true)}
+                return photoBytes(evidenceId,true)
+            }
+            if(status==404||status==410)return null
+            if(status !in 200..299)throw ApiException(status,"The photo could not be loaded.",c.getHeaderField("X-Request-ID"))
+            return c.inputStream.use{it.readBytes()}
+        } finally { c.disconnect() }
+    }
+
     suspend fun upload(encounter:String,file:File,mime:String,kind:String,key:String,photoReview:JSONObject?=null):JSONObject {
 
         val fields=mutableMapOf("kind" to kind)

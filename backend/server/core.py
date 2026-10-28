@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     ai_stale_release_quiet_seconds: int = 600
     max_audio_mb: int = 25
     max_image_mb: int = 12
+    # Viewable photo copies (see photo_store.py). Off unless a bucket or a local directory is set.
+    photo_store_bucket: str = ''
+    photo_store_dir: str = ''
+    photo_retention_hours: int = 24
     max_document_mb: int = 20
     max_audio_seconds: int = 3600
     max_text_chars: int = 40000

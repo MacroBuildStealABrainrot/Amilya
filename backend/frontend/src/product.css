@@ -185,6 +185,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .evidence-row {padding:22px 0;}
 .evidence-row-head .source-badge {font-size:14px;font-weight:500;}
 .evidence-row-head time {font-size:11px;}
+.kept-photo {display:flex;flex-direction:column;gap:6px;margin:10px 0;width:fit-content;max-width:100%;}
+.kept-photo img {display:block;max-width:min(320px,100%);max-height:320px;object-fit:contain;border-radius:8px;border:1px solid var(--line);}
 .evidence-row>p {font-size:15px;line-height:1.7;}
 .evidence-row .synthetic-photo {max-width:260px;border-radius:3px;}
 .review-section {padding:22px 0 8px;}

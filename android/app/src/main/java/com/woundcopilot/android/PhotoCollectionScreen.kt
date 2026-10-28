@@ -28,15 +28,20 @@ import org.json.JSONObject
             photos.forEachIndexed{index,p->
                 val file=s.localSource(p.str("id"))
                 val bitmap=remember(file?.path){file?.let{BitmapFactory.decodeFile(it.path,BitmapFactory.Options().apply{inSampleSize=8})}?.asImageBitmap()}
+                val source=s.case?.items("evidence").orEmpty().firstOrNull{it.str("id")==p.str("id")}
                 Column(Modifier.width(110.dp).clickable{selected=p.str("id")}){
-                    if(bitmap!=null)Image(bitmap,"Photo ${index+1}",Modifier.size(100.dp))else Text("Photo ${index+1}")
+                    if(bitmap!=null)Image(bitmap,"Photo ${index+1}",Modifier.size(100.dp))
+                    else if(file==null&&keptPhotoExpiry(source)?.isAfter(java.time.OffsetDateTime.now())==true)KeptPhoto(s,source,"Photo ${index+1}",thumbnail=true)
+                    else Text("Photo ${index+1}")
                     Text(p.str("label").ifBlank{"Photo ${index+1}"},style=MaterialTheme.typography.labelMedium)
                 }
             }
         }
         val current=photos.firstOrNull{it.str("id")==selected}?:photos.lastOrNull()
         current?.let{p->
-            val id=p.str("id");s.localSource(id)?.let{LocalMediaPreview(it,"photo")}
+            val id=p.str("id");val local=s.localSource(id)
+            if(local!=null)LocalMediaPreview(local,"photo")
+            else KeptPhoto(s,s.case?.items("evidence").orEmpty().firstOrNull{it.str("id")==id},"Uploaded wound photograph",thumbnail=false)
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
                 TextButton({editing=p;label=p.str("label");group=p.str("group")},enabled=!s.loading){Text("Label / group")}
                 TextButton({val index=photos.indexOf(p);if(index>0){val copy=photos.toMutableList();java.util.Collections.swap(copy,index,index-1);s.arrangePhotos(copy)}},enabled=!s.loading&&photos.indexOf(p)>0){Text("Move earlier")}

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, delete, text
 from sqlalchemy.orm import Session
-from server import clinical
+from server import clinical,photo_store
 from server.clinical_models import Encounter, Evidence, ClinicalFact, FactRevision, ClinicalReview
 from server.db import get_db
 from server.identity import User, current_user, require_csrf
@@ -45,6 +45,7 @@ def remove_photo(encounter_id:str,photo_id:str,user:User=Depends(current_user),d
     if db.get_bind().dialect.name=='postgresql':
         db.execute(text('SELECT public.wcp_erase_work(:id,:workspace,:actor,:photo)'),{'id':encounter_id,'workspace':user.workspace_id,'actor':user.id,'photo':photo_id})
         clinical.timeline(db,user,encounter_id,'photo.erased',photo_id);clinical.finish(db)
+        photo_store.remove(user.workspace_id,[photo_id])
         return {'status':'deleted','case_revision':encounter.revision}
     facts=select(ClinicalFact.id).where(ClinicalFact.evidence_id==photo_id)
     db.execute(delete(FactRevision).where(FactRevision.fact_id.in_(facts)))
@@ -55,4 +56,5 @@ def remove_photo(encounter_id:str,photo_id:str,user:User=Depends(current_user),d
     db.execute(delete(Evidence).where(Evidence.id==photo_id))
     clinical.timeline(db,user,encounter_id,'photo.erased',photo_id)
     clinical.finish(db)
+    photo_store.remove(user.workspace_id,[photo_id])
     return {'status':'deleted','case_revision':encounter.revision,'saved_reports':'Review previously saved or exported wording separately.'}

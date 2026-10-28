@@ -6,20 +6,22 @@ an optimistic encounter revision lock; immutable rows preserve earlier decisions
 """
 from __future__ import annotations
 
+import asyncio
 from collections import Counter, defaultdict
-from datetime import timezone
+from datetime import timedelta, timezone
 from hashlib import sha256
 import json
+import logging
 import re
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from server import providers
+from server import photo_store, providers
 from server.audit import write_audit
 from server.core import settings
 from server.db import get_db, uid, utcnow
@@ -32,6 +34,7 @@ from server.schemas import (AssistantRequest, DocumentCreate, DraftRequest, Enco
                             validated_value)
 
 router = APIRouter(tags=['clinical'])
+log = logging.getLogger(__name__)
 MUTATION = [Depends(require_csrf)]
 VISUAL_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate'}
 SOURCE_LABELS = {'clinician_manual': 'Clinician assessed', 'clinician_statement': 'Clinician stated',
@@ -675,11 +678,21 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
         if segments:
             candidate['locator'] = {'segments': [index for index, segment in enumerate(segments)
                                                  if isinstance(segment, dict) and candidate.get('quote') and candidate['quote'] in str(segment.get('text', ''))]}
+    evidence_id, retained = uid(), {'raw_media_retained': False}
+    # Stored before the revision lock so no row stays locked across a network call; an orphaned copy simply expires.
+    if kind == 'photo' and photo_store.enabled():
+        try:
+            await asyncio.to_thread(photo_store.save, user.workspace_id, evidence_id, providers.image_payload(data))
+            retained = {'raw_media_retained': True,
+                        'photo_expires_at': iso(utcnow() + timedelta(seconds=photo_store.retention_seconds()))}
+        except Exception:
+            log.warning('photo copy could not be stored', exc_info=True)
+            warnings.append('The photo itself could not be kept for viewing; its findings were saved.')
     lock_case(db, encounter, expected)
-    evidence = Evidence(id=uid(), workspace_id=user.workspace_id, encounter_id=encounter_id, wound_id=target_wound,
+    evidence = Evidence(id=evidence_id, workspace_id=user.workspace_id, encounter_id=encounter_id, wound_id=target_wound,
                         kind=kind, text=text, created_by=user.id, request_key=key, request_hash=payload_hash,
                         metadata_json={'filename': filename, 'mime': mime, 'bytes': len(data), 'media_hash': media_hash,
-                                       'raw_media_retained': False, 'consent': consent, 'duration_seconds': duration_seconds,
+                                       **retained, 'consent': consent, 'duration_seconds': duration_seconds,
                                        'segments': segments, 'source_text_hash': content_hash(text) if text is not None else None,
                                        **({'original_transcript': result['original_text']} if kind == 'audio' and isinstance(result.get('original_text'), str) else {}),
                                        **({'photo_quality': automatic_quality} if automatic_quality is not None else {}),
@@ -692,6 +705,18 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
     with diagnostics.measure('evidence_save'):
         finish(db)
     return source_response(db, encounter, evidence)
+
+
+@router.get('/evidence/{evidence_id}/photo')
+def evidence_photo(evidence_id: str, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    evidence = owned(db, Evidence, evidence_id, user)
+    if evidence.kind != 'photo' or not evidence.metadata_json.get('raw_media_retained'):
+        raise HTTPException(404, 'No viewable photo is kept for this source')
+    image = photo_store.load(user.workspace_id, evidence.id) if photo_store.enabled() else None
+    if image is None:
+        raise HTTPException(410, f'This photo was deleted after its {settings.photo_retention_hours}-hour viewing period. Its findings remain.')
+    return Response(image, media_type='image/jpeg',
+                    headers={'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'})
 
 
 @router.post('/facts/{fact_id}/review', dependencies=MUTATION)

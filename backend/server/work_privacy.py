@@ -12,6 +12,7 @@ from server.provider_models import ProviderResult
 from server.billing_models import UsageOperation
 from server.transfer_models import ReportTransfer
 from server.audit import write_audit
+from server import photo_store
 
 router=APIRouter(tags=['work privacy'])
 RECOVERY_DAYS=7
@@ -52,6 +53,7 @@ def erase_work(db,row):
     identifier=row.id
     if db.scalar(select(UsageOperation.id).where(UsageOperation.encounter_id==identifier,UsageOperation.status=='reserved').limit(1)):
         raise HTTPException(409,'This work is still processing. Wait for it to finish before deleting.')
+    photo_store.remove(row.workspace_id,list(db.scalars(select(Evidence.id).where(Evidence.encounter_id==identifier,Evidence.kind=='photo'))))
     transfers=affected_transfers(db,row)
     if db.get_bind().dialect.name=='postgresql':
         db.execute(text("SELECT set_config('wcp.erasure_transfers',:ids,true)"),{'ids':','.join(transfers)})
