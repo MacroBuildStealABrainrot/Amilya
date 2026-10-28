@@ -1,179 +1,126 @@
-# Isolated Render test hosting — 27 October 2026
+# Isolated Render test hosting — verified handoff
 
-## Verified provider results and final test configuration
+This is a separate synthetic test environment. Production Cloud Run, existing
+apps, recordings, billing and clinical-data permissions were preserved.
 
-The approved key was created after secure email verification and transferred
-directly to Render without exposing its value. Its total limit is US$1, never
-resets, and it expires 28 October at 20:52 EDT. OpenRouter reported US$0.023
-used after these checks. No new funds or recurring payment was added.
+## Current resources
 
-- Photo: PASS on the built-in nonclinical geometric image. The app accepted the
-  structured insufficient-quality response, required a retake and accepted no
-  invented wound findings. This is not validation on a real wound or Samsung UI.
-- Report: PASS on fictional visit text, including the complete report QA pipeline.
-- Extraction: Luna returned HTTP 502; its exact cause remains unproven. A separate
-  once-only check with Sol passed on the same fictional text at 21:22 EDT.
-  No validation rule was weakened or unsupported result accepted.
-- The Sol check ran in deploy `dep-dbgkseou01pc73advje0`, code
-  `2e9ce76745d99017b11f7eb00e48d1536fa9f6f2`.
-- CI 40613486277 passed Android build, unit tests, lint and flag checks,
-  deployment safety, and backend tests: 874 passed, 1 skipped. PostgreSQL
-  migration integration passed. All Google Cloud authentication/deploy steps
-  skipped; the Google Cloud job reported connection readiness only.
-- The test service's Dashboard-owned `MODEL_EXTRACTION` now selects
-  `openai/gpt-6.1-sol`. The diagnostic trigger was cleared after the checks;
-  durable claims also prevent repeats. These omitted Blueprint variables are
-  preserved by subsequent Blueprint syncs.
-- Final configuration deploy `dep-dbgkt1gae00c73co6930` (same checked code)
-  became LIVE at 21:23 EDT. No further diagnostic calls appeared after it.
+- Owner-confirmed workspace: hazem's workspace, `tea-dbgcgn59fdbs73ddfahg`.
+- GitHub installation is restricted to Amilya only.
+- Blueprint: `exs-dbgh6kbl550s73b5jnjg`.
+- Web service: `srv-dbgh73o8v5cc73ccufk0`, Free, Ohio.
+- URL: https://amilya-repair-test.onrender.com.
+- Live backend code last verified: `2e9ce76745d99017b11f7eb00e48d1536fa9f6f2`.
+- Final settings deploy: `dep-dbgkt1gae00c73co6930`, LIVE.
+- Auto-deploy waits for GitHub checks to pass. Root directory: `backend`.
+- Database: `amilya-repair-test-db`, Free PostgreSQL 16, Ohio,
+  `dpg-dbgcjuu7bikc73fn7v30-a`, database `amilya_repair_test_db`.
+  Public database IP allowlist remains empty. Render resolves the internal
+  connection string through Blueprint references.
+- The free database expires 26 November 2026 and has no backups. The free web
+  service sleeps after inactivity and has ephemeral local storage. Neither is
+  prepared for nursing production or irreplaceable records.
 
-Public AI, audio, clinical-data use, billing and signup remain disabled. No test
-login or legal acceptance was created. The installed repair APK still points to
-Google Cloud. A Render-connected Android build, authenticated full-app testing,
-transcription setup, Samsung hardware checks and signing continuity remain open.
-The original Samsung photo failure is not certified fixed by these server tests.
-This isolated test setup is not a production migration or a final APK release.
+Public AI, audio, signup, billing and clinical-data processing remain disabled.
+No Render app account, login session or legal acceptance was created.
+The diagnostic trigger was cleared after the fixed-input checks.
+Dashboard-owned `MODEL_EXTRACTION` selects `openai/gpt-6.1-sol`.
 
+## Approved provider key
 
-## Approved private provider check
+The owner approved `Amilya Render synthetic test`: US$1 total cap, no reset,
+expiry one day after creation (28 October, 20:52 EDT). Secure email verification
+succeeded; the key was transferred directly to Render. Its value was not placed
+in source, chat, artifacts or these notes. OpenRouter reported US$0.023 used
+after the tests. No purchase, recurring payment or production key change occurred.
 
-First live provider result (27 October, 21:08 EDT): on commit
-`bb15ff4d3872c2d0c108ea91213dd165730fd7ea`, the fixed nonclinical photo passed
-(no invented wound findings, retake required), and the complete checked report
-passed. Separate extraction using Luna returned HTTP 502. Its precise cause is
-not established. CI 40612219037 passed, including 871 backend tests and Android.
-Render deploy `dep-dbgklm142hec73br8llg` became live. This does not certify the
-installed Samsung APK, which still connects to Google Cloud.
+`OPENROUTER_API_KEY`, `MODEL_EXTRACTION` and the diagnostic opt-in are managed
+in Render settings and omitted from the Blueprint. Blueprint syncs preserve
+omitted environment variables. Do not commit their secret values.
 
-`AMILYA_RENDER_SYNTHETIC_PROBE=extract-sol-v2` selects one separate, once-only
-extraction check using the already-reviewed Sol model and the same fictional text.
-It does not repeat photo/report, change production defaults or relax validation.
-It stays under the same approved US$1 total key cap. This checks a practical model
-alternative; it is not a claim to have identified the Luna failure's root cause.
+## Actual provider integration results
 
-The owner approved a separate OpenRouter key named `Amilya Render synthetic test`,
-US$1 total cap, no reset, expiry one day after creation. Email verification
-succeeded and the key was saved directly in the Render service's secret settings;
-it is not in source, chat, artifacts, or these notes. `OPENROUTER_API_KEY` is
-Dashboard-owned and omitted from the Blueprint; later Blueprint syncs preserve it.
-No test key was used to change the existing production provider key.
+| Check | Actual result |
+| --- | --- |
+| Nonclinical geometric image, Sol | PASS: insufficient quality, retake required, no invented wound findings |
+| Fictional visit report, Sol | PASS including the complete report QA pipeline |
+| Fictional text extraction, Luna | HTTP 502; precise cause remains unproven |
+| Same fictional text extraction, Sol | PASS in a separate once-only check |
 
-`AMILYA_RENDER_SYNTHETIC_PROBE=photo-report-v1` opts into a private startup check.
-It runs only on the validated isolated Render service, after migrations, in a
-separate short-lived process. The public app remains provider-disabled. The check
-sends only built-in coloured geometric shapes and fictional visit text through
-the actual image preparation, gateway, validation, extraction, and checked report
-functions. It retains ZDR routing and a bounded timeout. It has no upload or HTTP
-entry point and cannot accept arbitrary source material.
+No patient photo or record was sent for these checks. A non-wound photo pass
+does not establish sufficient-quality wound assessment or Samsung UI behavior.
+No validation rule was relaxed and no unsupported output was accepted.
 
-A unique nonclinical marker in the isolated database claims this version before
-any provider request, so restarts cannot repeat it. Local temporary SQLite holds
-only synthetic fixture users and accounting while checking the real gateway. No
-login session, legal acceptance, paid subscription, or patient record is created.
-Only fixed stage/status/error codes are forwarded to deployment logs. The child
-has a 240-second total bound and cannot activate providers in the web process.
+Private checks run in a bounded child process after validating the dedicated
+Render context and database. They expose no HTTP or upload entry point and use
+only built-in shapes and fictional text through the real gateway and validators.
+The web process remains provider-disabled. A unique durable marker claims each
+probe version before a request, preventing restart repeats. Temporary SQLite
+contains only synthetic fixture users/accounting; no paid subscription, login
+session or legal acceptance is fabricated. Only fixed technical result codes
+reach deployment logs. The child has a 240-second overall bound.
 
-This is provider-integration diagnostics, not phone UI certification or proof of
-the original Samsung failure's cause. Record actual deployed results separately.
-There is still no Render-targeted APK, transcription provider key, or production
-migration. Real clinical data, public signup and billing remain disabled.
+First probe code: `bb15ff4d3872c2d0c108ea91213dd165730fd7ea`,
+deploy `dep-dbgklm142hec73br8llg`, CI 40612219037 (871 backend tests passed).
+Sol extraction check: code `2e9ce76745d99017b11f7eb00e48d1536fa9f6f2`,
+deploy `dep-dbgkseou01pc73advje0`, CI 40613486277 (874 backend tests passed).
+The first deployment of the extraction check reused the old selection and
+skipped as already claimed; the corrected explicit Render setting ran and passed.
+The opt-in was then cleared and the tested Sol extraction selection saved.
 
-## Completed hosting/access update
+## Android candidate now prepared
 
-The test service is now LIVE at https://amilya-repair-test.onrender.com.
-The initial-preparation notes below describe the earlier state; this update
-supersedes their statements that dashboard access or service creation is pending.
+[Render Android Test14 handoff](RENDER-ANDROID-TEST14.md) records the separate APK,
+signature, checksums and exact endpoint checks.
 
-- Render's GitHub installation is restricted to Amilya only.
-- Blueprint: exs-dbgh6kbl550s73b5jnjg.
-- Web service: srv-dbgh73o8v5cc73ccufk0, Free plan, Ohio.
-- Deployed code: ec695d22c66507283180d1af1c47ce4d2b43be19.
-- Successful deploy: dep-dbghedc9v7es73aulgpg, 27 October at 17:28 EDT.
-- GitHub run 40585185147 passed Android, backend, and deployment-safety checks.
-  Backend: 854 passed, 1 skipped. The new fresh-Postgres migration test passed.
-  The Google Cloud job performed readiness reporting only; no cloud deployment
-  credentials were configured and its authentication/deploy steps skipped.
-- HTTP 200 verified for /api/v1/health, /api/v1/config, /, and two frontend assets.
-- Clinical data, AI, photo, transcription, billing, and signup remain disabled.
-- The first deployment failed because migrations assumed the Cloud Run wcp_app
-  database role. The Render launcher now supplies its validated managed database
-  user through WCP_DB_RUNTIME_ROLE. Both migrations preserve wcp_app as their
-  default for existing deployments. CI verified upgrade to revision 0008 and
-  the intended function permission on a fresh PostgreSQL database.
-- Render automatically deployed the correction after CI passed; no manual Cloud
-  Shell or redeploy command was required.
+- File: `Amilya-Render-Test14.apk`.
+- Source: `b5c33932c062e9cad75f7ecb88eab2aea92492c8`.
+- Full CI: 40618434623 passed Android and backend checks (874 passed, 1 skipped).
+- Label: Amilya Render Test.
+- Package: `com.woundcopilot.android.rendertest`.
+- API: `https://amilya-repair-test.onrender.com/api/v1`.
+- It installs beside existing apps and retains the original recorder. Crash-safe
+  recorder service and Wear remote control are disabled in this candidate.
+- It contains no provider key or app credential. No phone installation occurred.
+- SHA-256: `a37a8cb36047a1062e8446b25ba84b5b1d4c0a7ed009bf0773d605dccbe5fd82`.
 
-This verifies hosting and access only. Provider credentials, an isolated test
-account with owner-managed legal acceptance, synthetic photo/report/transcription
-tests, Samsung hardware validation, a Render-targeted APK, production migration,
-durable production storage, and signing continuity remain unfinished. Existing
-APKs and Google Cloud production were not changed. No real photo was sent.
+The existing Repair Test13 APK still targets the Google Cloud repair URL.
+Test14 is a connection candidate, not an in-place upgrade, production-final
+release or certification that the original Samsung photo failure is fixed.
 
-This is a separate test-hosting setup, not a production migration or a verified
-fix for the Samsung photo failure. The existing Android repair APK still targets
-the Google Cloud repair URL. No APK endpoint, Cloud Run traffic, existing database,
-recording, billing setting, or clinical-data permission is changed here.
+## Remaining gates
 
-## Account and resource verified
+1. Prepare an isolated test account and obtain the owner's actual acceptance of
+   the app's current policies. Signup is closed; no policy acceptance was forged.
+   The served policies are marked drafts requiring review before commercial use.
+2. Configure bounded, authenticated, synthetic-only provider access. The current
+   launcher deliberately rejects public provider execution; the private probe
+   did not remove that gate. Provider funding does not create app entitlement.
+3. Test authenticated upload, extraction and report routes, then the phone's
+   complete flow with synthetic data. Transcription still lacks a provider key.
+4. Resolve production signing continuity and physical Samsung validation.
+5. Any production migration requires separate authorization, durable storage,
+   privacy/provider review and verified rollback. No normal Cloud Run traffic
+   change, accidental MySQL deletion or clinical-data enable was performed.
 
-- The owner confirmed **hazem's workspace**, `tea-dbgcgn59fdbs73ddfahg`.
-- The workspace initially had no services or Postgres databases.
-- Created only the empty **Free** Postgres instance `amilya-repair-test-db`,
-  ID `dpg-dbgcjuu7bikc73fn7v30-a`, Ohio, PostgreSQL 16.
-- Database name: `amilya_repair_test_db`. Public database IP allowlist is empty.
-- Render reports expiration on **26 November 2026**. Free Postgres is temporary,
-  has no backups, and must never contain patient records or irreplaceable work.
-- No paid compute plan or billing setting was selected.
+## Hosting history and constraints
 
-## Prepared configuration
+The initial deploy failed because migrations assumed the Cloud Run `wcp_app`
+role. The launcher now supplies its validated Render-managed database role via
+`WCP_DB_RUNTIME_ROLE`; the migration defaults remain unchanged for existing
+deployments. CI upgraded a fresh PostgreSQL database through revision 0008 and
+verified function permissions. Hosting HTTP 200 was observed for health, config,
+frontend and assets; LIVE and application startup were verified after settings.
 
-`render.yaml` defines one Free Docker web service, `amilya-repair-test`, in Ohio.
-It references the existing test database by name. Render resolves the internal
-connection string and generates a new application secret without committing either
-value to GitHub. The Blueprint must be applied in the same confirmed workspace.
+The startup script checks the dedicated database/hostname before migrations,
+derives the exact HTTPS origin and trusted hosts, and rejects clinical data,
+billing, test-provider output, auto-created schema, open signup and public AI.
+It never prints secret connection strings on startup failure.
 
-The Docker build uses the source branch `fix/server-diagnosis-20261025`, the existing
-backend Dockerfile, locked frontend install, and pinned backend requirements. This
-is a **fresh source build**, not the narrow immutable-image patch used on Cloud Run.
-It does not assume that private Google Artifact Registry is accessible from Render.
+This is a fresh source Docker build, not the immutable-image Cloud Run patch.
+No dependency-identical-to-production claim is made. The Cloud Run deployment
+job only reports missing connection readiness; authentication and deploy steps
+skipped in the recorded CI runs. No Google Cloud credential was copied.
 
-The Render-only startup script validates the dedicated database and Render hostname
-before running migrations. It derives the web origin and trusted host from Render's
-documented runtime hostname. It rejects clinical data, billing, provider execution,
-test-provider output, automatic schema creation, and open signup. Secrets and database
-connection strings are not printed if startup fails. Database migrations finish
-before the HTTP listener starts. HTTP health checks use `/api/v1/health`.
-
-After initial setup, `autoDeployTrigger: checksPass` makes Render wait for GitHub CI
-before deploying updates. This avoids repeated Cloud Shell deployment commands.
-Free web services sleep after inactivity and have no durable local upload storage;
-they are unsuitable for nursing production use.
-
-## Access limitations observed
-
-The connected Render tools can create resources, inspect deploys/logs, and merge
-environment variables. They do not expose a database-connection retrieval operation
-or a Blueprint creation/sync operation. Reading the database returns metadata only.
-The dashboard fallback currently shows a sign-in screen. Connector authorization
-does not sign the cloud browser into the dashboard.
-
-The Blueprint wires database secrets inside Render, avoiding a manual password copy.
-Applying it still requires authenticated dashboard access and Render access to the
-private Amilya repository. No service has yet been created by this preparation.
-
-Provider API keys are not available through the GitHub connection or the existing
-Google Cloud secret store. Do not invent them, publish them in Git, reuse an unrelated
-key, or label a keyless startup as a successful AI/photo test. Provider activation,
-an isolated test account with owner-managed legal acceptance, and synthetic end-to-end
-tests remain separate steps. Do not send a real wound image for diagnostics.
-
-## Validation
-
-- 19 Render startup tests pass locally.
-- The Blueprint passes Render's current public JSON Schema.
-- Full platform-aware validation and actual deploy/health verification must be
-  recorded separately; source/schema checks do not establish a running server.
-
-Current references were retrieved directly from Render's official documentation:
-`blueprint-spec`, `mcp-server`, `compute-plans`, `free`, `deploys`, `health-checks`,
-`configure-environment-variables`, `environment-variables`, and `private-network`.
+Current official Render configuration, Blueprint, private-network, PostgreSQL,
+free-plan, health-check and deployment documentation was retrieved during setup.
