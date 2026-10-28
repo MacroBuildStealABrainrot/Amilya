@@ -74,6 +74,18 @@ def test_other_accounts_and_inactive_or_admin_accounts_cannot_use_test(monkeypat
     assert not render_owner_test.allows(actor)
 
 
+def test_audio_capability_obeys_the_same_owner_deadline(monkeypatch):
+    from server import main
+    actor = SimpleNamespace(id=str(uuid4()), is_active=True, is_platform_admin=False)
+    enable(monkeypatch, actor)
+    monkeypatch.setattr(settings, 'openrouter_speech_enabled', True)
+    monkeypatch.setattr(settings, 'openrouter_api_key', 'synthetic-not-a-real-key')
+    assert main.public_config()['capabilities']['audio']['enabled'] is True
+    monkeypatch.setattr(render_owner_test, 'time', SimpleNamespace(time=lambda: NOW + 601))
+    assert main.public_config()['capabilities']['audio']['enabled'] is False
+    assert main.public_config()['capabilities']['photo']['enabled'] is False
+
+
 def test_allowance_is_not_a_paid_subscription_and_expires(client, monkeypatch):
     c, factory = client
     response = signup(c)

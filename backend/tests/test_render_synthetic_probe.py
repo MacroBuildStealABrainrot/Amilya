@@ -165,3 +165,24 @@ def test_http_probe_uses_native_auth_and_normal_upload_and_report_routes(client,
     assert probe.check_http_workflows()
     assert calls == list(probe.STAGES)
     assert capsys.readouterr().out.count('status=PASS') == 3
+
+
+def test_audio_http_probe_checks_recording_to_report_through_real_routes(client, gateway, monkeypatch, capsys):
+    from server import db as database, providers
+    _, factory = client
+    monkeypatch.setattr(database, 'SessionLocal', factory)
+    monkeypatch.setattr(providers, 'SessionLocal', factory)
+    gateway.config.openrouter_speech_enabled = True
+    gateway.http.responses = [
+        {'text':'Synthetic software test only. The dressing was changed. Pain score is two out of ten.',
+         'segments':[{'start':0,'end':5.0,'text':'The dressing was changed. Pain score is two out of ten.'}],
+         'usage':{'cost':.00003984}},
+        completion({'facts':[{'name':'treatment_performed','value':{'text':'Dressing changed'},
+            'quote':'The dressing was changed.'}], 'warnings':[]}),
+        completion({'status':'ready','text':'The dressing was changed. Pain score was two out of ten.','ui_alerts':[]}),
+        completion({'passed':True,'discrepancies':[]}),
+    ]
+    assert probe.check_http_workflows(audio=True)
+    assert gateway.http.calls[0]['url'].endswith('/audio/transcriptions')
+    assert len(gateway.http.calls) == 4
+    assert capsys.readouterr().out.count('status=PASS') == 2

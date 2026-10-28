@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = 'https://openrouter.ai/api/v1'
     openrouter_phi_approved: bool = False
     openrouter_require_zdr: bool = True
+    openrouter_speech_enabled: bool = False
     cloudflare_api_token: str = ''
     cloudflare_account_id: str = ''
     cloudflare_phi_approved: bool = False

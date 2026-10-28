@@ -76,10 +76,16 @@ MODEL_SNAPSHOTS = {
     'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
 }
 FINISH_REASONS = frozenset({'stop', 'length', 'content_filter', 'tool_calls', 'function_call'})
+OPENROUTER_SPEECH_MODEL = 'openai/whisper-large-v3'
+SPEECH_MODEL_IDS = frozenset({OPENROUTER_SPEECH_MODEL})
+# Reviewed 2026-10-28: duration-priced endpoints ranged from $0.0000075
+# to $0.0000308333333333/second. Normalize/reserve at the reviewed upper rate;
+# actual vendor cost is recorded separately when supplied, otherwise unknown.
+OPENROUTER_WHISPER_MICROS_PER_MINUTE = Decimal('1850')
 
 
 def known_model_id(value):
-    return isinstance(value, str) and (value in MODEL_PRICES or any(value in ids for ids in MODEL_SNAPSHOTS.values()))
+    return isinstance(value, str) and (value in MODEL_PRICES or value in SPEECH_MODEL_IDS or any(value in ids for ids in MODEL_SNAPSHOTS.values()))
 
 
 def model_identity_matches(selected, reported):
@@ -1086,7 +1092,10 @@ def collapse_speech_loops(text, segments, minimum_run=3):
 async def speech_attempt(provider, data, mime, filename, seconds, *, user, encounter_id, verification_model=None, purpose='transcription', diagnostic_original=None):
     diagnostics.task(purpose)
     primer = (PROMPTS / 'speech_primer.txt').read_text(encoding='utf-8')[:1000]
-    model = {'cloudflare': '@cf/openai/whisper-large-v3-turbo', 'groq': 'whisper-large-v3-turbo', 'deepgram': 'nova-3-medical'}[provider]
+    model = {'cloudflare': '@cf/openai/whisper-large-v3-turbo', 'groq': 'whisper-large-v3-turbo', 'deepgram': 'nova-3-medical',
+             'openrouter': OPENROUTER_SPEECH_MODEL}[provider]
+    if provider == 'openrouter' and not (getattr(settings, 'openrouter_speech_enabled', False) and settings.openrouter_api_key):
+        raise HTTPException(503, 'Recording transcription is not enabled')
     if purpose not in {'transcription', 'audio_verification'}:
         raise HTTPException(422, 'Unsupported speech purpose')
     if verification_model is not None:
@@ -1094,7 +1103,8 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             raise HTTPException(422, 'Unsupported speech verification model')
         model = verification_model
     seconds = max(10, seconds) if provider == 'groq' else seconds
-    price = GROQ_FULL_WHISPER_MICROS_PER_MINUTE if model == 'whisper-large-v3' else SPEECH_PRICES[provider]
+    price = (OPENROUTER_WHISPER_MICROS_PER_MINUTE if provider == 'openrouter' else
+             GROQ_FULL_WHISPER_MICROS_PER_MINUTE if model == 'whisper-large-v3' else SPEECH_PRICES[provider])
     normalized = math.ceil(Decimal(str(seconds)) / 60 * price)
     async def perform():
         async with httpx.AsyncClient(timeout=settings.provider_timeout_seconds, follow_redirects=False) as client:
@@ -1107,11 +1117,26 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             elif provider == 'groq':
                 response = await send('https://api.groq.com/openai/v1/audio/transcriptions', headers={'Authorization': 'Bearer ' + settings.groq_api_key},
                     data={'model': model, 'prompt': primer, 'response_format': 'verbose_json', 'temperature': '0'}, files={'file': (filename, data, mime)})
+            elif provider == 'openrouter':
+                formats = {'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/mpeg':'mp3', 'audio/mp4':'m4a',
+                    'audio/x-m4a':'m4a', 'audio/ogg':'ogg', 'audio/webm':'webm', 'video/webm':'webm',
+                    'audio/flac':'flac', 'audio/aac':'aac'}
+                if mime not in formats: raise HTTPException(422, 'This recording format is not supported')
+                response = await send(settings.openrouter_base_url.rstrip('/') + '/audio/transcriptions',
+                    headers={'Authorization':'Bearer ' + settings.openrouter_api_key},
+                    json={'model':model, 'input_audio':{'data':base64.b64encode(data).decode(), 'format':formats[mime]},
+                        'temperature':0, 'response_format':'verbose_json', 'timestamp_granularities':['segment'],
+                        'provider':{'zdr':True, 'data_collection':'deny'}})
             else:
                 response = await send('https://api.deepgram.com/v1/listen', params={'model': model, 'smart_format': 'true', 'utterances': 'true', 'mip_opt_out': 'true'},
                     headers={'Authorization': 'Token ' + settings.deepgram_api_key, 'Content-Type': mime}, content=data)
             response.raise_for_status()
-            return response.json()
+            raw = response.json()
+            if provider == 'openrouter':
+                failure = provider_error_response(response, raw)
+                if failure is not None: failure.raise_for_status()
+                if not isinstance(raw, dict): raise ValueError('Invalid transcript')
+            return raw
     def validate(raw):
         if provider == 'cloudflare':
             if raw.get('success') is False: raise ValueError('Provider failure')
@@ -1121,6 +1146,15 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             text = alt['transcript']
             segments = [{'text': x['transcript'], 'start': x['start'], 'end': x['end'], 'confidence': x.get('confidence'), 'speaker': x.get('speaker')} for x in raw['results'].get('utterances', [])]
         else: text, segments = raw.get('text'), raw.get('segments') or []
+        if provider == 'openrouter':
+            if not model_identity_matches(model, raw.get('model')): raise ModelIdentityError()
+            if not isinstance(segments, list) or len(segments) > 1000: raise ValueError('Invalid transcript segments')
+            for segment in segments:
+                if (not isinstance(segment, dict) or not isinstance(segment.get('text'), str)
+                        or len(segment['text']) > settings.max_text_chars
+                        or any(type(segment.get(k)) not in (int,float) or not math.isfinite(segment[k]) for k in ('start','end'))
+                        or not 0 <= segment['start'] <= segment['end'] <= seconds + 1):
+                    raise ValueError('Invalid transcript segments')
         limit = 8000 if purpose == 'audio_verification' else settings.max_text_chars
         if not isinstance(text, str) or len(text) > limit or (purpose == 'audio_verification' and not text.strip()): raise ValueError('Invalid transcript')
         clean = []
@@ -1139,7 +1173,8 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
         return result
     return await metered_call(user=user, encounter_id=encounter_id, task=purpose, provider=provider, model=model,
         payload_hash=fingerprint([sha256(data).hexdigest(), mime, model, primer]), estimate=normalized,
-        perform=perform, measure=lambda raw: (normalized, {'audio_seconds': seconds, 'audio_minutes': seconds / 60}, None), validate=validate)
+        perform=perform, measure=lambda raw: (normalized, {'audio_seconds': seconds, 'audio_minutes': seconds / 60},
+            actual_cost(raw.get('usage', {})) if provider == 'openrouter' and isinstance(raw.get('usage'), dict) else None), validate=validate)
 
 
 async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
@@ -1160,6 +1195,8 @@ async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
             options.append(('groq', 'whisper-large-v3', 'full_whisper_v3_verification'))
         if settings.cloudflare_api_token and settings.cloudflare_account_id:
             options.append(('cloudflare', None, 'repeat_transcription_fallback'))
+        if getattr(settings, 'openrouter_speech_enabled', False) and settings.openrouter_api_key:
+            options.append(('openrouter', None, 'repeat_openrouter_transcription'))
     if not options:
         raise HTTPException(503, 'The requested short-window speech verifier is not configured')
     errors = []
@@ -1170,6 +1207,8 @@ async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
             result['verifier'] = {'provider': provider, 'model': result['usage']['model'], 'method': method}
             if method == 'repeat_transcription_fallback':
                 result['warnings'].append('The configured Turbo speech service repeated this clip; a stronger or independent medical verifier was not used.')
+            elif method == 'repeat_openrouter_transcription':
+                result['warnings'].append('The same configured speech model repeated this clip. This is not an independent or stronger medical check; compare it with the recording.')
             return result
         except HTTPException as error:
             if error.status_code not in {502, 503, 504}:
@@ -1185,12 +1224,14 @@ async def transcribe(data, mime, filename, duration_seconds=None, *, user, db=No
     if settings.cloudflare_api_token and settings.cloudflare_account_id: available.append('cloudflare')
     if settings.groq_api_key: available.append('groq')
     if settings.deepgram_enabled and settings.deepgram_api_key: available.append('deepgram')
+    if getattr(settings, 'openrouter_speech_enabled', False) and settings.openrouter_api_key: available.append('openrouter')
     if settings.speech_provider != 'auto': available = [p for p in available if p == settings.speech_provider]
     if not available: raise HTTPException(503, 'Speech providers are not configured. Typed transcripts and manual evidence remain available.')
     errors = []
     for provider in available[:3]:
         try:
-            original=(available[0],{'cloudflare':'@cf/openai/whisper-large-v3-turbo','groq':'whisper-large-v3-turbo','deepgram':'nova-3-medical'}[available[0]]) if errors else None
+            original=(available[0],{'cloudflare':'@cf/openai/whisper-large-v3-turbo','groq':'whisper-large-v3-turbo','deepgram':'nova-3-medical',
+                'openrouter':OPENROUTER_SPEECH_MODEL}[available[0]]) if errors else None
             result = await speech_attempt(provider, data, mime, filename, seconds, user=user, encounter_id=encounter_id,diagnostic_original=original)
             if errors: result['warnings'].append('A configured fallback speech provider was used.')
             return result
