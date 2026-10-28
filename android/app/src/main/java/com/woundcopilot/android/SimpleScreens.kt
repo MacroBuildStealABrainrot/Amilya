@@ -94,7 +94,8 @@ fun StartScreen(
         if (savedWork.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Text("Recent work", style = MaterialTheme.typography.titleSmall, color = c.onSurfaceVariant, modifier = Modifier.semantics { heading() })
-            savedWork.forEach { work ->
+            // Home is a preview; the complete history remains in Saved work.
+            savedWork.take(1).forEach { work ->
                 Surface(
                     onClick = { onOpenWork(work.id) },
                     enabled = !busy,

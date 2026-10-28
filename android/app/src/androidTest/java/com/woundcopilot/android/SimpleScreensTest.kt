@@ -202,6 +202,27 @@ class SimpleScreensTest {
         assertTrue(unicodeChunks.none { it.isNotEmpty() && Character.isHighSurrogate(it.last()) })
     }
 
+    @Test fun recoveryListShowsOnlyStatusAndResumeAction() {
+        val finished=mutableListOf<String>()
+        val job=org.json.JSONObject("""{"id":"synthetic-job","owner":"synthetic-owner","file":"/synthetic/audio.m4a","phase":"REPORT_READY","resume_from":"REPORT_READY","updated_at":0,"report":"PRIVATE_REPORT_SENTINEL","case":{"patient":{"display_name":"PRIVATE_PATIENT_SENTINEL"}}}""")
+        showScreen { RecordingRecoveryList(listOf(job),null,false,{finished+=it.str("id")},{}) }
+        compose.onNodeWithText("Review report").performClick()
+        compose.runOnIdle { assertEquals(listOf("synthetic-job"),finished) }
+        compose.onNodeWithText("PRIVATE_PATIENT_SENTINEL").assertDoesNotExist()
+        compose.onNodeWithText("PRIVATE_REPORT_SENTINEL").assertDoesNotExist()
+    }
+
+    @Test fun recoveryDiscardRequiresExplicitConfirmation() {
+        val discarded=mutableListOf<String>()
+        val job=org.json.JSONObject("""{"id":"synthetic-job","owner":"synthetic-owner","file":"/synthetic/audio.m4a","phase":"RECORDED_LOCALLY","resume_from":"RECORDED_LOCALLY","updated_at":0}""")
+        showScreen { RecordingRecoveryList(listOf(job),null,false,{}, {discarded+=it.str("id")}) }
+        compose.onNodeWithText("Discard").performClick()
+        compose.onNodeWithText("Discard permanently").assertExists()
+        compose.runOnIdle { assertTrue(discarded.isEmpty()) }
+        compose.onNodeWithText("Discard permanently").performClick()
+        compose.runOnIdle { assertEquals(listOf("synthetic-job"),discarded) }
+    }
+
     private fun showScreen(content: @Composable () -> Unit) {
         compose.runOnUiThread { compose.activity.setContent { WoundTheme { content() } } }
     }

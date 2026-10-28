@@ -129,7 +129,6 @@ fun AuthScreen(state: AppState, signup: Boolean) {
             Text(if (signup) "Already have an account? Sign in" else "Create a workspace")
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))
-        TextButton(onClick = { state.startDemo() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = !state.loading) { Text("Explore a sample encounter") }
         TextButton(onClick = { support = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Need help signing in?") }
         Spacer(Modifier.height(24.dp))
     }

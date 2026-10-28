@@ -5,6 +5,7 @@ holds a business write lock. Encrypted replay results prevent duplicate inferenc
 """
 from __future__ import annotations
 
+import logging
 import asyncio
 import base64
 from contextvars import ContextVar
@@ -44,6 +45,16 @@ from .kosmo import select_route
 from . import diagnostics
 
 router = APIRouter()
+
+
+class OutputLimitError(ValueError):
+    """The provider exhausted its output allowance; partial findings are unusable."""
+
+
+class ModelIdentityError(ValueError):
+    """A gateway response does not identify the model that was requested."""
+
+
 request_operation: ContextVar[str | None] = ContextVar('request_operation', default=None)
 document_operations: ContextVar[list | None] = ContextVar('document_operations',default=None)
 PROMPTS = Path(__file__).parent / 'prompts'
@@ -51,11 +62,30 @@ PRICE_VERSION = 'normalized-2026-09-05'
 # USD per million tokens: durable list-price normalization, independent of discounts.
 MODEL_PRICES = {
     'meta/muse-spark-1.3': ('1.25', '4.25', '.15'),
-    'openai/gpt-5.6-luna': ('.20', '1.20', '.02'),
-    'openai/gpt-5.6-terra': ('2', '12', '.2'),
-    'openai/gpt-5.6-sol': ('4', '20', '.4'),
-    'anthropic/claude-fable-5.1': ('10', '50', '.25'),
+    'openai/gpt-6-luna': ('.10', '.50', '.02'),
+    'openai/gpt-6.1-sol': ('2', '10', '.2'),
+    'openai/gpt-6-astra': ('10', '50', '.4'),
+    'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
 }
+# Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
+# Exact aliases only: never accept arbitrary date suffixes or another model.
+MODEL_SNAPSHOTS = {
+    'openai/gpt-6-luna': frozenset({'openai/gpt-6-luna-20260922'}),
+    'openai/gpt-6.1-sol': frozenset({'openai/gpt-6.1-sol-20260929'}),
+    'openai/gpt-6-astra': frozenset({'openai/gpt-6-astra-20260903'}),
+    'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
+}
+FINISH_REASONS = frozenset({'stop', 'length', 'content_filter', 'tool_calls', 'function_call'})
+
+
+def known_model_id(value):
+    return isinstance(value, str) and (value in MODEL_PRICES or any(value in ids for ids in MODEL_SNAPSHOTS.values()))
+
+
+def model_identity_matches(selected, reported):
+    return reported is None or isinstance(reported, str) and (reported == selected or reported in MODEL_SNAPSHOTS.get(selected, ()))
+
+
 SPEECH_PRICES = {'cloudflare': Decimal('510'), 'groq': Decimal('40000') / 60,
                  'deepgram': Decimal('7700')}  # microUSD per minute, medical reserve uses configurable cap
 GROQ_FULL_WHISPER_MICROS_PER_MINUTE = Decimal('111000') / 60
@@ -129,7 +159,7 @@ def prompt(task: str) -> str:
 def scope_guard(text: str):
     # Explicit jailbreak attempts cannot become instructions to the model. Clinical
     # discussion of these words is still usable through manual evidence entry.
-    attack = re.search(r'(?is)(ignore|override|disregard).{0,35}(system|previous|instruction|safety)|reveal.{0,30}(prompt|secret|api.key)|(?:set|make).{0,20}(?:admin|unlimited)|(?:write|create).{0,20}(?:ransomware|malware)', text)
+    attack = re.search(r'(?is)\b(?:ignore|override|disregard)\s+(?:(?:all|the|any)\s+)?(?:previous\s+instructions?|system\s+(?:prompt|instructions?|safety\s+boundary)|safety\s+(?:rules|instructions?|boundary))\b|\breveal\s+(?:the\s+)?(?:system\s+prompt|api\s*key|secret\s+key)\b|\b(?:set|make)\s+(?:me\s+)?(?:an?\s+)?(?:admin|unlimited)(?:\s+(?:with\s+)?unlimited\s+credits)?\b|\b(?:write|create)\s+(?:ransomware|malware)\b', text)
     if attack:
         raise HTTPException(422, 'This request contains instructions outside the clinical evidence workflow')
 
@@ -286,6 +316,57 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
     return {'considerations': values, 'warnings': warnings}
 
 
+# Only documented technical codes may leave this parser. Provider messages,
+# native codes, raw metadata and generated content can contain clinical data.
+PROVIDER_ERROR_STATUS = {
+    'authentication': 401, 'permission_denied': 403, 'payment_required': 402,
+    'rate_limit_exceeded': 429, 'provider_overloaded': 503,
+    'provider_unavailable': 502, 'timeout': 504, 'server': 500,
+    'content_policy_violation': 403, 'refusal': 403,
+    'context_length_exceeded': 400, 'max_tokens_exceeded': 400,
+    'token_limit_exceeded': 400, 'string_too_long': 400,
+    'invalid_request': 400, 'invalid_prompt': 400, 'not_found': 404,
+    'precondition_failed': 400, 'payload_too_large': 413, 'unprocessable': 422,
+    'invalid_image': 400, 'image_too_large': 400, 'image_too_small': 400,
+    'unsupported_image_format': 400, 'image_not_found': 404,
+    'image_download_failed': 400, 'unmapped': 502,
+}
+
+
+def provider_error_response(response, raw):
+    """Normalize top-level/choice errors without retaining their sensitive body.
+
+    HTTP 200 does not prove generation succeeded. Never retry an error envelope:
+    partial generation and vendor cost may be unknown.
+    """
+    if not isinstance(raw, dict):
+        return None
+    info = raw.get('error')
+    if info is None:
+        choices = raw.get('choices')
+        if isinstance(choices, list):
+            info = next((choice['error'] for choice in choices
+                         if isinstance(choice, dict) and choice.get('error') is not None), None)
+    if info is None:
+        return None
+    metadata = info.get('metadata') if isinstance(info, dict) else None
+    category = metadata.get('error_type') if isinstance(metadata, dict) else None
+    if not isinstance(category, str) or category not in PROVIDER_ERROR_STATUS:
+        category = 'unknown'
+    code = info.get('code') if isinstance(info, dict) else None
+    if isinstance(code, str) and code.isascii() and code.isdigit() and len(code) <= 3:
+        code = int(code)
+    if category in PROVIDER_ERROR_STATUS:
+        code = PROVIDER_ERROR_STATUS[category]
+    elif type(code) is not int or not 400 <= code <= 599:
+        code = 502
+    delay = retry_after_delay(response)
+    return httpx.Response(code, request=response.request,
+        extensions={'wcp_transport_status': response.status_code, 'wcp_error_type': category},
+        headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
+        json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+
+
 def quota_rejection(response):
     """Inspect a bounded error body transiently; never return/log its contents."""
     if len(response.content) > 16384:
@@ -336,9 +417,9 @@ def photo_error_headers(usage, exhausted=False):
         'route_unavailable':'MODEL_UNAVAILABLE', 'request_incompatible':'REQUEST_INCOMPATIBLE',
         'provider_timeout':'PROVIDER_TIMEOUT', 'invalid_response':'INVALID_RESPONSE',
         'provider_connection':'NETWORK_UNAVAILABLE', 'provider_rate_limit':'RATE_LIMITED',
-        'response_processing':'RESPONSE_PROCESSING_FAILED',
+        'response_processing':'RESPONSE_PROCESSING_FAILED', 'output_limit':'OUTPUT_LIMIT',
     }.get(usage.get('failure_reason'), 'PROVIDER_UNAVAILABLE')
-    permanent = category in {'PROVIDER_QUOTA','PROVIDER_AUTH','MODEL_UNAVAILABLE','REQUEST_INCOMPATIBLE'}
+    permanent = category in {'PROVIDER_QUOTA','PROVIDER_AUTH','MODEL_UNAVAILABLE','REQUEST_INCOMPATIBLE','OUTPUT_LIMIT'}
     return {**(retry_after_headers(usage) or {}),
             'X-WCP-Error': 'RETRY_LIMIT' if exhausted and not permanent else category,
             'X-WCP-Retryable': 'false' if permanent or exhausted else 'true',
@@ -377,6 +458,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
     diagnostics.bind(user)
     diagnostics.event({'source':'router','stage':'provider_preflight','selected_model':model,'provider':provider,'status':'selected','finished_at':diagnostics.timestamp()})
     privacy_guard(provider)
+    from . import render_owner_test
+    if render_owner_test.required() and (provider != 'openrouter' or not render_owner_test.allows(user)):
+        raise preflight_error(503, 'The synthetic test allowance is unavailable for this account or has expired')
     check_rate('provider:' + user.id, limit=60)
     crypt = cipher()
     seed = request_operation.get() or str(uuid.uuid4())
@@ -402,7 +486,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     # without charge. Let the same request key try again (bounded),
                     # instead of replaying the old failure forever. Permanent
                     # configuration failures (credits, access, routing) never advance.
-                    if previous.usage.get('failure_reason') in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                    if previous.usage.get('failure_reason') in {'provider_credits','provider_access','route_unavailable','request_incompatible','output_limit'}:
                         break
                     attempts = previous.usage.get('attempts', [])
                     if not attempts or attempts[-1].get('error_code') not in {'502','503','504'}:
@@ -413,7 +497,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     # A success, unknown charge or running request never advances.
                     reason = previous.usage.get('failure_reason')
                     if replay_invalid_failure and reason == 'invalid_response':break
-                    if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                    if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible','output_limit'}:
                         break
                     if retry_after_headers(previous.usage):
                         raise HTTPException(503, 'Photo assessment is waiting for provider capacity.',
@@ -455,8 +539,12 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                         # Replay the settled failure so a configured fallback can
                         # reach its cached success; never perform or charge again.
                         diagnostics.event({'source':'replay','stage':task,'status':'failed','selected_model':attempts[-1].get('model'),'provider':attempts[-1].get('provider'),'operation_id':operation,'new_provider_request':False,'error_code':code})
-                        raise HTTPException(int(code), 'This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.',
-                            headers=photo_error_headers(previous.usage, resumed_attempt >= 3) if task == 'image' else photo_error_headers(previous.usage))
+                        exhausted = task == 'image' and resumed_attempt >= 3
+                        message = ('We could not assess this photo after several attempts. Your photo is saved. Retake it, try later, or chart by hand.'
+                                   if exhausted else
+                                   'This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.')
+                        raise HTTPException(int(code), message,
+                            headers=photo_error_headers(previous.usage, exhausted))
             raise HTTPException(409, 'This AI request is already processing or awaiting reconciliation. Refresh the case before retrying.')
     if document_operations.get() is not None:document_operations.get().append(operation)
     started = time.monotonic()
@@ -467,6 +555,13 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         raw = await perform()
         normalized, usage, billed = measure(raw)
         result = validate(raw)
+    except asyncio.CancelledError:
+        # Cancellation must not leave a reserved credit hold with no result.
+        if heartbeat is not None:
+            heartbeat.cancel()
+        with SessionLocal() as cancelled_db:
+            billing.release(cancelled_db, user, operation, "provider_cancelled")
+        raise
     except httpx.TimeoutException:
         usage['failure_reason'] = 'provider_timeout'
         error = HTTPException(504, 'The provider timed out. Refresh the case, then start a new attempt. Final provider cost may require reconciliation.')
@@ -495,9 +590,33 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         elif code == 400:
             reason = 'request_incompatible'
             detail = 'The AI provider rejected the request format or model parameters. The owner must review the integration; manual charting remains available.'
+        category = exc.response.extensions.get('wcp_error_type', 'unknown')
+        if category not in PROVIDER_ERROR_STATUS:
+            category = 'unknown'
+        if category in {'content_policy_violation', 'refusal'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider declined this assessment. No findings were accepted. Manual charting remains available.'
+        elif category in {'invalid_image', 'image_too_large', 'image_too_small', 'unsupported_image_format', 'image_not_found', 'image_download_failed'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider could not read the uploaded image. No findings were accepted. Manual charting remains available.'
+        elif category in {'context_length_exceeded', 'max_tokens_exceeded', 'token_limit_exceeded', 'string_too_long'}:
+            reason = 'output_limit'
+            detail = 'The AI provider reached a token or length limit. No partial findings were accepted. Manual charting remains available.'
+        elif category == 'timeout':
+            reason = 'provider_timeout'
+        logging.getLogger('wcp.providers').warning('provider_request_failed transport=%d status=%d category=%s',
+            exc.response.extensions.get('wcp_transport_status', code), code, category)
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
-                              headers=retry_after_headers(usage))
+                              headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status']),
+                                       **({'X-WCP-Provider-Error': category} if task == 'image' or category != 'unknown' else {}),
+                                       **({'X-WCP-Retryable': 'false'} if task == 'image' and exc.response.extensions.get('wcp_transport_status') == 200 else {})})
+    except OutputLimitError:
+        usage['failure_reason'] = 'output_limit'
+        error = HTTPException(502, 'The AI response reached its output limit before completion. No partial findings were accepted. The source is preserved; the administrator must review the output allowance.')
+    except ModelIdentityError:
+        usage['failure_reason'] = 'request_incompatible'
+        error = HTTPException(502, 'The provider returned an unexpected model. The owner must review routing; no findings were accepted.')
     except (ValueError, KeyError, TypeError, IndexError):
         usage['failure_reason'] = 'invalid_response'
         error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.')
@@ -539,7 +658,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         ledger_db.commit()
     if error:
         if usage.get('failure_reason'):
-            error.headers = {**(error.headers or {}), **photo_error_headers(usage, task == 'image' and resumed_attempt >= 3)}
+            error.headers = {**photo_error_headers(usage, task == 'image' and resumed_attempt >= 3), **(error.headers or {})}
         raise error
     return result
 
@@ -562,9 +681,15 @@ def _start_lease(user, operation_id):
     async def renew():
         while True:
             await asyncio.sleep(max(1, getattr(settings, 'ai_lease_seconds', 120) // 3))
-            with SessionLocal() as db:
-                if not billing.lease_heartbeat(db, user.workspace_id, operation_id, token):
-                    return
+            try:
+                with SessionLocal() as db:
+                    if not billing.lease_heartbeat(db, user.workspace_id, operation_id, token):
+                        return  # lease no longer belongs to this worker
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # Transient database failures must not permanently end lease renewal.
+                logging.getLogger(__name__).warning("AI lease heartbeat failed; retrying", exc_info=True)
     return asyncio.create_task(renew())
 
 
@@ -597,37 +722,39 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 await rate_limit_backoff(delay)
             response.raise_for_status()
             raw = parse_provider_json(response.text)
-            # Some gateways return HTTP 200 with an error object. Normalize it
-            # through the same safe failure/waived-charge path as HTTP failures.
-            if isinstance(raw, dict) and 'error' in raw:
-                info = raw['error']
-                code = info.get('code') if isinstance(info, dict) else None
-                if isinstance(code, str) and code.isascii() and code.isdigit(): code = int(code)
-                if type(code) is not int or not 400 <= code <= 599: code = 502
-                delay = retry_after_delay(response)
-                synthetic = httpx.Response(code, request=response.request, extensions={'wcp_transport_status':response.status_code},
-                    headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
-                    json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+            synthetic = provider_error_response(response, raw)
+            if synthetic is not None:
                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
             return raw
     async def perform():
-        if task not in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
-            return await perform_attempts()
-        # A report has at most four stages. Bound the whole network portion of
-        # each stage, including the single 429 retry/backoff, rather than only
-        # socket inactivity. Keep this inside metering so timeout settles safely.
+        # Socket timeouts alone allow a slow/dribbling response to run indefinitely.
+        # Bound every text/vision stage, including backoff, inside credit settlement.
+        timeout = settings.provider_timeout_seconds
+        if task in REPORT_STAGE_TASKS:
+            timeout = min(REPORT_STAGE_TIMEOUT_SECONDS, timeout)
         try:
-            return await asyncio.wait_for(perform_attempts(),
-                timeout=min(REPORT_STAGE_TIMEOUT_SECONDS, settings.provider_timeout_seconds))
+            return await asyncio.wait_for(perform_attempts(), timeout=timeout)
         except TimeoutError:
-            raise httpx.TimeoutException('The report stage exceeded its bounded wait') from None
+            raise httpx.TimeoutException('The AI stage exceeded its bounded wait') from None
     def measure(raw):
         vendor = raw.get('usage') or {}
         amount, safe = normalized_tokens(model, vendor)
+        reported = raw.get('model')
+        safe['reported_model'] = reported if known_model_id(reported) else None
+        safe['model_identity'] = 'unreported' if reported is None else 'confirmed' if model_identity_matches(model, reported) else 'mismatch'
+        safe['max_output_tokens'] = max_tokens
+        choices = raw.get('choices')
+        choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+        finish = choice.get('finish_reason')
+        if isinstance(finish, str) and finish in FINISH_REASONS:
+            safe['finish_reason'] = finish
         if routing: safe['routing'] = routing
         return amount, safe, actual_cost(vendor)
     def validate(raw):
+        if not model_identity_matches(model, raw.get('model')):
+            raise ModelIdentityError('Provider returned a different or unrecognized model')
         choice = raw['choices'][0]
+        if choice.get('finish_reason') == 'length': raise OutputLimitError('Output limit reached')
         if choice.get('finish_reason') not in {'stop', None}: raise ValueError('Incomplete output')
         message = choice['message']
         if message.get('tool_calls') or message.get('refusal'): raise ValueError('Non-clinical response')
@@ -641,13 +768,35 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
 
 
+def configured_route(task, content):
+    """Keep automatic effort selection while honoring the owner's model settings."""
+    route = select_route(TASK_FAMILIES.get(task, task), content)
+    family = TASK_FAMILIES.get(task, task)
+    if task == 'image': selected = settings.model_vision
+    elif task == 'challenge': selected = settings.model_challenger
+    elif route['effort_level'] == 'high': selected = settings.model_frontier
+    elif family in {'draft', 'qa'}: selected = settings.model_documentation
+    elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
+    else: selected = settings.model_extraction
+    if selected not in MODEL_PRICES:
+        raise preflight_error(503, 'Configured AI model is not in the approved price registry')
+    return {**route, 'model': selected, 'reason': 'configured_' + task, 'effort_reason': route.get('reason')}
+
+
 @timed('ai_stage')
 async def routed(task, content, model=None, **kwargs):
-    if task not in {'quick_draft','quick_qa','quick_repair','quick_refine','improve_report'} and (diagnostics.active.get() or {}).get('task')!='deep_review':
+    if task not in REPORT_STAGE_TASKS and (diagnostics.active.get() or {}).get('task')!='deep_review':
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
-    route = select_route(TASK_FAMILIES.get(task, task), content)
-    # Completion limits include hidden reasoning; preserve room for report text.
-    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']])
+    route = configured_route(task, content)
+    # Extraction emits structured facts, not a short summary. A live 2,426-token
+    # input exhausted the old 1,800-token completion cap (2026-10-26). Keep low
+    # reasoning effort while allowing bounded room for complete JSON and evidence.
+    minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
+    if task in {'extract', 'document'}:
+        minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
+    elif task == 'image':
+        minimum = max(minimum, 8000)
+    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), minimum)
     return await structured(task, content, route['model'], routing=route, **kwargs)
 
 
@@ -735,21 +884,29 @@ async def draft_text(facts, template, mode, *, user, db=None, encounter_id, cust
 async def clinical_review(facts, mode, *, user, db=None, encounter_id):
     diagnostics.task('deep_review' if mode=='deep' else 'clinical_review')
     content = json.dumps({'case_facts': facts, 'mode': mode, 'instruction': 'Respect each confirmation_state. Unconfirmed evidence is an attributed suggestion, never a patient fact.'}, ensure_ascii=False, default=str)
+    if mode == 'deep':
+        primary = configured_route('review', content)['model']
+        challenger = configured_route('challenge', content)['model']
+        if primary.split('/')[0] == challenger.split('/')[0]:
+            raise preflight_error(503, 'Deep Review requires a challenger from a different model developer')
     first = await routed('review', content, settings.model_review, user=user, encounter_id=encounter_id)
     triggers = review_triggers(facts)
     first['routing'] = {**first.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': False}
-    if mode == 'fast' or not triggers: return first
+    if mode == 'fast' or not triggers and mode != 'deep': return first
     targeted = json.dumps({'case_facts': facts, 'material_questions': triggers, 'initial_considerations': first['considerations']}, ensure_ascii=False, default=str)
-    additional = await routed('escalation', targeted, settings.model_frontier, user=user, encounter_id=encounter_id)
-    stages = [first['usage'], additional['usage']]
-    opinions = [first['considerations'], additional['considerations']]
-    if mode == 'deep' and any('conflict' in x or 'vascular' in x for x in triggers):
-        challenged = await routed('challenge', targeted, settings.model_challenger, user=user, encounter_id=encounter_id)
+    stages = [first['usage']]
+    opinions = [first['considerations']]
+    if triggers:
+        additional = await routed('escalation', targeted, settings.model_frontier, user=user, encounter_id=encounter_id)
+        stages.append(additional['usage']); opinions.append(additional['considerations'])
+    if mode == 'deep':
+        # Independent assessment sees source evidence, not the first model's conclusions.
+        challenged = await routed('challenge', content, settings.model_challenger, user=user, encounter_id=encounter_id)
         opinions.append(challenged['considerations']); stages.append(challenged['usage'])
     reconciled = await routed('reconcile', json.dumps({'case_facts': facts, 'material_questions': triggers, 'interpretations': opinions}, ensure_ascii=False, default=str),
         settings.model_review, user=user, encounter_id=encounter_id)
     reconciled['usage']['stages'] = stages
-    reconciled['routing'] = {**reconciled.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': True}
+    reconciled['routing'] = {**reconciled.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': bool(triggers), 'independent_challenge': mode == 'deep'}
     return reconciled
 
 
@@ -1048,3 +1205,5 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+
+

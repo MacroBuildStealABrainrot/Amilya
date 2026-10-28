@@ -34,6 +34,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import com.woundcopilot.android.ui.*
 import kotlinx.coroutines.flow.distinctUntilChanged
+import org.json.JSONObject
 
 class MainActivity:ComponentActivity(){
     private val state:AppState by viewModels()
@@ -211,29 +212,45 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             }
         }
         WcpButton("Sign in",{s.screen="login"},Modifier.fillMaxWidth())
-        WcpButton("Explore a sample encounter",{s.startDemo()},Modifier.fillMaxWidth(),secondary=true)
         if(s.config.optBoolean("allow_signup",true))TextButton(onClick={s.screen="signup"},modifier=Modifier.align(Alignment.CenterHorizontally)){Text("Create account")}
-        Text("Sample encounters use fictional data.",Modifier.align(Alignment.CenterHorizontally),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
     }
 }
 
 @Composable fun SavedWorkScreen(s:AppState){
-    var query by rememberSaveable{mutableStateOf("")};var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
+    var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
+    val recorder by RecordingService.state.collectAsState()
     Page{
         InstrumentTitle("Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
-        TextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Find a patient or encounter")},leadingIcon={InstrumentIcon("search",tint=c.onSurfaceVariant)},singleLine=true,shape=RoundedCornerShape(18.dp),colors=TextFieldDefaults.colors(focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedContainerColor=c.surfaceContainer,unfocusedContainerColor=c.surfaceContainer))
-        Row{TextButton({recovery=false}){Text("Saved")};TextButton({recovery=true}){Text("Recovery & older work")}}
-        val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}.filter{e->(e.str("title")+s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")).contains(query,true)}
-        if(!s.demo&&(s.encounters.size>=500||s.patients.size>=500))Text("Searching the 500 records loaded by this service.",style=MaterialTheme.typography.bodySmall)
-        if(filtered.isEmpty())EmptyState(if(query.isBlank())"No encounters yet" else "No matching encounters","",if(query.isBlank())"New encounter" else null){s.screen="new"}
-        if(!recovery)TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading && filtered.isNotEmpty()){Text("Delete all saved work")}
+        Row{TextButton(onClick={recovery=false}){Text("Saved")};TextButton(onClick={recovery=true;s.refreshRecordingJobs()}){Text("Recovery & older work")}}
+        val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
+        if(recovery) RecordingRecoveryList(jobs=s.recordingJobs,actionId=s.recoveryActionId,recording=recorder.recording,onFinish=s::resumeRecording,onDiscard=s::discardRecovery)
+        if(filtered.isEmpty() && (!recovery || s.recordingJobs.isEmpty())) {
+            Text(if(recovery)"No unfinished recordings or older work." else "Nothing saved yet. Start a report from Home.")
+            WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
+        }
+        if(!recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
         filtered.forEach{e->
-            val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
-            val name=if(quick)e.str("title")else s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")?:"Visit"
+            val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty()
+            val type=when(mode.lowercase()){
+                "photo","photo_assessment","image"->"Photo assessment"
+                "consultant","wound_consultant","ask_consultant"->"Wound consultant"
+                "document","report","nursing"->"Nursing visit"
+                else->"Visit"
+            }
+            // Keep patient-entered titles out of Saved Work previews.
+            val name="$type, ${localTime(e.str("updated_at"))}"
             GlassPanel(Modifier.fillMaxWidth().clickable(role=Role.Button){s.openEncounter(e.str("id"))}){
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
                     Box(Modifier.size(45.dp).background(c.primaryContainer,CircleShape),contentAlignment=Alignment.Center){Text(name.split(' ').mapNotNull{it.firstOrNull()}.take(2).joinToString(""),style=MaterialTheme.typography.titleMedium,color=c.onPrimaryContainer)}
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){Text(name,style=MaterialTheme.typography.titleLarge);Text(e.str("title"),style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
+                        Text(name,style=MaterialTheme.typography.titleLarge)
+                        val status=when(e.str("storage_state").lowercase()){
+                            "saved"->"Saved"
+                            "temporary"->"Temporary"
+                            else->"Recovery or older work"
+                        }
+                        Text(status,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)
+                    }
                     InstrumentIcon("arrow",tint=c.primary)
                 }
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){TextButton({s.deleteWorkId=e.str("id")}){Text("Delete")};Spacer(Modifier.weight(1f));Text(localTime(e.str("updated_at")),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
@@ -242,6 +259,36 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     }
 }
 
+@Composable internal fun RecordingRecoveryList(
+    jobs:List<JSONObject>, actionId:String?, recording:Boolean,
+    onFinish:(JSONObject)->Unit, onDiscard:(JSONObject)->Unit,
+){
+    var discardTarget by remember { mutableStateOf<JSONObject?>(null) }
+    if(jobs.isNotEmpty()){
+        Text("Unfinished recordings",style=MaterialTheme.typography.titleLarge)
+        jobs.forEach{job->
+            val phase=job.str("resume_from",job.str("phase"))
+            val action=when(phase){"REPORT_READY"->"Review report";"TRANSCRIBED","GENERATING_REPORT"->"Finish report";else->"Finish recording"}
+            val busy=recording || actionId!=null
+            GlassPanel(Modifier.fillMaxWidth()){
+                Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                    Text("Unfinished recording",style=MaterialTheme.typography.titleMedium)
+                    Text("Updated ${localTime(job.optLong("updated_at").toString())}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        Button(onClick={onFinish(job)},enabled=!busy){Text(action)}
+                        TextButton(onClick={discardTarget=job},enabled=!busy){Text("Discard")}
+                    }
+                }
+            }
+        }
+    }
+    discardTarget?.let{job->
+        AlertDialog(onDismissRequest={discardTarget=null},title={Text("Discard this recording?")},
+            text={Text("This permanently deletes the local audio and its unfinished recovery data from this device. Saved reports are not affected.")},
+            confirmButton={TextButton(onClick={discardTarget=null;onDiscard(job)}){Text("Discard permanently")}},
+            dismissButton={TextButton(onClick={discardTarget=null}){Text("Keep it")}})
+    }
+}
 @Composable fun EncounterScreen(s:AppState){
     val data=s.case?:return;val facts=data.items("facts");val pending=facts.count{it.str("confirmation_state")=="unconfirmed"};val confirmed=facts.count{it.str("confirmation_state")=="confirmed"};val c=MaterialTheme.colorScheme
     Page{

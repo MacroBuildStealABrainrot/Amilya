@@ -157,7 +157,7 @@ class Vault(context:Context) {
 
 
 
-internal val PHOTO_ERROR_CATEGORIES=setOf("PROVIDER_QUOTA","PROVIDER_AUTH","MODEL_UNAVAILABLE","REQUEST_INCOMPATIBLE","PROVIDER_TIMEOUT","INVALID_RESPONSE","NETWORK_UNAVAILABLE","RATE_LIMITED","PROVIDER_UNAVAILABLE","RETRY_LIMIT","RESPONSE_PROCESSING_FAILED","AI_PAUSED","AI_NOT_CONFIGURED","PROVIDER_APPROVAL_REQUIRED","PRIVACY_CONFIGURATION_REQUIRED","SECURE_STORAGE_REQUIRED","MODEL_CONFIGURATION_INVALID")
+internal val PHOTO_ERROR_CATEGORIES=setOf("PROVIDER_QUOTA","PROVIDER_AUTH","MODEL_UNAVAILABLE","REQUEST_INCOMPATIBLE","PROVIDER_TIMEOUT","OUTPUT_LIMIT","INVALID_RESPONSE","NETWORK_UNAVAILABLE","RATE_LIMITED","PROVIDER_UNAVAILABLE","RETRY_LIMIT","RESPONSE_PROCESSING_FAILED","AI_PAUSED","AI_NOT_CONFIGURED","PROVIDER_APPROVAL_REQUIRED","PRIVACY_CONFIGURATION_REQUIRED","SECURE_STORAGE_REQUIRED","MODEL_CONFIGURATION_INVALID")
 
 internal fun apiErrorMessage(value:Any?):String {
     val detail=(value as? JSONObject)?.opt("detail")
@@ -179,19 +179,22 @@ internal fun isCsrfRejection(status:Int,message:String)=status==403 && message.c
 class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
 
 internal const val PRODUCTION_API_ORIGIN="https://woundcopilot-1039151887397.us-central1.run.app/api/v1"
+internal const val REPAIR_API_ORIGIN="https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1"
+internal const val RENDER_TEST_API_ORIGIN="https://amilya-repair-test.onrender.com/api/v1"
 internal const val LOCAL_TEST_API_ORIGIN="http://127.0.0.1:18766/api/v1"
 
 /** Which server addresses a build may talk to. The sandbox build allows ONLY the fake test server on this PC. */
-internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean):Boolean{
+internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean,repair:Boolean=false,renderTest:Boolean=false):Boolean{
+    if(renderTest) return !sandbox && !repair && url==RENDER_TEST_API_ORIGIN
     val local=url==LOCAL_TEST_API_ORIGIN || url=="http://localhost:18766/api/v1"
-    return if(sandbox) local else url==PRODUCTION_API_ORIGIN || (debug && local)
+    return if(sandbox) local else if(repair) url==REPAIR_API_ORIGIN else url==PRODUCTION_API_ORIGIN || (debug && local)
 }
 
 class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
     @Volatile var diagnosticJob:String?=null
     @Volatile var diagnosticGeneration:String?=null
 
-    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX)) { "Unsupported API origin." } }
+    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX,BuildConfig.REPAIR_SERVER,BuildConfig.RENDER_TEST_SERVER)) { "Unsupported API origin." } }
 
     private val sessionKey=if(base.startsWith("https://woundcopilot-"))"session" else "session-local-integration"
 

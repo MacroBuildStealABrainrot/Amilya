@@ -1,6 +1,7 @@
 package com.woundcopilot.android
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
+import org.junit.Ignore
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 

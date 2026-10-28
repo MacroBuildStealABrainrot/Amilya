@@ -135,7 +135,10 @@ internal class SessionInfo(val directory: File) {
         } catch (_: IOException) { null }
     }
     /** Read-change-save as one step, so the clock updates and the piece counts (two threads) can never overwrite each other. */
-    fun update(key: String, value: String) = synchronized(LOCK) { write((read() ?: emptyMap()) + (key to value)) }
+    fun update(key: String, value: String) = synchronized(LOCK) {
+        val existing = read() ?: throw IOException("Recording recovery metadata is missing or unreadable")
+        write(existing + (key to value))
+    }
     companion object {
         private val LOCK = Any()
         fun framesKey(segment: Int) = "seg.$segment.frames"

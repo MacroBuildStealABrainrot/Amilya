@@ -23,6 +23,7 @@ class PhotoLifecycleTest {
         compose.runOnIdle{s=ViewModelProvider(compose.activity)[AppState::class.java]}
         compose.waitUntil(15000){!s.loading}
         check(s.user==null){"Use an isolated test installation"}
+        compose.runOnIdle{s.externalCapture.clear();if(s.locked)s.unlock()}
         compose.runOnIdle{
             AppState::class.java.getDeclaredMethod("setSession",JSONObject::class.java).apply{isAccessible=true}.invoke(s,obj("user" to obj("id" to "synthetic-photo-lifecycle","workspace_id" to "synthetic")))
             AppState::class.java.getDeclaredMethod("setCase",JSONObject::class.java).apply{isAccessible=true}.invoke(s,DemoData.caseData());s.screen="photo";s.unlock()

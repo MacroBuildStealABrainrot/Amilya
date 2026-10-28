@@ -1,5 +1,7 @@
 """Explicit scoped erasure while retaining normal immutable-table privileges."""
 from alembic import op
+import os
+import re
 revision='0006'
 down_revision='0005'
 branch_labels=None
@@ -35,8 +37,17 @@ REVOKE ALL ON FUNCTION public.wcp_erase_work(text,text,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.wcp_erase_work(text,text,text,text) TO wcp_app;
 """
 
+def erasure_sql():
+    # Cloud Run uses wcp_app. Managed test databases have a platform-assigned
+    # runtime user instead; do not require creating an unrelated global role.
+    role = os.environ.get('WCP_DB_RUNTIME_ROLE', 'wcp_app')
+    if not re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]{0,62}', role):
+        raise ValueError('Invalid runtime database role')
+    return ERASURE_SQL.replace('TO wcp_app;', 'TO "' + role + '";')
+
 def upgrade():
-    if op.get_bind().dialect.name=='postgresql':op.execute(ERASURE_SQL)
+    if op.get_bind().dialect.name=='postgresql':op.execute(erasure_sql())
 
 def downgrade():
     if op.get_bind().dialect.name=='postgresql':op.execute('DROP FUNCTION public.wcp_erase_work(text,text,text,text)')
+

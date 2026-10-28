@@ -38,11 +38,11 @@ def test_photo_metadata_failure_and_retry_do_not_copy_image_or_error_body(trace)
     assert len(inputs)==2 and inputs[0]['width']==40 and inputs[0]['height']==30
     attempts=[r for r in rows if r['stage']=='photo_attempt']
     assert [r['retry_count'] for r in attempts]==[0,1]
-    assert all(r['selected_model']=='openai/gpt-5.6-luna' for r in attempts)
+    assert all(r['selected_model']==trace.config.model_vision for r in attempts)
     assert any(r['stage']=='photo_result' and r['error_code']=='PROVIDER_UNAVAILABLE' for r in rows)
 
 def test_exact_outgoing_router_model_not_task_configuration(trace,monkeypatch):
-    selected='openai/gpt-5.6-sol'
+    selected='openai/gpt-6-astra'
     monkeypatch.setattr(providers,'select_route',lambda *a:{'model':selected,'effort_level':'high'})
     trace.http.responses=[completion()]
     asyncio.run(providers.routed('extract','Entirely synthetic clinical input',user=trace.user,encounter_id='synthetic'))
@@ -163,14 +163,14 @@ def test_replay_keeps_actual_original_model_without_new_provider_call(trace):
 def test_saved_report_links_only_to_same_actor_job(trace):
     origin=d.active.get()['id'];job=d.active.get()['job_id']
     trace.http.responses=[completion({'text':'Synthetic nursing note.','status':'ready','ui_alerts':[]})]
-    asyncio.run(providers.structured('quick_draft','synthetic','openai/gpt-5.6-terra',user=trace.user,encounter_id='synthetic'))
+    asyncio.run(providers.structured('quick_draft','synthetic','openai/gpt-6.1-sol',user=trace.user,encounter_id='synthetic'))
     d.finish(200)
     token=d.begin(str(uuid.uuid4()),job)
     try:
         d.bind(trace.user);d.task('document_save');d.saved_document(str(uuid.uuid4()),origin);d.finish(201)
         trace.user.is_platform_admin=True
         result=d.detail(uuid.UUID(d.active.get()['id']),trace.user)
-        assert result['generation_request_id']==origin and result['last_generation_model']=='openai/gpt-5.6-terra'
+        assert result['generation_request_id']==origin and result['last_generation_model']=='openai/gpt-6.1-sol'
         d.active.get()['job_id']=str(uuid.uuid4())
         d.saved_document(str(uuid.uuid4()),origin)
         assert 'generation_request_id' not in d.active.get()['links']

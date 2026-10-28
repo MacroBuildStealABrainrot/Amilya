@@ -31,6 +31,7 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         code=="MODEL_UNAVAILABLE" -> "No provider endpoint matches the configured model and privacy settings. An administrator must check routing."
         code=="REQUEST_INCOMPATIBLE" -> "The provider rejected the request format or model parameters. The integration needs correction."
         code=="PROVIDER_TIMEOUT" -> "The AI provider timed out. Check request status before retrying."
+        code=="OUTPUT_LIMIT" -> "The AI response was cut short. No partial result was accepted. Your source is saved; contact support before trying again."
         code=="INVALID_RESPONSE" -> "The AI response failed structure or clinical-data validation. Its result was not accepted."
         code=="NETWORK_UNAVAILABLE" -> "The server could not connect to the AI provider. Retry when that connection is restored."
         code=="RATE_LIMITED" -> "The provider rate-limited this request. Wait before retrying."
@@ -38,6 +39,7 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         code=="RESPONSE_PROCESSING_FAILED" -> "The server could not process the provider response. Contact support with the request reference."
         code=="PROVIDER_UNAVAILABLE" -> "The provider returned an unsuccessful response. Check the request diagnostics before retrying."
         api!=null && isCsrfRejection(api.status,api.message.orEmpty()) -> {code="SESSION_TOKEN_REFRESH_FAILED";"The secure session token could not be refreshed. Check your connection and tap Try Again. Your recording is not affected."}
+        api?.status==429 -> {code="RATE_LIMITED";"This request is temporarily limited. Wait before trying again."}
         api?.status==401 -> "Your session is no longer authorized. Sign in again."
         api?.status==402 -> "This app account needs AI entitlement or app credits. Provider funding alone does not activate app access."
         api?.status==428 -> "Review the updated terms to continue."

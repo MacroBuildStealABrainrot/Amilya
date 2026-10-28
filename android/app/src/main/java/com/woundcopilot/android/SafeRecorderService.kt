@@ -38,6 +38,12 @@ import kotlin.math.abs
 internal object CrashSafeBackendImpl : CrashSafeBackend {
     const val SAMPLE_RATE = 24_000
     const val CHANNELS = 1
+    // In-process rebuilds are not orphaned. The set resets after a process kill,
+    // allowing genuinely interrupted rebuilds to be recovered on the next launch.
+    private val activeRebuilds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    internal fun beginRebuild(dir: File) { activeRebuilds.add(dir.canonicalPath) }
+    internal fun endRebuild(dir: File) { activeRebuilds.remove(dir.canonicalPath) }
+    internal fun isRebuilding(dir: File): Boolean = activeRebuilds.contains(dir.canonicalPath)
 
     override fun start(context: Context, ownerKey: String) {
         SafeRecorderService.starting = true
@@ -75,6 +81,7 @@ internal object CrashSafeBackendImpl : CrashSafeBackend {
         val live = SafeRecorderService.live?.takeIf { it.isCapturing() }?.sessionDirectory
         root.listFiles { f -> f.isDirectory && f.name.startsWith(RetentionRules.SESSION_PREFIX) }.orEmpty().forEach { dir ->
             if (live != null && dir.canonicalFile == live.canonicalFile) return@forEach
+            if (isRebuilding(dir)) return@forEach // normal hand-off rebuild is still running
             if (SessionInfo(dir).read()?.get("status") == "finished") return@forEach // already rebuilt; nothing to do
             runCatching { consolidate(context, dir, interrupted = true) }
         }
@@ -431,12 +438,8 @@ internal class SafeRecorderService : Service() {
                 "sampleRate" to CrashSafeBackendImpl.SAMPLE_RATE.toString(), "channels" to CrashSafeBackendImpl.CHANNELS.toString(),
                 "segmentSeconds" to SEGMENT_SECONDS.toString(),
             ) + VisitContinuation.settings(visitId, nextPart, previous))
-            val sink = PartSink(dir, name, key, newWriter(dir, key, rate))
-            try { registerRecording(name, File(root, name), ownerKeyForParts) } catch (error: Exception) { sink.abandon(); throw error }
-            // Tell the finished part where the visit continues BEFORE it is rebuilt, so its note says so.
-            partDirs.lastOrNull()?.let { SessionInfo(it).update("nextName", name) }
-            partNames += name; partDirs += dir
-            return sink
+            // Do not publish or link this part yet: the hand-off primer write can fail.
+            return PartSink(dir, name, key, newWriter(dir, key, rate))
         } catch (error: Exception) {
             runCatching { dir.deleteRecursively() }
             throw error
@@ -451,8 +454,13 @@ internal class SafeRecorderService : Service() {
         partNumber = finishedPart + 1
         finalName = partNames.last(); sessionDirectory = partDirs.last(); sessionKey = null
         runCatching { SessionInfo(sink.dir).update("elapsedMillis", partMillis.toString()); SessionInfo(sink.dir).update("status", "stopped") }
-        val thread = Thread({ runCatching { CrashSafeBackendImpl.consolidate(this, sink.dir, interrupted = false) } }, "safe-rebuild-part-$finishedPart")
-        rebuilds += thread; thread.start()
+        CrashSafeBackendImpl.beginRebuild(sink.dir)
+        val thread = Thread({
+            try { runCatching { CrashSafeBackendImpl.consolidate(this, sink.dir, interrupted = false) } }
+            finally { CrashSafeBackendImpl.endRebuild(sink.dir) }
+        }, "safe-rebuild-part-$finishedPart")
+        rebuilds += thread
+        try { thread.start() } catch (error: Exception) { CrashSafeBackendImpl.endRebuild(sink.dir); throw error }
         handler.post {
             headsUpShown = false
             RecordingService.state.value = RecordingService.state.value.copy(notice = VisitContinuation.continuedNotice(partNumber))
@@ -461,28 +469,49 @@ internal class SafeRecorderService : Service() {
     }
 
     private fun startCaptureThread(dir: File, key: SessionKey) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            throw SecurityException("Microphone permission is required to start recording")
+        }
         val rate = CrashSafeBackendImpl.SAMPLE_RATE
         val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         check(minBuffer > 0) { "audio input unavailable" }
         val record = AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuffer * 4)
-        check(record.state == AudioRecord.STATE_INITIALIZED) { "audio input unavailable" }
-        val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, rate, CrashSafeBackendImpl.CHANNELS).apply {
-            setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-            setInteger(MediaFormat.KEY_BIT_RATE, 32_000)
-            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
-        }
-        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
-        codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        codec.start()
-        record.startRecording()
-        audio = record
-        val first = PartSink(dir, partNames.last(), key, newWriter(dir, key, rate))
+        var codec: MediaCodec? = null
+        try {
+            check(record.state == AudioRecord.STATE_INITIALIZED) { "audio input unavailable" }
+            val format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, rate, CrashSafeBackendImpl.CHANNELS).apply {
+                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
+                setInteger(MediaFormat.KEY_BIT_RATE, 32_000)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
+            }
+            codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+            val encoder = codec
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            encoder.start()
+            record.startRecording()
+            val first = PartSink(dir, partNames.last(), key, newWriter(dir, key, rate))
         val writer = HandoffRouter(
             first, VisitContinuation.framesPerPart(rate) .let { handOffFramesForTests ?: it },
-            openNext = { n -> openNextPart(n, rate).also { next -> sessionKey = (next as PartSink).key } },
+            openNext = { n -> openNextPart(n, rate) },
+            onPartStarted = { started ->
+                val next = started as PartSink
+                // Only commit after the repeated frame was successfully saved.
+                registerRecording(next.name, File(RecordingService.recordingsDirectory(this), next.name), ownerKeyForParts)
+                partDirs.lastOrNull()?.let { SessionInfo(it).update("nextName", next.name) }
+                partNames += next.name
+                partDirs += next.dir
+                sessionKey = next.key
+            },
             onPartFinished = ::partFinished,
         )
-        thread = Thread({ captureLoop(record, codec, writer) }, "safe-recorder").also { it.start() }
+            thread = Thread({ captureLoop(record, encoder, writer) }, "safe-recorder").also { it.start() }
+            audio = record
+        } catch (error: Exception) {
+            runCatching { record.stop() }
+            runCatching { record.release() }
+            codec?.let { encoder -> runCatching { encoder.stop() }; runCatching { encoder.release() } }
+            throw error
+        }
     }
 
     private fun captureLoop(record: AudioRecord, codec: MediaCodec, writer: HandoffRouter) {
@@ -492,7 +521,9 @@ internal class SafeRecorderService : Service() {
         var failure: String? = null
         var wasPaused = false
         fun drain(untilEnd: Boolean): Boolean {
+            val deadline = if (untilEnd) SystemClock.elapsedRealtime() + 10_000L else Long.MAX_VALUE
             while (true) {
+                if (untilEnd && SystemClock.elapsedRealtime() >= deadline) throw java.io.IOException("Audio encoder did not finish within 10 seconds")
                 val index = codec.dequeueOutputBuffer(outInfo, if (untilEnd) 10_000 else 0)
                 if (index < 0) { if (untilEnd) continue else return false }
                 val out = codec.getOutputBuffer(index)
@@ -538,7 +569,9 @@ internal class SafeRecorderService : Service() {
             }
             // Flush what the encoder still holds, so the last seconds before Stop are not lost.
             var queued = false
+            val flushDeadline = SystemClock.elapsedRealtime() + 10_000L
             while (!queued) {
+                if (SystemClock.elapsedRealtime() >= flushDeadline) throw java.io.IOException("Audio encoder did not accept final frame within 10 seconds")
                 val inIndex = codec.dequeueInputBuffer(10_000)
                 if (inIndex >= 0) {
                     codec.queueInputBuffer(inIndex, 0, 0, samples * 1_000_000L / CrashSafeBackendImpl.SAMPLE_RATE, MediaCodec.BUFFER_FLAG_END_OF_STREAM)

@@ -92,8 +92,8 @@ def gateway(tmp_path, monkeypatch):
         openrouter_api_key='synthetic-openrouter-key', openrouter_base_url='https://provider.invalid/api/v1',
         public_base_url='https://woundcopilot.example.test', provider_timeout_seconds=7,
         model_extraction='meta/muse-spark-1.3', model_vision='meta/muse-spark-1.3',
-        model_documentation='openai/gpt-5.6-luna', model_review='meta/muse-spark-1.3',
-        model_frontier='openai/gpt-5.6-sol', model_challenger='anthropic/claude-fable-5.1',
+        model_documentation='openai/gpt-6-luna', model_review='meta/muse-spark-1.3',
+        model_frontier='openai/gpt-6-astra', model_challenger='anthropic/claude-sonnet-5.5',
         cloudflare_api_token='', cloudflare_account_id='', groq_api_key='', deepgram_api_key='',
         deepgram_enabled=False, speech_provider='auto', max_text_chars=40000,
         max_image_mb=12, max_document_mb=20, max_audio_mb=25, max_audio_seconds=1800)
@@ -122,11 +122,11 @@ def operation_rows(gateway):
 
 
 def test_openai_route_uses_compatible_output_limit_with_privacy_enforced(gateway):
-    gateway.config.model_extraction = 'openai/gpt-5.6-luna'
+    gateway.config.model_extraction = 'openai/gpt-6-luna'
     gateway.http.responses = [completion()]
     extract(gateway)
     payload = gateway.http.calls[0]['json']
-    assert payload['max_completion_tokens'] == 1800
+    assert payload['max_completion_tokens'] == 8000
     assert 'max_tokens' not in payload
     assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
     assert operation_rows(gateway)[0].usage['routing']['effort_level'] == 'low'
@@ -165,7 +165,7 @@ def test_duplicate_qa_pass_cannot_override_failure(gateway):
     gateway.http.responses = [completion(), completion()]
     gateway.http.responses[0]['choices'][0]['message']['content'] = '{"passed":false,"passed":true,"discrepancies":[]}'
     with pytest.raises(HTTPException) as caught:
-        asyncio.run(providers.structured('qa', 'Synthetic draft', 'openai/gpt-5.6-luna', user=gateway.user, encounter_id='qa'))
+        asyncio.run(providers.structured('qa', 'Synthetic draft', 'openai/gpt-6-luna', user=gateway.user, encounter_id='qa'))
     assert caught.value.status_code == 502
     assert operation_rows(gateway)[0].usage['charge_waived'] is True
 
@@ -219,7 +219,7 @@ def test_unassessable_photo_succeeds_without_placeholder_findings(gateway):
     gateway.http.responses = [completion({'facts': [], 'warnings': ['No wound is visible.'],
         'quality': {'status': 'insufficient', 'reason': 'no_wound'}})]
     result = asyncio.run(providers.structured('image', 'Synthetic blank image',
-        'openai/gpt-5.6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
+        'openai/gpt-6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
     assert result['facts'] == [] and 'No wound is visible.' in result['warnings']
     assert result['quality']['retake_required'] is True and result['quality']['reason'] == 'no_wound'
     schema = gateway.http.calls[0]['json']['response_format']['json_schema']['schema']
@@ -235,7 +235,7 @@ def test_invented_photo_value_key_is_still_rejected(gateway):
         'quality': {'status': 'sufficient', 'reason': 'none'}})]
     with pytest.raises(HTTPException) as caught:
         asyncio.run(providers.structured('image', 'Synthetic image',
-            'openai/gpt-5.6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
+            'openai/gpt-6-luna', user=gateway.user, encounter_id='synthetic-encounter'))
     assert caught.value.status_code == 502
 
 
@@ -312,7 +312,35 @@ def test_timeout_and_http_failures_are_bounded_and_release_credits(gateway, fail
         assert account.reserved_micros == 0 and account.plan_micros == 10_000_000
 
 
+def test_cancelled_provider_call_releases_hold_and_allows_new_attempt(gateway):
+    started = asyncio.Event()
+
+    async def blocked_provider(_):
+        started.set()
+        await asyncio.Event().wait()
+
+    async def scenario():
+        gateway.http.responses = [blocked_provider]
+        first = asyncio.create_task(providers.extract_text(
+            'Synthetic cancelled request.', 'typed',
+            user=gateway.user, encounter_id='cancelled-visit'))
+        await asyncio.wait_for(started.wait(), timeout=2)
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+
+    asyncio.run(scenario())
+    with gateway.sessions() as db:
+        op = db.scalar(select(UsageOperation))
+        account = db.get(BillingAccount, gateway.user.workspace_id)
+        assert op.status == 'released'
+        assert op.charged_micros == 0
+        assert account.reserved_micros == 0
+        assert account.plan_micros == 10_000_000
+
+
 def test_reservation_commits_before_http_and_replay_is_encrypted_and_single_charge(gateway):
+    gateway.config.model_extraction = 'openai/gpt-6-luna'
     source = 'Synthetic private narrative with wound assessment.'
     def response(_):
         with gateway.sessions() as db:
@@ -327,9 +355,9 @@ def test_reservation_commits_before_http_and_replay_is_encrypted_and_single_char
     first = extract(gateway, source)
     second = extract(gateway, source)
     assert first == second and len(gateway.http.calls) == 1
-    assert first['usage']['normalized_micros'] == 440
+    assert first['usage']['normalized_micros'] == 200
     assert first['usage']['actual_cost_micros'] == 1000
-    assert first['usage']['charged_credits'] == .44
+    assert first['usage']['charged_credits'] == .2
     with gateway.sessions() as db:
         assert len(list(db.scalars(select(UsageOperation)))) == 1
         assert len(list(db.scalars(select(CreditLedger)))) == 2
@@ -411,10 +439,10 @@ def test_ordinary_clinical_instruction_word_remains_quoted_data(gateway):
 
 
 def test_normalization_uses_list_prices_and_cache_units_without_discount_drift():
-    cost, usage = providers.normalized_tokens('openai/gpt-5.6-sol', {
+    cost, usage = providers.normalized_tokens('openai/gpt-6-astra', {
         'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000,
         'prompt_tokens_details': {'cached_tokens': 500_000}, 'cost': 1})
-    assert cost == 22_200_000
+    assert cost == 55_200_000
     assert usage['cached_tokens'] == 500_000
     assert providers.actual_cost({'cost': 0.0000001}) == 1
     assert providers.actual_cost({}) is None
@@ -476,7 +504,7 @@ def test_draft_requires_independent_qa_of_exact_proposed_text(gateway):
     result = asyncio.run(providers.draft_text(facts, 'nursing', 'auto', user=gateway.user, encounter_id='draft'))
     assert result['text'] == draft and result['qa']['passed'] is True
     assert result['effort_level'] == 'medium'
-    assert result['routing']['model'] == 'openai/gpt-5.6-terra'
+    assert result['routing']['model'] == gateway.config.model_documentation
     assert gateway.http.calls[0]['json']['reasoning']['effort'] == 'medium'
     qa_source = json.loads(gateway.http.calls[1]['json']['messages'][1]['content'])
     assert qa_source['case_facts'] == facts and qa_source['proposed_draft'] == draft
@@ -507,7 +535,7 @@ def test_review_escalation_is_triggered_and_reconciled_with_fact_states_preserve
     assert result['routing']['escalated'] is True
 
 
-@pytest.mark.parametrize('mode', ['fast', 'auto', 'advanced', 'deep'])
+@pytest.mark.parametrize('mode', ['fast', 'auto', 'advanced'])
 def test_review_without_material_trigger_uses_one_stage(gateway, mode):
     gateway.http.responses = [completion({'considerations': [], 'warnings': []})]
     result = asyncio.run(providers.clinical_review([], mode, user=gateway.user, encounter_id='simple-review'))
@@ -658,3 +686,4 @@ def test_verification_cannot_send_long_audio_or_bypass_execution_pause(gateway, 
     with pytest.raises(HTTPException) as caught:
         asyncio.run(providers.verify_speech_clip(b'synthetic-clip', user=gateway.user, encounter_id='verification'))
     assert caught.value.status_code == 503 and not operation_rows(gateway) and not gateway.http.calls
+

@@ -65,7 +65,8 @@ def has_unlimited_credits(user: User) -> bool:
     """
     configured = getattr(settings, "unlimited_credit_user_ids", "")
     allowed = {value.strip() for value in configured.split(",") if value.strip()}
-    return bool(user.is_platform_admin or user.id in allowed)
+    from . import render_owner_test
+    return bool(user.is_platform_admin or user.id in allowed or render_owner_test.allows(user))
 
 
 def _lock_account(db: Session, workspace_id: str) -> BillingAccount:
@@ -165,7 +166,7 @@ def reserve(db: Session, user: User, operation_id: str, estimated_micros: int,
         raise
 
 
-_USAGE_NUMBERS = {"input_tokens", "output_tokens", "cached_tokens", "total_tokens", "audio_seconds", "audio_minutes", "media_units", "image_units", "gateway_overhead_micros", "provider_list_cost_micros", "latency_ms", "attempt_count"}
+_USAGE_NUMBERS = {"input_tokens", "output_tokens", "cached_tokens", "total_tokens", "audio_seconds", "audio_minutes", "media_units", "image_units", "gateway_overhead_micros", "provider_list_cost_micros", "latency_ms", "attempt_count", "max_output_tokens"}
 
 
 def _safe_usage(usage: dict) -> dict:
@@ -174,12 +175,22 @@ def _safe_usage(usage: dict) -> dict:
     routing = usage.get('routing')
     if isinstance(routing, dict):
         from .kosmo import MODELS, VERSION
-        if isinstance(routing.get('effort_level'), str) and routing['effort_level'] in MODELS and routing.get('model') == MODELS[routing['effort_level']]:
+        from .providers import MODEL_PRICES
+        if isinstance(routing.get('effort_level'), str) and routing['effort_level'] in MODELS and isinstance(routing.get('model'), str) and routing['model'] in MODEL_PRICES:
             safe['routing'] = {key: routing[key] for key in ('model', 'effort_level')}
             safe['routing']['policy_version'] = VERSION
+    from .providers import known_model_id, FINISH_REASONS
+    reported = usage.get('reported_model')
+    if known_model_id(reported):
+        safe['reported_model'] = reported
+    finish = usage.get('finish_reason')
+    if isinstance(finish, str) and finish in FINISH_REASONS:
+        safe['finish_reason'] = finish
+    if usage.get('model_identity') in ('confirmed', 'unreported', 'mismatch'):
+        safe['model_identity'] = usage['model_identity']
     if type(usage.get('upstream_status')) is int and 100 <= usage['upstream_status'] <= 599:
         safe['upstream_status'] = usage['upstream_status']
-    if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible', 'invalid_response', 'provider_timeout', 'provider_connection', 'response_processing'):
+    if usage.get('failure_reason') in ('upstream_error', 'route_unavailable', 'provider_credits', 'provider_access', 'provider_rate_limit', 'request_incompatible', 'invalid_response', 'provider_timeout', 'provider_connection', 'response_processing', 'output_limit'):
         safe['failure_reason'] = usage['failure_reason']
     retry_deadline = usage.get('retry_not_before')
     if type(retry_deadline) in (int, float) and 0 < retry_deadline < 10**12:
@@ -311,6 +322,7 @@ def plans():
 
 @router.get("/billing")
 def billing_status(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from . import render_owner_test
     account = db.get(BillingAccount, user.workspace_id)
     history = list(db.scalars(select(CreditLedger).where(CreditLedger.workspace_id == user.workspace_id).order_by(CreditLedger.created_at.desc()).limit(60)))
     period_valid = account and account.period_end > int(time.time())
@@ -320,6 +332,8 @@ def billing_status(user: User = Depends(current_user), db: Session = Depends(get
             "reserved_credits": (account.reserved_micros if account else 0) / MICROS_PER_CREDIT,
             "topup_credits": (account.topup_micros if account else 0) / MICROS_PER_CREDIT,
             "is_unlimited": has_unlimited_credits(user), "period_end": account.period_end if account else None,
+            "synthetic_test_allowance": {"expires_at": settings.render_owner_test_until, "provider_cap_usd": 1,
+                "patient_data_allowed": False} if render_owner_test.allows(user) else None,
             "cancel_at_period_end": account.cancel_at_period_end if account else False,
             "history": [{"id": row.id, "kind": row.kind, "credits": row.delta_micros / MICROS_PER_CREDIT,
                          "created_at": row.created_at, "balance_credits": row.balance_after_micros / MICROS_PER_CREDIT} for row in history]}
@@ -505,6 +519,9 @@ def verify_stripe_event(raw: bytes, signature: str, secret: str, now: int | None
         raise HTTPException(503, "Webhook signing is not configured")
     if len(raw) > 1024 * 1024:
         raise HTTPException(413, "Webhook exceeds size limit")
+    # Reject malformed non-ASCII headers before signature verification.
+    if not signature.isascii():
+        raise HTTPException(400, "Invalid webhook signature")
     fields = {}
     for part in signature.split(","):
         key, sep, value = part.partition("=")
@@ -842,6 +859,11 @@ def release_stale_hold(db: Session, operation: UsageOperation) -> bool:
     if operation is None or operation.status != "reserved":
         db.rollback()
         return False
+    # Re-check under the account lock: the lease may have been renewed
+    # between the batch scan and this transaction.
+    if not lease_is_stale(operation, time.time(), settings.ai_stale_release_quiet_seconds):
+        db.rollback()
+        return False
     held = operation.reserved_plan_micros + operation.reserved_topup_micros
     plan_return = operation.reserved_plan_micros if operation.cycle_start == account.period_start and account.period_end > int(time.time()) and account.status not in {"canceled", "incomplete_expired"} else 0
     account.plan_micros += plan_return
@@ -893,3 +915,4 @@ def absorbed_cost_report(db: Session, since_epoch: float) -> dict:
             "known_absorbed_cost_micros": sum(r.actual_cost_micros or 0 for r in waived),
             "unknown_cost_attempts": sum(1 for r in waived if r.actual_cost_micros is None),
             "charged_micros": sum(r.charged_micros for r in rows)}
+

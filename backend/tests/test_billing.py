@@ -358,6 +358,29 @@ def test_reservation_return_across_cycle_does_not_resurrect_expired_plan(commerc
         assert account.plan_micros == 2500 and account.topup_micros == 1000 and account.reserved_micros == 0
 
 
+def test_webhook_non_ascii_signature_rejected(commerce):
+    env = commerce
+    with pytest.raises(HTTPException) as exc:
+        billing.verify_stripe_event(b"{}", "t=123,v1=\u00e9", env.config.stripe_webhook_secret)
+    assert exc.value.status_code == 400
+
+
+def test_cross_cycle_settle_preserves_unused_topup(commerce):
+    env = commerce
+    fund(env, 1000, topup=1000)
+    with env.db() as db:
+        billing.reserve(db, env.user, "cross-cycle-settle", 1500)
+        account = billing._lock_account(db, env.user.workspace_id)
+        account.period_start += 1
+        account.plan_micros = 2500
+        db.commit()
+        billing.settle(db, env.user, "cross-cycle-settle", 200, "synthetic", "model", {})
+        account = db.get(BillingAccount, env.user.workspace_id)
+        assert account.plan_micros == 2500
+        assert account.topup_micros == 1000
+        assert account.reserved_micros == 0
+
+
 def test_terminal_subscription_and_paid_invoice_resist_same_second_reordering(commerce):
     env = commerce; fund(env, 0, topup=1000)
     now = int(time.time())

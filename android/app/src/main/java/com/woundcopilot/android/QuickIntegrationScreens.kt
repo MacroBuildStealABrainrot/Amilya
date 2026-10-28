@@ -16,18 +16,40 @@ import java.time.format.DateTimeFormatter
     LaunchedEffect(s.user?.str("id")){s.refreshRecordingJobs()}
     StartScreen(
         recovery={
-            s.recordingJobs.take(3).forEachIndexed{index,job->
-                TextButton({s.resumeRecording(job)},enabled=!s.loading){Text(if(job.str("resume_from")=="REPORT_READY")"Review recovered report ${index+1}"else "Resume saved recording ${index+1}")}
+            val pending = s.recordingJobs.filter { it.str("resume_from") != "REPORT_READY" }
+            val reports = s.recordingJobs.filter { it.str("resume_from") == "REPORT_READY" }
+            if (pending.isNotEmpty()) {
+                TextButton({ s.resumeRecording(pending.first()) }, enabled = !s.loading) {
+                    Text("${pending.size} recording${if (pending.size == 1) "" else "s"} not finished")
+                }
+                if (pending.size > 1) DetailDisclosure("Other unfinished recordings", "${pending.size - 1} more") {
+                    pending.drop(1).forEachIndexed { index, job ->
+                        TextButton({ s.resumeRecording(job) }, enabled = !s.loading) { Text("Open unfinished recording ${index + 2}") }
+                    }
+                }
             }
-            if(s.recordingJobs.size>3)DetailDisclosure("More saved recordings","${s.recordingJobs.size-3} more"){
-                s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Resume saved recording ${index+4}")}}
+            if (reports.isNotEmpty()) {
+                TextButton({ s.resumeRecording(reports.first()) }, enabled = !s.loading) { Text("Review recovered report") }
+                if (reports.size > 1) DetailDisclosure("Other recovered reports", "${reports.size - 1} more") {
+                    reports.drop(1).forEachIndexed { index, job ->
+                        TextButton({ s.resumeRecording(job) }, enabled = !s.loading) { Text("Review recovered report ${index + 2}") }
+                    }
+                }
             }
         },
-        savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}.take(4).map { e ->
-            val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
-            val name=s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name").orEmpty()
-            SimpleSavedWork(e.str("id"),if(quick || name.isBlank())e.str("title")else name,
-                if(quick)localTime(e.str("updated_at"))else e.str("title"))
+        savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}
+            .sortedByDescending { it.str("updated_at") }.take(1).map { e ->
+            val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().lowercase()
+            val type=when(mode){
+                "photo","photo_assessment","image"->"Photo assessment"
+                "consultant","wound_consultant","ask_consultant"->"Wound consultant"
+                "document","report","nursing"->"Nursing visit"
+                else->"Visit"
+            }
+            val rawTitle=e.str("title").trim()
+            val title=if(rawTitle.isNotBlank() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
+                rawTitle else type
+            SimpleSavedWork(e.str("id"),title,localTime(e.str("updated_at")))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},
         onConsultant={s.startQuick("consultant")},onOpenWork={s.openEncounter(it)},
         onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
