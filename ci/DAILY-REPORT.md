@@ -10,7 +10,10 @@
 | Tests, Pilot APK, open changes, approvals | GitHub API | nothing (`GITHUB_TOKEN`) |
 | Live traffic and server errors | Cloud Run and Cloud Logging | one-time `ci/report_bootstrap.sh` (owner approval), then repository variables `AMILYA_REPORT_WIF_PROVIDER` and `AMILYA_REPORT_ACCOUNT` |
 | Crashes | Sentry org `amilya` | repository secret `SENTRY_AUTH_TOKEN` (scopes `org:read`, `project:read`, `event:read`) |
-| Spending, clinical quality | not built yet | billing export approval; synthetic evaluation suite |
+| Deepgram audio hours and prepaid balance | Deepgram management API | repository secret `DEEPGRAM_USAGE_KEY` (a separate key with only the Member role or usage/billing read scopes, never the app's transcription key) and repository variable `DEEPGRAM_PROJECT_ID` |
+| Google Cloud spending, clinical quality | not built yet | billing export approval; synthetic evaluation suite |
+
+OpenRouter (all AI models) and Groq (transcription) offer no read-only spending access. OpenRouter's figures need a spend-capable or key-managing key, and Groq has no billing API. Neither is placed in GitHub. Use their dashboards, spend limits and low-balance alerts instead.
 
 Open an issue with the label `needs-approval` to make a decision appear under "Waiting for you".
 

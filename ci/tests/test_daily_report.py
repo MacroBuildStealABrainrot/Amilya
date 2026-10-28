@@ -57,6 +57,13 @@ def test_route_shape_redacts_ids():
     assert dr.route_shape(url) == '/api/v1/encounters/{id}/upload'
 
 
+def test_deepgram_states():
+    assert 'Deepgram (transcription): not connected yet' in dr.render(base())
+    assert 'could not read (HTTP 403)' in dr.render(base(deepgram={'error': 'HTTP 403'}))
+    text = dr.render(base(deepgram={'balances': [{'amount': 12.5, 'units': 'usd'}], 'hours_today': 0.4, 'hours_month': 3.1}))
+    assert '0.4 audio hours today, 3.1 this month' in text and '12.5 usd' in text
+
+
 def test_waiting_items_listed():
     data = base()
     data['github']['approvals'] = [{'number': 5, 'title': 'Turn on database backups', 'url': 'a'}]
