@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     trusted_hosts: str = 'localhost,127.0.0.1,testserver'
     session_hours: int = 12
     allow_signup: bool = True
+    render_owner_enrollment_email: str = ''
+    render_owner_enrollment_until: int = 0
     clinical_data_enabled: bool = False
     legal_version: str = '2026-09-05'
     legal_business_name: str = ''
@@ -96,3 +98,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

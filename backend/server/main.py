@@ -86,11 +86,18 @@ def health():
 
 @app.get('/api/v1/config')
 def public_config():
+    owner_enrollment = False
+    if not settings.allow_signup:
+        from .render_enrollment import configured, is_open
+        if configured():
+            with SessionLocal() as db:
+                owner_enrollment = is_open(db)
     def capability(enabled,reason):return {'enabled':bool(enabled),'reason':'' if enabled else reason}
     ai=bool(settings.provider_execution_enabled and settings.openrouter_api_key)
     speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key))
     paused='Live assistance is configured but paused while the owner completes provider activation. Manual documentation remains available.'
-    return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':settings.allow_signup,
+    return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':bool(settings.allow_signup or owner_enrollment),
+        'signup_scope':'public' if settings.allow_signup else 'owner_test' if owner_enrollment else 'closed',
         'clinical_data_enabled':settings.clinical_data_enabled,'privacy_review_required':not settings.clinical_data_enabled,
         'capabilities':{'ai':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Clinical assistance is not configured. Manual documentation remains available.'),
             'photo':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Image interpretation is not configured.'),'document':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Document extraction is not configured.'),
@@ -126,4 +133,5 @@ def frontend(path:str):
         return FileResponse(asset,headers={'Cache-Control':'no-cache' if path.endswith(('sw.js','index.html')) else 'public, max-age=3600'})
     if not (FRONTEND/'index.html').exists():return JSONResponse({'service':'WoundCoPilot','frontend':'Build the frontend to open the app.'},status_code=503)
     return FileResponse(FRONTEND/'index.html',headers={'Cache-Control':'no-cache'})
+
 

@@ -189,7 +189,10 @@ def issue_session(db,user,response,native=False):
 
 @router.post('/signup',status_code=201)
 def signup(payload:Signup,request:Request,response:Response,db:Session=Depends(get_db)):
-    if not settings.allow_signup: raise HTTPException(403,'Signup is currently closed.')
+    if not settings.allow_signup:
+        from .render_enrollment import is_open
+        if not is_open(db, payload.email):
+            raise HTTPException(403,'Signup is currently closed.')
     check_rate('signup:'+str(request.client.host),5,3600)
     if not payload.accept_terms or payload.terms_version!=settings.legal_version or payload.privacy_version!=settings.legal_version:
         raise HTTPException(422,'Accept the current Terms and Privacy Policy to create an account.')
@@ -302,3 +305,4 @@ def bootstrap_owner(email,password,workspace_name='WoundCoPilot Owner'):
         # Bootstrap account still accepts policies on first login; no fabricated owner acceptance.
         from server.audit import write_audit
         write_audit(db,user,'owner.bootstrapped',user.id);db.commit();return user.id
+
