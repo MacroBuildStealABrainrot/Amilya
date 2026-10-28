@@ -24,9 +24,11 @@ MARKER = '063dbda7-f51c-5d78-8102-342bd1ac74d6'
 EXTRACTION_VERSION = 'extract-sol-v2'
 HTTP_VERSION = 'native-http-v3'
 AUDIO_HTTP_VERSION = 'audio-http-v4'
+PHOTO_HTTP_VERSION = 'photo-note-v5'
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
-           AUDIO_HTTP_VERSION: '6b3a9bb9-5e66-5637-a578-cf6d5447a58e'}
+           AUDIO_HTTP_VERSION: '6b3a9bb9-5e66-5637-a578-cf6d5447a58e',
+           PHOTO_HTTP_VERSION: 'd34dd3d6-1af0-5b13-b4c2-0698a85c9446'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -220,7 +222,7 @@ def main():
             raise ConfigurationError('PROBE_OPT_IN_REQUIRED')
         if not env.get('OPENROUTER_API_KEY') or env.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1') != 'https://openrouter.ai/api/v1':
             raise ConfigurationError('PROBE_PROVIDER_REQUIRED')
-        if version in (HTTP_VERSION, AUDIO_HTTP_VERSION):
+        if version in (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION):
             from render_owner_activation import APPROVAL_END, check_key
             now = time.time()
             if now >= APPROVAL_END:
@@ -235,12 +237,12 @@ def main():
             os.environ.update(DATABASE_URL='sqlite:///' + directory + '/probe.sqlite',
                 ENVIRONMENT='development', PROVIDER_EXECUTION_ENABLED='true',
                 APP_SECRET=secrets.token_hex(32), UNLIMITED_CREDIT_USER_IDS='',
-                ALLOW_SIGNUP='true' if version in (HTTP_VERSION, AUDIO_HTTP_VERSION) else 'false',
-                PUBLIC_BASE_URL='http://localhost' if version in (HTTP_VERSION, AUDIO_HTTP_VERSION) else env['PUBLIC_BASE_URL'],
-                SECURE_COOKIES='false' if version in (HTTP_VERSION, AUDIO_HTTP_VERSION) else 'true',
+                ALLOW_SIGNUP='true' if version in (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION) else 'false',
+                PUBLIC_BASE_URL='http://localhost' if version in (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION) else env['PUBLIC_BASE_URL'],
+                SECURE_COOKIES='false' if version in (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION) else 'true',
                 OPENROUTER_SPEECH_ENABLED='true' if version == AUDIO_HTTP_VERSION else 'false',
                 OPENROUTER_REQUIRE_ZDR='true', PROVIDER_TIMEOUT_SECONDS='45',
-                MODEL_EXTRACTION='openai/gpt-6.1-sol' if version in (EXTRACTION_VERSION, HTTP_VERSION, AUDIO_HTTP_VERSION) else 'openai/gpt-6-luna',
+                MODEL_EXTRACTION='openai/gpt-6.1-sol' if version in (EXTRACTION_VERSION, HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION) else 'openai/gpt-6-luna',
                 MODEL_VISION='openai/gpt-6.1-sol',
                 MODEL_DOCUMENTATION='openai/gpt-6.1-sol', MODEL_FRONTIER='openai/gpt-6-astra')
             sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -249,7 +251,7 @@ def main():
             from server.db import Base, engine, SessionLocal
             from server.identity import User, Workspace
             Base.metadata.create_all(engine)
-            if version in (HTTP_VERSION, AUDIO_HTTP_VERSION):
+            if version in (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION):
                 try:
                     return 0 if check_http_workflows(audio=version == AUDIO_HTTP_VERSION) else 1
                 finally:

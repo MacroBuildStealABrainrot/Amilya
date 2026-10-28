@@ -52,6 +52,18 @@ def test_existing_claim_stops_before_provider_import_or_execution(monkeypatch, c
     assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED\n'
 
 
+@pytest.mark.parametrize('version', [probe.HTTP_VERSION, probe.AUDIO_HTTP_VERSION, probe.PHOTO_HTTP_VERSION])
+def test_each_http_probe_has_a_separate_once_only_claim(monkeypatch, capsys, version):
+    from types import SimpleNamespace
+    import render_owner_activation
+    monkeypatch.setattr(probe.os, 'environ', environment() | {'AMILYA_RENDER_SYNTHETIC_PROBE':version})
+    monkeypatch.setattr(probe, 'time', SimpleNamespace(time=lambda:render_owner_activation.APPROVAL_END - 3600))
+    monkeypatch.setattr(render_owner_activation, 'check_key', lambda *args: None)
+    monkeypatch.setattr(probe, 'claim_once', lambda env: False)
+    assert probe.main() == 0
+    assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED\n'
+
+
 def test_image_is_only_fixed_geometric_shapes_with_no_metadata():
     with Image.open(io.BytesIO(probe.synthetic_image())) as image:
         assert image.size == (384, 384)

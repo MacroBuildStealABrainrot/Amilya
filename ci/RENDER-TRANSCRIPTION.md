@@ -29,7 +29,7 @@ The fixed `audio-http-v4` startup test uses a locally generated artificial voice
 of ten." It is 5.312 seconds, mono AAC/M4A, generated with espeakng-loader 0.2.4
 and ffmpeg. SHA-256:
 `4d8d5e1eadac65c3660cb71c07c2f224c578994dbf67f5f348b446acef21246a`.
-The image needs no TTS dependency: only this fixed 27,138-byte recording is
+The server image needs no TTS dependency: only this fixed 27,138-byte recording is
 included, as text-encoded fixture data, with a hash checked before use.
 
 The private test creates a temporary fixture account in local SQLite, uses normal
@@ -48,3 +48,38 @@ Primary references reviewed October 28, 2026:
 
 The current public catalog included this model when filtered for ZDR endpoints.
 Requests still enforce ZDR at runtime and fail closed if no eligible route exists.
+
+## Verified live, October 28, 2026
+
+Functional commit `cd9424969cab60056e5c8abfa0ac55e319c09b7f` passed CI run
+`40779269994`: backend 934 passed / 1 skipped, Android build/unit/lint/flag checks,
+and deployment safety checks. The Google Cloud job performed readiness checks
+only; authentication, CLI setup and deployment steps stayed skipped.
+
+- Automatic code deploy `dep-dbh7dbdg1s2s73fik98g` became live with public speech
+  still off, preserving the previously enabled owner photo/text allowance.
+- Private test deploy `dep-dbh7dnmhds7s73dtug2g` logged audio PASS and report PASS
+  at 22:28:58 UTC and became live at 22:29:21 UTC. This exercised normal native
+  login, consented multipart M4A upload, real OpenRouter transcription, extraction,
+  and a genuinely checked report from the recording, in the disposable fixture DB.
+- Only after those results, clear the once-only probe and set
+  `OPENROUTER_SPEECH_ENABLED=true`. Deploy `dep-dbh7ejt9fdbs73865n90` logged owner
+  eligibility READY at 22:30:10 UTC and became live at 22:30:30 UTC.
+- After it became live, public config returned HTTP 200 with audio, photo,
+  document and AI capabilities enabled. Signup remained closed, billing and
+  clinical-data flags stayed off, and the same test cap/expiry remained in place.
+  Health returned HTTP 200 / ok; an anonymous session request returned HTTP 401.
+
+Keep the already supplied Test14 APK. No rebuilt APK was delivered, no installed
+app or recording was deleted, no key was renewed or topped up, and no production
+traffic moved. The allowance still ends October 28 at 20:50 Toronto time. Physical
+Samsung behavior and a successful real-device wound assessment remain unverified.
+
+A concurrent photo wording change at `d78defafe86534f293caf95535e38f5b6a737e70`
+was discovered while saving this handoff. Its provider and prompt changes were
+preserved together with the speech connection. The new fixed-input test version
+`photo-note-v5` has its own once-only marker and reuses the normal native HTTP
+photo/extraction/checked-report test after that prompt change. It does not reset
+or delete earlier claims, renew the key or enable clinical data. A geometric
+image must still yield a retake decision and no findings. This tests the updated
+prompt's rejection of an unsuitable image, not a genuine wound or phone hardware.
