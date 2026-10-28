@@ -49,8 +49,15 @@ async def boundary(request:Request,call_next):
     except asyncio.CancelledError:
         diagnostics.finish(499);diagnostics.active.reset(diagnostic_token)
         raise
-    except Exception:
-        logger.error('request_failed request_id=%s method=%s',request_id,request.method)
+    except Exception as exc:
+        # Record only the exception CLASS, never str(exc), traceback, input or PHI.
+        # The existing request ID allows correlation with Cloud Run request metadata.
+        error_class = type(exc).__name__
+        if error_class not in {'TimeoutError', 'ConnectionError', 'ValueError',
+                              'RuntimeError', 'OSError', 'KeyError', 'TypeError'}:
+            error_class = 'OtherError'
+        logger.error('request_failed request_id=%s method=%s error_class=%s',
+                     request_id,request.method,error_class)
         response=JSONResponse({'detail':'The request could not be completed. Refresh the case to check its current state.','request_id':request_id},status_code=500)
     finally:providers.request_operation.reset(operation_token);performance_job.reset(performance_token)
     diagnostics.finish(response.status_code)
