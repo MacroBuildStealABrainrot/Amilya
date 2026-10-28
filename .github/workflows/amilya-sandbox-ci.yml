@@ -1,3 +1,4 @@
+# Photo-report 409 repair build; GitHub Actions trigger.
 # Amilya / WoundCoPilot 1.8.5-test10: build and test on GitHub's machines (they have the Android SDK; the review workspace does not).
 #
 # SAFE BY DESIGN
@@ -15,7 +16,7 @@ name: amilya-sandbox-ci
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, 'test/**' ]
+    branches: [ main, master, 'test/**', 'fix/photo-report-409-20261028' ]
 
 permissions:
   contents: read
