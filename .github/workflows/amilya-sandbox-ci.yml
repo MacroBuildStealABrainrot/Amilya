@@ -127,6 +127,17 @@ jobs:
           cp -r android/wear-contract/build/reports ci-out/reports/wear-contract 2>/dev/null || true
           cp gradle-build.log build-flags.log ci-out/ 2>/dev/null || true
           (cd ci-out/apks && sha256sum *.apk > SHA256SUMS.txt) || true
+      - name: Prepare the one app to install
+        if: always()
+        run: |
+          mkdir -p ci-out/install
+          cp android/app/build/outputs/apk/pilot/*.apk ci-out/install/Amilya-Test-15.apk || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: INSTALL-THIS-Amilya-Test-15
+          path: ci-out/install/Amilya-Test-15.apk
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
