@@ -88,7 +88,7 @@ def main():
             probe = subprocess.run([sys.executable, str(root / 'scripts/render_synthetic_probe.py')],
                                    cwd=root, env=env, capture_output=True, timeout=240)
             for line in probe.stdout.decode('utf-8', errors='replace').splitlines():
-                if re.fullmatch(r'AMILYA_SYNTHETIC_PROBE (?:stage=(?:photo|extract|report|audio) )?status=(?:PASS|FAIL|BLOCKED|ALREADY_CLAIMED)(?: code=[A-Z0-9_]{1,40})?', line):
+                if re.fullmatch(r'AMILYA_SYNTHETIC_PROBE (?:stage=(?:photo|extract|report|audio|wound) )?status=(?:PASS|FAIL|BLOCKED|ALREADY_CLAIMED)(?: code=[A-Z0-9_]{1,40})?', line):
                     print(line, flush=True)
         except (subprocess.TimeoutExpired, OSError):
             print('AMILYA_SYNTHETIC_PROBE status=FAIL code=TIMEOUT', flush=True)
