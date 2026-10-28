@@ -51,7 +51,10 @@ import org.json.JSONObject
             val sourcePhotos=s.case?.items("evidence").orEmpty().filter{it.str("id") in ids}
             sourcePhotos.mapNotNull{it.optJSONObject("metadata")?.optJSONObject("photo_quality")}.filter{it.optBoolean("retake_required")}.forEach{Text(it.str("message"))}
             if(findings.isEmpty())Text("No assessable findings. Review or retake these photos.")
-            findings.forEach{Text(prettyValue(it.opt("value")))}
+            // One chart-ready paragraph: wound bed, edges, periwound, then exudate.
+            val order=listOf("wound_tissue","wound_edges","periwound","exudate")
+            if(findings.isNotEmpty())Text(findings.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
+                .map{prettyValue(it.opt("value")).trim().let{t->if(t.isEmpty()||t.last() in ".!?")t else "$t."}}.filter{it.isNotBlank()}.joinToString(" "))
         }
         TextButton({s.saveWorkAndClose()},enabled=!s.loading&&photos.isNotEmpty()){Text("Save assessment")}
         WcpButton("Done",{s.finishPhotoAssessment()},Modifier.fillMaxWidth(),enabled=!s.loading)
