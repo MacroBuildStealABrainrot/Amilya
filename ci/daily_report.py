@@ -117,6 +117,28 @@ def collect_sentry(token, since):
     return result
 
 
+def collect_deepgram(token, project, now):
+    """Remaining prepaid balance and audio hours used. Deepgram reports hours, not dollars."""
+    if not (token and project):
+        return None
+    base = f'https://api.deepgram.com/v1/projects/{urllib.parse.quote(project)}'
+
+    def hours(start):
+        query = urllib.parse.urlencode({'start': start.strftime('%Y-%m-%d'), 'end': now.strftime('%Y-%m-%d')})
+        results = http_json(f'{base}/usage/breakdown?{query}', token, auth='Token').get('results', [])
+        return round(sum(float(r.get('hours') or 0) for r in results), 2)
+
+    try:
+        balances = http_json(f'{base}/balances', token, auth='Token').get('balances', [])
+        return {
+            'balances': [{'amount': b.get('amount'), 'units': b.get('units')} for b in balances],
+            'hours_today': hours(now),
+            'hours_month': hours(now.replace(day=1)),
+        }
+    except urllib.error.HTTPError as error:
+        return {'error': f'HTTP {error.code}'}
+
+
 def gcloud(*args):
     exe = shutil.which('gcloud')
     if not exe:
@@ -219,8 +241,18 @@ def render(data, owner=None):
                  if apk else '- No tested APK is available (none built recently, or downloads expired).')
 
     lines += ['', '## Clinical AI quality tests', '- Not set up yet (planned: synthetic-case evaluation).',
-              '', '## Spending', '- Not connected yet. Real billing figures need the billing export (waiting for approval).',
-              '', '## Waiting for you']
+              '', '## Spending', '- Google Cloud: not connected yet. Real billing figures need the billing export (waiting for approval).',
+              '- OpenRouter (all AI models) and Groq (transcription): no read-only access exists. Check their own dashboards and spend limits.']
+    deepgram = data.get('deepgram')
+    if deepgram is None:
+        lines.append('- Deepgram (transcription): not connected yet.')
+    elif 'error' in deepgram:
+        lines.append(f"- Deepgram (transcription): could not read ({deepgram['error']}).")
+    else:
+        left = ', '.join(f"{b['amount']} {b['units']}" for b in deepgram['balances']) or 'none listed'
+        lines.append(f"- Deepgram (transcription): {deepgram['hours_today']} audio hours today, "
+                     f"{deepgram['hours_month']} this month. Prepaid balance left: {left}.")
+    lines += ['', '## Waiting for you']
     waiting = [f"- [Approval #{a['number']}: {a['title']}]({a['url']})" for a in gh['approvals']]
     waiting += [f"- [{'Draft' if p['draft'] else 'Ready for review'} change #{p['number']}: {p['title']}]({p['url']})"
                 for p in gh['pulls']]
@@ -258,6 +290,7 @@ def main(argv=None):
         'github': github,
         'health': collect_health(),
         'sentry': collect_sentry(os.environ.get('SENTRY_AUTH_TOKEN'), since),
+        'deepgram': collect_deepgram(os.environ.get('DEEPGRAM_USAGE_KEY'), os.environ.get('DEEPGRAM_PROJECT_ID'), now),
         'gcp': collect_gcp() if os.environ.get('AMILYA_REPORT_GCP', '1') == '1' else None,
     }
     body = render(data, owner=args.repo.split('/')[0])

@@ -56,6 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          DEEPGRAM_USAGE_KEY: ${{ secrets.DEEPGRAM_USAGE_KEY }}
+          DEEPGRAM_PROJECT_ID: ${{ vars.DEEPGRAM_PROJECT_ID }}
           AMILYA_REPORT_GCP: ${{ steps.gcp.outcome == 'success' && '1' || '0' }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
