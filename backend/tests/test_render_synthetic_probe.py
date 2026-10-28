@@ -52,6 +52,18 @@ def test_existing_claim_stops_before_provider_import_or_execution(monkeypatch, c
     assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED\n'
 
 
+@pytest.mark.parametrize('version', probe.HTTP_VERSIONS)
+def test_each_http_probe_has_a_separate_once_only_claim(monkeypatch, capsys, version):
+    from types import SimpleNamespace
+    import render_owner_activation
+    monkeypatch.setattr(probe.os, 'environ', environment() | {'AMILYA_RENDER_SYNTHETIC_PROBE':version})
+    monkeypatch.setattr(probe, 'time', SimpleNamespace(time=lambda:render_owner_activation.APPROVAL_END - 3600))
+    monkeypatch.setattr(render_owner_activation, 'check_key', lambda *args: None)
+    monkeypatch.setattr(probe, 'claim_once', lambda env: False)
+    assert probe.main() == 0
+    assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED\n'
+
+
 def test_image_is_only_fixed_geometric_shapes_with_no_metadata():
     with Image.open(io.BytesIO(probe.synthetic_image())) as image:
         assert image.size == (384, 384)
@@ -165,3 +177,53 @@ def test_http_probe_uses_native_auth_and_normal_upload_and_report_routes(client,
     assert probe.check_http_workflows()
     assert calls == list(probe.STAGES)
     assert capsys.readouterr().out.count('status=PASS') == 3
+
+
+def test_audio_http_probe_checks_recording_to_report_through_real_routes(client, gateway, monkeypatch, capsys):
+    from server import db as database, providers
+    _, factory = client
+    monkeypatch.setattr(database, 'SessionLocal', factory)
+    monkeypatch.setattr(providers, 'SessionLocal', factory)
+    gateway.config.openrouter_speech_enabled = True
+    gateway.http.responses = [
+        {'text':'Synthetic software test only. The dressing was changed. Pain score is two out of ten.',
+         'segments':[{'start':0,'end':5.0,'text':'The dressing was changed. Pain score is two out of ten.'}],
+         'usage':{'cost':.00003984}},
+        completion({'facts':[{'name':'treatment_performed','value':{'text':'Dressing changed'},
+            'quote':'The dressing was changed.'}], 'warnings':[]}),
+        completion({'status':'ready','text':'The dressing was changed. Pain score was two out of ten.','ui_alerts':[]}),
+        completion({'passed':True,'discrepancies':[]}),
+    ]
+    assert probe.check_http_workflows(audio=True)
+    assert gateway.http.calls[0]['url'].endswith('/audio/transcriptions')
+    assert len(gateway.http.calls) == 4
+    assert capsys.readouterr().out.count('status=PASS') == 2
+
+
+def test_wound_fixture_is_fixed_generated_training_data():
+    import hashlib
+    data = probe.synthetic_wound()
+    assert hashlib.sha256(data).hexdigest() == '6115d07dca6d07e7a268dc77641e821a28996fb26313fe96b988085c390d9d55'
+    with Image.open(io.BytesIO(data)) as im:
+        assert im.size == (1254,1254)
+        assert not im.getexif()
+
+
+@pytest.mark.parametrize('photo_only', [False, True])
+def test_http_probe_accepts_visible_synthetic_wound_but_rejects_unrelated_shapes(client, gateway, monkeypatch, capsys, photo_only):
+    from server import db as database, providers
+    _, factory = client
+    monkeypatch.setattr(database, 'SessionLocal', factory)
+    monkeypatch.setattr(providers, 'SessionLocal', factory)
+    gateway.http.responses = [
+        completion({'facts':[], 'warnings':[], 'quality':{'status':'insufficient','reason':'no_wound'}}),
+        completion({'facts':[{'name':'wound_tissue','value':{'text':'Visible red tissue with pale yellow material'},
+            'quote':''}], 'warnings':[], 'quality':{'status':'sufficient','reason':'none'}}),
+        completion({'facts':[{'name':'treatment_performed','value':{'text':'Cleansed with normal saline'},
+            'quote':'cleansed the wound with normal saline'}], 'warnings':[]}),
+        completion({'status':'ready','text':'Fictional training visit: old dressing removed, wound cleansed with normal saline, and foam dressing applied. No pain reported during the dressing change.','ui_alerts':[]}),
+        completion({'passed':True,'discrepancies':[]}),
+    ]
+    assert probe.check_http_workflows(wound=True, photo_only=photo_only)
+    assert len(gateway.http.calls) == (2 if photo_only else 5)
+    assert capsys.readouterr().out.count('status=PASS') == (2 if photo_only else 4)

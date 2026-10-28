@@ -7,6 +7,8 @@ Render restarts. No legal acceptance, login session, or paid account is created.
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import io
 import os
 from pathlib import Path
@@ -21,8 +23,17 @@ VERSION = 'photo-report-v1'
 MARKER = '063dbda7-f51c-5d78-8102-342bd1ac74d6'
 EXTRACTION_VERSION = 'extract-sol-v2'
 HTTP_VERSION = 'native-http-v3'
+AUDIO_HTTP_VERSION = 'audio-http-v4'
+PHOTO_HTTP_VERSION = 'photo-note-v5'
+WOUND_HTTP_VERSION = 'wound-http-v6'
+QUALITATIVE_HTTP_VERSION = 'photo-words-v7'
+HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
-           HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02'}
+           HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
+           AUDIO_HTTP_VERSION: '6b3a9bb9-5e66-5637-a578-cf6d5447a58e',
+           PHOTO_HTTP_VERSION: 'd34dd3d6-1af0-5b13-b4c2-0698a85c9446',
+           WOUND_HTTP_VERSION: 'd21a0ad3-5dbd-5e06-bc29-676b7e13b045',
+           QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -51,6 +62,24 @@ def synthetic_image():
     stream = io.BytesIO()
     image.save(stream, format='PNG')
     return stream.getvalue()
+
+
+def synthetic_audio():
+    # Locally generated artificial voice, never a patient or owner recording.
+    encoded = (Path(__file__).parent / 'fixtures/render-synthetic-visit.m4a.b64').read_bytes()
+    data = base64.b64decode(encoded)
+    if hashlib.sha256(data).hexdigest() != '4d8d5e1eadac65c3660cb71c07c2f224c578994dbf67f5f348b446acef21246a':
+        raise ValueError('SYNTHETIC_FIXTURE_MISMATCH')
+    return data
+
+
+def synthetic_wound():
+    # Generated fictional training picture, never a real person's wound.
+    encoded = (Path(__file__).parent / 'fixtures/synthetic-wound-image.jpg.b64').read_bytes()
+    data = base64.b64decode(encoded)
+    if hashlib.sha256(data).hexdigest() != '6115d07dca6d07e7a268dc77641e821a28996fb26313fe96b988085c390d9d55':
+        raise ValueError('SYNTHETIC_FIXTURE_MISMATCH')
+    return data
 
 
 def error_code(exc):
@@ -101,7 +130,7 @@ async def check_workflows(actor, stages=STAGES):
     return all(value == 'PASS' for value in results.values())
 
 
-def check_http_workflows():
+def check_http_workflows(audio=False, wound=False, photo_only=False):
     """Exercise native login, multipart photo and checked report in disposable DB.
 
     No dependency/auth overrides; the normal routes, cookies, CSRF and real
@@ -112,7 +141,7 @@ def check_http_workflows():
     from fastapi.testclient import TestClient
     from server.main import app
     from server.core import settings
-    from server import billing
+    from server import billing, providers
     from server.db import SessionLocal
     from server.identity import User
     from sqlalchemy import select
@@ -144,9 +173,54 @@ def check_http_workflows():
             account.period_start, account.period_end = int(time.time()) - 60, int(time.time()) + 3600
             account.plan_micros = 1_000_000  # temporary fixture, never the Render account DB
             db.commit()
-        for stage in STAGES:
+        stages = ('photo', 'wound') if wound and photo_only else ('photo', 'wound', 'extract', 'report') if wound else ('audio', 'report') if audio else STAGES
+        for stage in stages:
             try:
-                if stage == 'photo':
+                if stage == 'wound':
+                    started = client.post('/api/v1/quick/start', headers=headers,
+                        json={'mode':'photo', 'request_id':str(uuid4())})
+                    if started.status_code != 201: raise ValueError()
+                    wound_id = started.json()['encounter']['id']
+                    result = client.post('/api/v1/encounters/' + wound_id + '/upload', headers=headers,
+                        data={'kind':'photo'}, files={'file':('synthetic-wound.jpg', synthetic_wound(), 'image/jpeg')})
+                    body = result.json()
+                    findings = body.get('facts')
+                    if (result.status_code != 201 or body.get('photo_quality', {}).get('status') != 'sufficient'
+                            or body.get('photo_quality', {}).get('retake_required') is not False
+                            or not isinstance(findings, list) or not findings
+                            or any(f.get('name') not in {'wound_tissue','wound_edges','periwound','exudate'}
+                                   or f.get('confirmation_state') == 'confirmed' for f in findings)):
+                        raise ValueError()
+                    if photo_only:
+                        if not any(f.get('name') == 'wound_tissue' for f in findings):
+                            raise ValueError()
+                        for finding in findings:
+                            value = finding.get('value', {})
+                            if (finding.get('name') == 'wound_tissue' and set(value) != {'text'}
+                                    or any(k in value for k in ('granulation','slough','eschar','epithelial'))):
+                                raise ValueError()
+                            providers.validated_photo_value(finding['name'], value)
+                elif stage == 'audio':
+                    started = client.post('/api/v1/quick/start', headers=headers,
+                        json={'mode':'document', 'request_id':str(uuid4())})
+                    if started.status_code != 201: raise ValueError()
+                    report_id = started.json()['encounter']['id']
+                    result = client.post('/api/v1/encounters/' + report_id + '/upload', headers=headers,
+                        data={'kind':'audio', 'consent':'true'},
+                        files={'file':('synthetic-visit.m4a', synthetic_audio(), 'audio/mp4')})
+                    body = result.json()
+                    transcript = body.get('evidence', {}).get('text', '').lower()
+                    if (result.status_code != 201 or 'dressing' not in transcript or 'pain' not in transcript
+                            or not any(word in transcript for word in ('two', '2'))):
+                        raise ValueError()
+                    from server.billing_models import UsageOperation
+                    with SessionLocal() as db:
+                        operation = db.scalar(select(UsageOperation).where(UsageOperation.task=='transcription'))
+                        if (operation is None or operation.provider != 'openrouter'
+                                or operation.model != 'openai/whisper-large-v3'
+                                or operation.status != 'settled' or operation.usage.get('charge_waived')):
+                            raise ValueError()
+                elif stage == 'photo':
                     started = client.post('/api/v1/quick/start', headers=headers,
                         json={'mode': 'photo', 'request_id': str(uuid4())})
                     if started.status_code != 201: raise ValueError()
@@ -187,7 +261,7 @@ def main():
             raise ConfigurationError('PROBE_OPT_IN_REQUIRED')
         if not env.get('OPENROUTER_API_KEY') or env.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1') != 'https://openrouter.ai/api/v1':
             raise ConfigurationError('PROBE_PROVIDER_REQUIRED')
-        if version == HTTP_VERSION:
+        if version in HTTP_VERSIONS:
             from render_owner_activation import APPROVAL_END, check_key
             now = time.time()
             if now >= APPROVAL_END:
@@ -202,11 +276,12 @@ def main():
             os.environ.update(DATABASE_URL='sqlite:///' + directory + '/probe.sqlite',
                 ENVIRONMENT='development', PROVIDER_EXECUTION_ENABLED='true',
                 APP_SECRET=secrets.token_hex(32), UNLIMITED_CREDIT_USER_IDS='',
-                ALLOW_SIGNUP='true' if version == HTTP_VERSION else 'false',
-                PUBLIC_BASE_URL='http://localhost' if version == HTTP_VERSION else env['PUBLIC_BASE_URL'],
-                SECURE_COOKIES='false' if version == HTTP_VERSION else 'true',
+                ALLOW_SIGNUP='true' if version in HTTP_VERSIONS else 'false',
+                PUBLIC_BASE_URL='http://localhost' if version in HTTP_VERSIONS else env['PUBLIC_BASE_URL'],
+                SECURE_COOKIES='false' if version in HTTP_VERSIONS else 'true',
+                OPENROUTER_SPEECH_ENABLED='true' if version == AUDIO_HTTP_VERSION else 'false',
                 OPENROUTER_REQUIRE_ZDR='true', PROVIDER_TIMEOUT_SECONDS='45',
-                MODEL_EXTRACTION='openai/gpt-6.1-sol' if version in (EXTRACTION_VERSION, HTTP_VERSION) else 'openai/gpt-6-luna',
+                MODEL_EXTRACTION='openai/gpt-6.1-sol' if version in HTTP_VERSIONS or version == EXTRACTION_VERSION else 'openai/gpt-6-luna',
                 MODEL_VISION='openai/gpt-6.1-sol',
                 MODEL_DOCUMENTATION='openai/gpt-6.1-sol', MODEL_FRONTIER='openai/gpt-6-astra')
             sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -215,9 +290,11 @@ def main():
             from server.db import Base, engine, SessionLocal
             from server.identity import User, Workspace
             Base.metadata.create_all(engine)
-            if version == HTTP_VERSION:
+            if version in HTTP_VERSIONS:
                 try:
-                    return 0 if check_http_workflows() else 1
+                    return 0 if check_http_workflows(audio=version == AUDIO_HTTP_VERSION,
+                        wound=version in (WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION),
+                        photo_only=version == QUALITATIVE_HTTP_VERSION) else 1
                 finally:
                     engine.dispose()
             with SessionLocal() as db:
