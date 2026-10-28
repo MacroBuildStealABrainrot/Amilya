@@ -282,7 +282,11 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
                 if source is not None and (not quote.strip() or quote not in source):
                     warnings.append('A suggestion without an exact source quotation was excluded.')
                     continue
-                facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
+                checked = validated_value(name, value)
+                if task == 'image' and name == 'wound_tissue' and isinstance(checked, dict) and (checked.get('text') or '').strip():
+                    # Percentages are charted in the sentence; extra numeric fields read as robotic duplicates.
+                    checked = {'text': checked['text']}
+                facts.append({'name': name, 'value': checked, 'quote': quote})
             except (ValueError, KeyError, TypeError):
                 if task != 'image':raise
                 invalid_photo_count += 1
