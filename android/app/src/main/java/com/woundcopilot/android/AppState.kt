@@ -600,7 +600,16 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun saveWorkAndClose()=runTask("Saving work"){
         ensureRemoteDocument()
-        if(editor.isNotBlank() && savedId==null)saveDocumentNow()
+        if(editor.isNotBlank() && savedId==null) {
+            // Keep the close dialog open when a photo has changed the source revision.
+            // No automatic approval of clinical changes or loss of the edited draft.
+            try { saveDocumentNow() }
+            catch(e:Exception) {
+                closeWorkPrompt=true
+                persistEditor()
+                throw e
+            }
+        }
         if(!demo)api.call("/work/$encounterId/save","POST",JSONObject())
         case?.getJSONObject("encounter")?.put("storage_state","saved")?.getJSONObject("draft_data")?.put("retention","saved")
         recordingRecovery.complete(encounterId,user?.str("id")?:"sample");refreshRecordingJobs()
