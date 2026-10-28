@@ -1,3 +1,4 @@
+# Photo-report 409 repair build; GitHub Actions trigger.
 # Amilya / WoundCoPilot 1.8.5-test10: build and test on GitHub's machines (they have the Android SDK; the review workspace does not).
 #
 # SAFE BY DESIGN

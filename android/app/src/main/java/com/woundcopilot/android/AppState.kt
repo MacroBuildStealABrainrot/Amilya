@@ -616,7 +616,16 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun saveWorkAndClose()=runTask("Saving work"){
         ensureRemoteDocument()
-        if(editor.isNotBlank() && savedId==null)saveDocumentNow()
+        if(editor.isNotBlank() && savedId==null) {
+            // Keep the close dialog open when a photo has changed the source revision.
+            // No automatic approval of clinical changes or loss of the edited draft.
+            try { saveDocumentNow() }
+            catch(e:Exception) {
+                closeWorkPrompt=true
+                persistEditor()
+                throw e
+            }
+        }
         if(!demo)api.call("/work/$encounterId/save","POST",JSONObject())
         case?.getJSONObject("encounter")?.put("storage_state","saved")?.getJSONObject("draft_data")?.put("retention","saved")
         recordingRecovery.complete(encounterId,user?.str("id")?:"sample");refreshRecordingJobs()
@@ -816,6 +825,19 @@ class AppState(application:Application):AndroidViewModel(application) {
         ensureRemoteDocument()
         require(editor.isNotBlank()&&editor.length<=60000){"Enter document text within 60,000 characters."}
         require(amendId==null||amendReason.isNotBlank()){"An amendment requires a reason."}
+        // Photo uploads advance encounter revision. Keep edited text intact.
+        if(!demo) {
+            // Refresh once before saving, including when an upload acknowledgement
+            // was received but the local encounter revision has not caught up.
+            persistEditor()
+            reloadCase()
+            if(editorCaseRevision != revision) {
+                closeWorkPrompt=false
+                notice="A photo or other source changed this visit. Your report is preserved. Review the updated sources and select the current revision before saving."
+                screen="editor"
+                throw IllegalStateException("Review the updated sources before saving your report.")
+            }
+        }
         val before=localRevision
         val p=obj("text" to editor,"template" to editorTemplate,"expected_revision" to editorCaseRevision,"amends_id" to amendId,"reason" to amendReason.ifBlank{null})
         if(editorTemplate=="custom"){require(customName.trim().length in 1..120 && customInstructions.trim().length in 1..2000){"Enter a custom template name and layout instructions."};p.put("custom_template",obj("name" to customName.trim(),"instructions" to customInstructions.trim()))}
