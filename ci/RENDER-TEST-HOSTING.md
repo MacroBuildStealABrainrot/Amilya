@@ -1,5 +1,26 @@
 # Isolated Render test hosting — verified handoff
 
+## Account-setup correction — 28 October 2026
+
+Render Test14 initially could not sign in because this separate database had no
+app account and registration was fully closed. The server now offers one-use,
+username-restricted enrollment; no new APK is needed.
+
+- Code: `ab98b566a928b14c111b2e680214da1a8cb10521`.
+- CI 40769822128 passed: backend 889 passed, 1 skipped; Android and safety checks
+  passed. All Google Cloud authentication/deploy steps skipped.
+- Live deploy: `dep-dbh6escfibcs73bnodo0`.
+- Registration expires 29 October, 16:21 EDT, or closes on the first user.
+- Live GET config: HTTP 200, `allow_signup=true`, `signup_scope=owner_test`.
+- A different username was rejected with HTTP 403. The configured username with
+  `accept_terms=false` was rejected with HTTP 422. Neither issued a session.
+  Enrollment remained open afterwards, confirming these checks created no user.
+- AI, billing and clinical-data processing remained false.
+- The owner chooses the password and accepts policies inside the existing app.
+  No credential is copied from Google Cloud, and no acceptance is fabricated.
+- See [restricted account-enrollment details](RENDER-OWNER-ENROLLMENT.md).
+
+
 This is a separate synthetic test environment. Production Cloud Run, existing
 apps, recordings, billing and clinical-data permissions were preserved.
 
@@ -10,8 +31,8 @@ apps, recordings, billing and clinical-data permissions were preserved.
 - Blueprint: `exs-dbgh6kbl550s73b5jnjg`.
 - Web service: `srv-dbgh73o8v5cc73ccufk0`, Free, Ohio.
 - URL: https://amilya-repair-test.onrender.com.
-- Live backend code last verified: `2e9ce76745d99017b11f7eb00e48d1536fa9f6f2`.
-- Final settings deploy: `dep-dbgkt1gae00c73co6930`, LIVE.
+- Live backend code last verified: `ab98b566a928b14c111b2e680214da1a8cb10521`.
+- Latest settings deploy: `dep-dbh6escfibcs73bnodo0`, LIVE.
 - Auto-deploy waits for GitHub checks to pass. Root directory: `backend`.
 - Database: `amilya-repair-test-db`, Free PostgreSQL 16, Ohio,
   `dpg-dbgcjuu7bikc73fn7v30-a`, database `amilya_repair_test_db`.
@@ -21,8 +42,9 @@ apps, recordings, billing and clinical-data permissions were preserved.
   service sleeps after inactivity and has ephemeral local storage. Neither is
   prepared for nursing production or irreplaceable records.
 
-Public AI, audio, signup, billing and clinical-data processing remain disabled.
-No Render app account, login session or legal acceptance was created.
+Public AI, audio, billing and clinical-data processing remain disabled.
+General signup stays closed; the bounded owner enrollment above is the only exception.
+No actual owner account, login session or legal acceptance was created by the agent.
 The diagnostic trigger was cleared after the fixed-input checks.
 Dashboard-owned `MODEL_EXTRACTION` selects `openai/gpt-6.1-sol`.
 

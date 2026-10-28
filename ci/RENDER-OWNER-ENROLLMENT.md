@@ -20,10 +20,28 @@ claim mailbox verification or import another account's identity or records.
 
 The first user closes enrollment automatically. The unique email constraint
 prevents concurrent claims from creating multiple users. No platform admin
-privilege, billing account, payment, AI entitlement or provider activation is
+privilege, paid plan, payment, AI entitlement or provider activation is
 granted. Existing signup rate limits, policy-version checks, password hashing,
 secure sessions and audit behavior remain in force. Other deployments default
 to no enrollment configuration, and their existing signup behavior is unchanged.
 
 This fixes the missing account-creation path. It does not certify phone login
 until the owner registers and signs in, and it does not enable photo assessment.
+
+## Deployed verification
+
+- Code: `ab98b566a928b14c111b2e680214da1a8cb10521`.
+- CI: [40769822128](https://github.com/MacroBuildStealABrainrot/Amilya/actions/runs/40769822128),
+  backend 889 passed, 1 skipped; Android and deployment-safety checks passed.
+- Render deploy `dep-dbh6escfibcs73bnodo0` became LIVE.
+- Restricted enrollment deadline: 29 October 2026, 16:21 EDT.
+- GET config returned HTTP 200, owner-only registration enabled, AI/billing/
+  clinical-data flags false.
+- Live rejection checks: non-selected username HTTP 403; selected username with
+  policy acceptance false HTTP 422. No session was issued; no account or policy
+  acceptance was created. Signup remained open after these negative checks.
+- Existing Test14 source was inspected: registration requires an unchecked-by-
+  default policy checkbox, a current policy version and a 12+ character password.
+  After a valid registration, it requests its normal account session/workspace.
+- The actual owner must complete that form. Phone sign-in is not claimed verified
+  until the owner has done so. No new APK or in-place upgrade was performed.
