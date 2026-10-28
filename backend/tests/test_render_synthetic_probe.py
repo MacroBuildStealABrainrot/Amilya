@@ -64,6 +64,8 @@ def test_image_is_only_fixed_geometric_shapes_with_no_metadata():
     (ValueError('PRIVATE clinical text and key'), 'CHECK_FAILED'),
     (HTTPException(502, 'PRIVATE', headers={'X-WCP-Provider-Error': 'MrBell_warfarin_5mg'}), 'HTTP_502'),
     (HTTPException(502, 'PRIVATE', headers={'X-WCP-Provider-Error': 'invalid_image'}), 'INVALID_IMAGE'),
+    (HTTPException(502, 'PRIVATE', headers={'X-WCP-Error': 'INVALID_RESPONSE'}), 'INVALID_RESPONSE'),
+    (HTTPException(502, 'PRIVATE', headers={'X-WCP-Error': 'MrBell_warfarin_5mg'}), 'HTTP_502'),
 ])
 def test_errors_emit_only_fixed_codes(exc, expected):
     assert probe.error_code(exc) == expected
@@ -123,3 +125,13 @@ def test_probe_uses_actual_gateway_validation_and_ledger(gateway, capsys):
     for call in gateway.http.calls:
         assert call['json']['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
     assert capsys.readouterr().out.count('status=PASS') == 3
+
+
+def test_extraction_only_check_does_not_repeat_photo_or_report(gateway, capsys):
+    gateway.config.model_extraction = 'openai/gpt-6.1-sol'
+    gateway.http.responses = [completion({'facts': [{'name': 'treatment_performed',
+        'value': {'text': 'Cleansed with normal saline'}, 'quote': 'cleansed the wound with normal saline'}], 'warnings': []})]
+    assert asyncio.run(probe.check_workflows(gateway.user, ('extract',)))
+    assert len(gateway.http.calls) == 1
+    assert gateway.http.calls[0]['json']['model'] == 'openai/gpt-6.1-sol'
+    assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE stage=extract status=PASS\n'

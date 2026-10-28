@@ -19,6 +19,8 @@ from render_test_start import runtime_environment, ConfigurationError
 
 VERSION = 'photo-report-v1'
 MARKER = '063dbda7-f51c-5d78-8102-342bd1ac74d6'
+EXTRACTION_VERSION = 'extract-sol-v2'
+MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -33,7 +35,8 @@ def claim_once(env):
         with conn.cursor() as cursor:
             cursor.execute('INSERT INTO workspaces (id,name,audit_sequence,audit_head,created_at) '
                            'VALUES (%s,%s,0,%s,CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING RETURNING id',
-                           (MARKER, 'Synthetic provider probe ' + VERSION + ' claimed', '0' * 64))
+                           (MARKERS[env['AMILYA_RENDER_SYNTHETIC_PROBE']],
+                            'Synthetic provider probe ' + env['AMILYA_RENDER_SYNTHETIC_PROBE'] + ' claimed', '0' * 64))
             return cursor.fetchone() is not None
 
 
@@ -52,6 +55,12 @@ def error_code(exc):
     """Fixed codes only: never exception messages, provider bodies or values."""
     from fastapi import HTTPException
     if isinstance(exc, HTTPException):
+        app_code = (exc.headers or {}).get('X-WCP-Error')
+        if app_code in {'PROVIDER_QUOTA', 'PROVIDER_AUTH', 'MODEL_UNAVAILABLE',
+                        'REQUEST_INCOMPATIBLE', 'PROVIDER_TIMEOUT', 'INVALID_RESPONSE',
+                        'NETWORK_UNAVAILABLE', 'RATE_LIMITED', 'RESPONSE_PROCESSING_FAILED',
+                        'OUTPUT_LIMIT', 'PROVIDER_UNAVAILABLE'}:
+            return app_code
         code = (exc.headers or {}).get('X-WCP-Provider-Error')
         allowed = {'unknown', 'invalid_image', 'unsupported_image_format', 'timeout',
                    'content_policy_violation', 'refusal', 'context_length_exceeded',
@@ -60,10 +69,10 @@ def error_code(exc):
     return 'CHECK_FAILED'
 
 
-async def check_workflows(actor):
+async def check_workflows(actor, stages=STAGES):
     from server import providers
     results = {}
-    for stage in STAGES:
+    for stage in stages:
         try:
             if stage == 'photo':
                 result = await providers.analyze_media(synthetic_image(), 'image/png', 'photo',
@@ -93,7 +102,8 @@ async def check_workflows(actor):
 def main():
     try:
         env = runtime_environment(os.environ)
-        if env.get('AMILYA_RENDER_SYNTHETIC_PROBE') != VERSION:
+        version = env.get('AMILYA_RENDER_SYNTHETIC_PROBE')
+        if version not in MARKERS:
             raise ConfigurationError('PROBE_OPT_IN_REQUIRED')
         if not env.get('OPENROUTER_API_KEY') or env.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1') != 'https://openrouter.ai/api/v1':
             raise ConfigurationError('PROBE_PROVIDER_REQUIRED')
@@ -107,7 +117,8 @@ def main():
                 ENVIRONMENT='development', PROVIDER_EXECUTION_ENABLED='true',
                 APP_SECRET=secrets.token_hex(32), UNLIMITED_CREDIT_USER_IDS='',
                 OPENROUTER_REQUIRE_ZDR='true', PROVIDER_TIMEOUT_SECONDS='45',
-                MODEL_EXTRACTION='openai/gpt-6-luna', MODEL_VISION='openai/gpt-6.1-sol',
+                MODEL_EXTRACTION='openai/gpt-6.1-sol' if version == EXTRACTION_VERSION else 'openai/gpt-6-luna',
+                MODEL_VISION='openai/gpt-6.1-sol',
                 MODEL_DOCUMENTATION='openai/gpt-6.1-sol', MODEL_FRONTIER='openai/gpt-6-astra')
             sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
             from server import main as app_module  # register the unchanged model metadata; no server is started
@@ -130,7 +141,7 @@ def main():
                 account.plan_micros = 1_000_000  # fixture balance only; no payment or subscription
                 db.commit()
             try:
-                passed = asyncio.run(check_workflows(actor))
+                passed = asyncio.run(check_workflows(actor, ('extract',) if version == EXTRACTION_VERSION else STAGES))
             finally:
                 engine.dispose()
             return 0 if passed else 1

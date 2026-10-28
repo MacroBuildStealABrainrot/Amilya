@@ -2,6 +2,20 @@
 
 ## Approved private provider check
 
+First live provider result (27 October, 21:08 EDT): on commit
+`bb15ff4d3872c2d0c108ea91213dd165730fd7ea`, the fixed nonclinical photo passed
+(no invented wound findings, retake required), and the complete checked report
+passed. Separate extraction using Luna returned HTTP 502. Its precise cause is
+not established. CI 40612219037 passed, including 871 backend tests and Android.
+Render deploy `dep-dbgklm142hec73br8llg` became live. This does not certify the
+installed Samsung APK, which still connects to Google Cloud.
+
+`AMILYA_RENDER_SYNTHETIC_PROBE=extract-sol-v2` selects one separate, once-only
+extraction check using the already-reviewed Sol model and the same fictional text.
+It does not repeat photo/report, change production defaults or relax validation.
+It stays under the same approved US$1 total key cap. This checks a practical model
+alternative; it is not a claim to have identified the Luna failure's root cause.
+
 The owner approved a separate OpenRouter key named `Amilya Render synthetic test`,
 US$1 total cap, no reset, expiry one day after creation. Email verification
 succeeded and the key was saved directly in the Render service's secret settings;
