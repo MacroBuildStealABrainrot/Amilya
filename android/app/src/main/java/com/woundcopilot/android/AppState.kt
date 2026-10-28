@@ -813,7 +813,6 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!demo) {
             // Refresh once before saving, including when an upload acknowledgement
             // was received but the local encounter revision has not caught up.
-            val oldRevision=revision
             persistEditor()
             reloadCase()
             if(editorCaseRevision != revision) {
