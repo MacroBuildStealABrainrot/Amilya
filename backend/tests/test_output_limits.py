@@ -69,7 +69,7 @@ def test_photo_output_limit_is_not_misclassified_as_schema_recovery(gateway):
         with pytest.raises(HTTPException) as caught:assess(gateway)
         assert caught.value.headers['X-WCP-Error']=='OUTPUT_LIMIT'
     assert len(gateway.http.calls)==1
-    assert gateway.http.calls[0]['json']['max_tokens']==8000
+    assert gateway.http.calls[0]['json']['max_tokens']==12000
 
 
 @pytest.mark.parametrize('selected,reported', [

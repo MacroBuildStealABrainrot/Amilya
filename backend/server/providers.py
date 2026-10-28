@@ -805,7 +805,8 @@ async def routed(task, content, model=None, **kwargs):
     if task in {'extract', 'document'}:
         minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
     elif task == 'image':
-        minimum = max(minimum, 8000)
+        # High-effort specialist reasoning also uses this allowance; leave room for the answer.
+        minimum = max(minimum, 12000)
     kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), minimum)
     return await structured(task, content, route['model'], routing=route, **kwargs)
 
