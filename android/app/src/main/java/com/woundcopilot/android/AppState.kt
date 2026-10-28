@@ -810,12 +810,17 @@ class AppState(application:Application):AndroidViewModel(application) {
         require(editor.isNotBlank()&&editor.length<=60000){"Enter document text within 60,000 characters."}
         require(amendId==null||amendReason.isNotBlank()){"An amendment requires a reason."}
         // Photo uploads advance encounter revision. Keep edited text intact.
-        if(!demo && editorCaseRevision != revision) {
+        if(!demo) {
+            // Refresh once before saving, including when an upload acknowledgement
+            // was received but the local encounter revision has not caught up.
+            val oldRevision=revision
             persistEditor()
             reloadCase()
             if(editorCaseRevision != revision) {
-                notice="New sources were added. Review the report and select the current revision before saving. Your text is preserved."
-                throw IllegalStateException("Review report against updated encounter before saving.")
+                closeWorkPrompt=false
+                notice="A photo or other source changed this visit. Your report is preserved. Review the updated sources and select the current revision before saving."
+                screen="editor"
+                throw IllegalStateException("Review the updated sources before saving your report.")
             }
         }
         val before=localRevision
