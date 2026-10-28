@@ -12,6 +12,7 @@ android {
         minSdk = 28
         targetSdk = 36
         buildConfigField("boolean", "REPAIR_SERVER", "false")
+        buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
         versionCode = 32
         versionName = "1.8.5-test12"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
@@ -62,6 +63,17 @@ android {
             buildConfigField("boolean", "REPAIR_SERVER", "true")
             versionNameSuffix = "-photo-repair13"
             buildConfigField("String", "API_BASE_URL", "\"https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
+        // A new package keeps all existing apps, sessions and recordings separate.
+        create("renderTest") {
+            initWith(getByName("pilot"))
+            applicationIdSuffix = ".rendertest"
+            versionNameSuffix = "-render-test14"
+            buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
+            buildConfigField("boolean", "REPAIR_SERVER", "false")
+            buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
+            buildConfigField("String", "API_BASE_URL", "\"https://amilya-repair-test.onrender.com/api/v1\"")
             matchingFallbacks += listOf("pilot", "debug")
         }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,

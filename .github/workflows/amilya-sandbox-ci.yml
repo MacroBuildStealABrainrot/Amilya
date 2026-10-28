@@ -108,12 +108,12 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
             :app:test :wear-contract:test \
-            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
+            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
       - name: Lint (sandbox + pilot)
         working-directory: android
-        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair
+        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest
       - name: Check build flags inside the built apps
         run: bash ci/verify-build-flags.sh | tee build-flags.log
       - name: Collect evidence
