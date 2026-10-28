@@ -600,7 +600,18 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun saveWorkAndClose()=runTask("Saving work"){
         ensureRemoteDocument()
-        if(editor.isNotBlank() && savedId==null)saveDocumentNow()
+        if(editor.isNotBlank() && savedId==null) {
+            // A newly added photo increments the server revision. Keep the draft and
+            // refresh before saving; never silently overwrite a newer clinical note.
+            if(!demo && editorCaseRevision!=revision) {
+                persistEditor()
+                reloadCase()
+                require(editorCaseRevision==revision) {
+                    "The encounter changed after the report was prepared. Your text is preserved. Review the new photo and choose the current revision before saving."
+                }
+            }
+            saveDocumentNow()
+        }
         if(!demo)api.call("/work/$encounterId/save","POST",JSONObject())
         case?.getJSONObject("encounter")?.put("storage_state","saved")?.getJSONObject("draft_data")?.put("retention","saved")
         recordingRecovery.complete(encounterId,user?.str("id")?:"sample");refreshRecordingJobs()
