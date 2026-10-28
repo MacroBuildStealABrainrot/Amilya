@@ -65,7 +65,8 @@ def has_unlimited_credits(user: User) -> bool:
     """
     configured = getattr(settings, "unlimited_credit_user_ids", "")
     allowed = {value.strip() for value in configured.split(",") if value.strip()}
-    return bool(user.is_platform_admin or user.id in allowed)
+    from . import render_owner_test
+    return bool(user.is_platform_admin or user.id in allowed or render_owner_test.allows(user))
 
 
 def _lock_account(db: Session, workspace_id: str) -> BillingAccount:
@@ -321,6 +322,7 @@ def plans():
 
 @router.get("/billing")
 def billing_status(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from . import render_owner_test
     account = db.get(BillingAccount, user.workspace_id)
     history = list(db.scalars(select(CreditLedger).where(CreditLedger.workspace_id == user.workspace_id).order_by(CreditLedger.created_at.desc()).limit(60)))
     period_valid = account and account.period_end > int(time.time())
@@ -330,6 +332,8 @@ def billing_status(user: User = Depends(current_user), db: Session = Depends(get
             "reserved_credits": (account.reserved_micros if account else 0) / MICROS_PER_CREDIT,
             "topup_credits": (account.topup_micros if account else 0) / MICROS_PER_CREDIT,
             "is_unlimited": has_unlimited_credits(user), "period_end": account.period_end if account else None,
+            "synthetic_test_allowance": {"expires_at": settings.render_owner_test_until, "provider_cap_usd": 1,
+                "patient_data_allowed": False} if render_owner_test.allows(user) else None,
             "cancel_at_period_end": account.cancel_at_period_end if account else False,
             "history": [{"id": row.id, "kind": row.kind, "credits": row.delta_micros / MICROS_PER_CREDIT,
                          "created_at": row.created_at, "balance_credits": row.balance_after_micros / MICROS_PER_CREDIT} for row in history]}
@@ -911,3 +915,4 @@ def absorbed_cost_report(db: Session, since_epoch: float) -> dict:
             "known_absorbed_cost_micros": sum(r.actual_cost_micros or 0 for r in waived),
             "unknown_cost_attempts": sum(1 for r in waived if r.actual_cost_micros is None),
             "charged_micros": sum(r.charged_micros for r in rows)}
+

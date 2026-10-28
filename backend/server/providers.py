@@ -458,6 +458,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
     diagnostics.bind(user)
     diagnostics.event({'source':'router','stage':'provider_preflight','selected_model':model,'provider':provider,'status':'selected','finished_at':diagnostics.timestamp()})
     privacy_guard(provider)
+    from . import render_owner_test
+    if render_owner_test.required() and (provider != 'openrouter' or not render_owner_test.allows(user)):
+        raise preflight_error(503, 'The synthetic test allowance is unavailable for this account or has expired')
     check_rate('provider:' + user.id, limit=60)
     crypt = cipher()
     seed = request_operation.get() or str(uuid.uuid4())

@@ -16,6 +16,9 @@ class ConfigurationError(ValueError):
 def runtime_environment(source):
     """Validate before migrations and return an environment without logging its values."""
     env = dict(source)
+    # Runtime grants can only come from the verified account/key check below.
+    env.pop('RENDER_OWNER_TEST_USER_ID', None)
+    env.pop('RENDER_OWNER_TEST_UNTIL', None)
     if env.get('RENDER') != 'true' or env.get('AMILYA_RENDER_TEST') != 'true':
         raise ConfigurationError('RENDER_TEST_CONTEXT_REQUIRED')
     hostname = env.get('RENDER_EXTERNAL_HOSTNAME', '')
@@ -89,6 +92,19 @@ def main():
                     print(line, flush=True)
         except (subprocess.TimeoutExpired, OSError):
             print('AMILYA_SYNTHETIC_PROBE status=FAIL code=TIMEOUT', flush=True)
+    if env.get('AMILYA_RENDER_OWNER_TEST_UNTIL'):
+        from render_owner_activation import prepare
+        try:
+            env.update(prepare(env))
+            print('AMILYA_OWNER_TEST status=READY', flush=True)
+        except ValueError as exc:
+            # Fixed codes only; keep manual use available when activation fails.
+            allowed = {'DEADLINE_INVALID', 'TEST_WINDOW_CLOSED', 'TEST_CONTEXT_INVALID',
+                'OWNER_ACCOUNT_REQUIRED', 'OWNER_MEMBERSHIP_REQUIRED',
+                'OWNER_POLICY_ACCEPTANCE_REQUIRED', 'ACCOUNT_CHECK_UNAVAILABLE',
+                'BOUNDED_PROVIDER_KEY_REQUIRED'}
+            code = str(exc) if str(exc) in allowed else 'ACTIVATION_UNAVAILABLE'
+            print('AMILYA_OWNER_TEST status=BLOCKED code=' + code, flush=True)
     os.chdir(root)
     os.execve(sys.executable, [sys.executable, '-m', 'uvicorn', 'server.main:app',
               '--host', '0.0.0.0', '--port', env['PORT'], '--no-access-log',

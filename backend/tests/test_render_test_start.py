@@ -55,6 +55,13 @@ def test_existing_google_settings_cannot_override_render_origin():
     assert env['WOUNDCOPILOT_ENV_FILE'] != '/run/secrets/app.env'
 
 
+def test_runtime_owner_grant_cannot_be_injected_without_verification():
+    env = launcher.runtime_environment(source() | {'RENDER_OWNER_TEST_USER_ID': 'spoofed',
+        'RENDER_OWNER_TEST_UNTIL': '9999999999'})
+    assert 'RENDER_OWNER_TEST_USER_ID' not in env
+    assert 'RENDER_OWNER_TEST_UNTIL' not in env
+
+
 def test_private_probe_cannot_enable_public_ai_or_print_child_secrets(monkeypatch, capsys):
     config = source() | {'AMILYA_RENDER_SYNTHETIC_PROBE': 'photo-report-v1',
                          'OPENROUTER_API_KEY': 'synthetic-private-key'}

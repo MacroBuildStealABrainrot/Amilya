@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from PIL import Image
 import pytest
 from test_providers import gateway, completion
+from test_identity import client
 
 SCRIPTS = Path(__file__).parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
@@ -135,3 +136,32 @@ def test_extraction_only_check_does_not_repeat_photo_or_report(gateway, capsys):
     assert len(gateway.http.calls) == 1
     assert gateway.http.calls[0]['json']['model'] == 'openai/gpt-6.1-sol'
     assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE stage=extract status=PASS\n'
+
+
+def test_http_probe_uses_native_auth_and_normal_upload_and_report_routes(client, monkeypatch, capsys):
+    from server import db as database, providers, identity
+    from server.core import settings
+    _, factory = client
+    monkeypatch.setattr(database, 'SessionLocal', factory)
+    calls = []
+    async def photo(data, mime, kind, **kwargs):
+        assert data == probe.synthetic_image() and kind == 'photo'
+        assert kwargs['user'].is_platform_admin is False
+        calls.append('photo')
+        return {'facts': [], 'warnings': [], 'quality': {'status': 'insufficient',
+            'reason': 'no_wound', 'retake_required': True, 'message': 'Retake the photo.'}}
+    async def extract(text, kind, **kwargs):
+        assert text == probe.TEXT
+        calls.append('extract')
+        return {'facts': [{'name': 'treatment_performed', 'value': {'text': 'Cleansed with normal saline'},
+            'quote': 'cleansed the wound with normal saline'}], 'warnings': []}
+    async def report(context, template, preferred_length, **kwargs):
+        assert context['untrusted_sources'][0]['text'] == probe.TEXT
+        calls.append('report')
+        return {'text': 'Fictional training report.', 'qa': {'passed': True}}
+    monkeypatch.setattr(providers, 'analyze_media', photo)
+    monkeypatch.setattr(providers, 'extract_text', extract)
+    monkeypatch.setattr(providers, 'quick_documentation', report)
+    assert probe.check_http_workflows()
+    assert calls == list(probe.STAGES)
+    assert capsys.readouterr().out.count('status=PASS') == 3
