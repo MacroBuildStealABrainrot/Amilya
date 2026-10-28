@@ -1,4 +1,4 @@
-# Amilya / WoundCoPilot 1.8.5-test10: build and test on GitHub's machines (they have the Android SDK; the review workspace does not).
+# Photo-report 409 repair build; GitHub Actions trigger.\n# Amilya / WoundCoPilot 1.8.5-test10: build and test on GitHub's machines (they have the Android SDK; the review workspace does not).
 #
 # SAFE BY DESIGN
 #  * Uses NO secrets, NO signing keys, NO AI keys and NO network service of yours. Nothing is deployed. Production, Cloud Run,
