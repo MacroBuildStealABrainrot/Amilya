@@ -26,12 +26,14 @@ HTTP_VERSION = 'native-http-v3'
 AUDIO_HTTP_VERSION = 'audio-http-v4'
 PHOTO_HTTP_VERSION = 'photo-note-v5'
 WOUND_HTTP_VERSION = 'wound-http-v6'
-HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION)
+QUALITATIVE_HTTP_VERSION = 'photo-words-v7'
+HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
            AUDIO_HTTP_VERSION: '6b3a9bb9-5e66-5637-a578-cf6d5447a58e',
            PHOTO_HTTP_VERSION: 'd34dd3d6-1af0-5b13-b4c2-0698a85c9446',
-           WOUND_HTTP_VERSION: 'd21a0ad3-5dbd-5e06-bc29-676b7e13b045'}
+           WOUND_HTTP_VERSION: 'd21a0ad3-5dbd-5e06-bc29-676b7e13b045',
+           QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -128,7 +130,7 @@ async def check_workflows(actor, stages=STAGES):
     return all(value == 'PASS' for value in results.values())
 
 
-def check_http_workflows(audio=False, wound=False):
+def check_http_workflows(audio=False, wound=False, photo_only=False):
     """Exercise native login, multipart photo and checked report in disposable DB.
 
     No dependency/auth overrides; the normal routes, cookies, CSRF and real
@@ -139,7 +141,7 @@ def check_http_workflows(audio=False, wound=False):
     from fastapi.testclient import TestClient
     from server.main import app
     from server.core import settings
-    from server import billing
+    from server import billing, providers
     from server.db import SessionLocal
     from server.identity import User
     from sqlalchemy import select
@@ -171,7 +173,7 @@ def check_http_workflows(audio=False, wound=False):
             account.period_start, account.period_end = int(time.time()) - 60, int(time.time()) + 3600
             account.plan_micros = 1_000_000  # temporary fixture, never the Render account DB
             db.commit()
-        stages = ('photo', 'wound', 'extract', 'report') if wound else ('audio', 'report') if audio else STAGES
+        stages = ('photo', 'wound') if wound and photo_only else ('photo', 'wound', 'extract', 'report') if wound else ('audio', 'report') if audio else STAGES
         for stage in stages:
             try:
                 if stage == 'wound':
@@ -189,6 +191,15 @@ def check_http_workflows(audio=False, wound=False):
                             or any(f.get('name') not in {'wound_tissue','wound_edges','periwound','exudate'}
                                    or f.get('confirmation_state') == 'confirmed' for f in findings)):
                         raise ValueError()
+                    if photo_only:
+                        if not any(f.get('name') == 'wound_tissue' for f in findings):
+                            raise ValueError()
+                        for finding in findings:
+                            value = finding.get('value', {})
+                            if (finding.get('name') == 'wound_tissue' and set(value) != {'text'}
+                                    or any(k in value for k in ('granulation','slough','eschar','epithelial'))):
+                                raise ValueError()
+                            providers.validated_photo_value(finding['name'], value)
                 elif stage == 'audio':
                     started = client.post('/api/v1/quick/start', headers=headers,
                         json={'mode':'document', 'request_id':str(uuid4())})
@@ -281,7 +292,9 @@ def main():
             Base.metadata.create_all(engine)
             if version in HTTP_VERSIONS:
                 try:
-                    return 0 if check_http_workflows(audio=version == AUDIO_HTTP_VERSION, wound=version == WOUND_HTTP_VERSION) else 1
+                    return 0 if check_http_workflows(audio=version == AUDIO_HTTP_VERSION,
+                        wound=version in (WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION),
+                        photo_only=version == QUALITATIVE_HTTP_VERSION) else 1
                 finally:
                     engine.dispose()
             with SessionLocal() as db:

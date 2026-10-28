@@ -209,20 +209,21 @@ def test_wound_fixture_is_fixed_generated_training_data():
         assert not im.getexif()
 
 
-def test_http_probe_accepts_visible_synthetic_wound_but_rejects_unrelated_shapes(client, gateway, monkeypatch, capsys):
+@pytest.mark.parametrize('photo_only', [False, True])
+def test_http_probe_accepts_visible_synthetic_wound_but_rejects_unrelated_shapes(client, gateway, monkeypatch, capsys, photo_only):
     from server import db as database, providers
     _, factory = client
     monkeypatch.setattr(database, 'SessionLocal', factory)
     monkeypatch.setattr(providers, 'SessionLocal', factory)
     gateway.http.responses = [
         completion({'facts':[], 'warnings':[], 'quality':{'status':'insufficient','reason':'no_wound'}}),
-        completion({'facts':[{'name':'wound_tissue','value':{'text':'Visible red tissue with pale yellow material',
-            'granulation':80.0,'slough':20.0},'quote':''}], 'warnings':[], 'quality':{'status':'sufficient','reason':'none'}}),
+        completion({'facts':[{'name':'wound_tissue','value':{'text':'Visible red tissue with pale yellow material'},
+            'quote':''}], 'warnings':[], 'quality':{'status':'sufficient','reason':'none'}}),
         completion({'facts':[{'name':'treatment_performed','value':{'text':'Cleansed with normal saline'},
             'quote':'cleansed the wound with normal saline'}], 'warnings':[]}),
         completion({'status':'ready','text':'Fictional training visit: old dressing removed, wound cleansed with normal saline, and foam dressing applied. No pain reported during the dressing change.','ui_alerts':[]}),
         completion({'passed':True,'discrepancies':[]}),
     ]
-    assert probe.check_http_workflows(wound=True)
-    assert len(gateway.http.calls) == 5
-    assert capsys.readouterr().out.count('status=PASS') == 4
+    assert probe.check_http_workflows(wound=True, photo_only=photo_only)
+    assert len(gateway.http.calls) == (2 if photo_only else 5)
+    assert capsys.readouterr().out.count('status=PASS') == (2 if photo_only else 4)
