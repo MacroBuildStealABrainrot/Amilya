@@ -13,8 +13,9 @@ android {
         targetSdk = 36
         buildConfigField("boolean", "REPAIR_SERVER", "false")
         buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
-        versionCode = 32
-        versionName = "1.8.5-test12"
+        versionCode = 35
+        versionName = "1.8.5-test15"
+        manifestPlaceholders["appLabel"] = "WoundCoPilot"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
         // Crash-resistant recorder: compiled into every build, switched ON only in sandbox. Turning it on for debug/release later is one
@@ -24,6 +25,14 @@ android {
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; buildConfig = true }
+    // TEST-ONLY signing key for the Pilot app, so every new Pilot build can update the last one in place
+    // (CI used to make a new random key each run). Never used for the release app.
+    val pilotKeystore = rootProject.file("../ci/pilot-test.keystore")
+    signingConfigs {
+        if (pilotKeystore.exists()) create("pilotTest") {
+            storeFile = pilotKeystore; storePassword = "pilottest"; keyAlias = "pilottest"; keyPassword = "pilottest"
+        }
+    }
     buildTypes {
         // Normal debug and release builds keep talking to the existing service, exactly as before.
         getByName("debug") {
@@ -47,8 +56,11 @@ android {
         // Do not use identifiable clinical data until compatibility and privacy checks are completed.
         create("pilot") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".pilot"
+            // ".pilot2": new package so it installs BESIDE the older Pilot (different signing key) without touching its data.
+            applicationIdSuffix = ".pilot2"
             versionNameSuffix = "-pilot"
+            manifestPlaceholders["appLabel"] = "Amilya Test 15"
+            if (pilotKeystore.exists()) signingConfig = signingConfigs.getByName("pilotTest")
             buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
             buildConfigField("boolean", "SANDBOX", "false")
             buildConfigField("boolean", "CRASH_SAFE_RECORDING", "false")

@@ -106,6 +106,7 @@ jobs:
           }
           trap cleanup EXIT
           sudo mount -t tmpfs -o size=1m,mode=0777 tmpfs "$WCP_STORAGE_FULL_TEST_DIR"
+          base64 -d ../ci/pilot-test.keystore.b64 > ../ci/pilot-test.keystore
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
             :app:test :wear-contract:test \
