@@ -800,6 +800,15 @@ class AppState(application:Application):AndroidViewModel(application) {
         ensureRemoteDocument()
         require(editor.isNotBlank()&&editor.length<=60000){"Enter document text within 60,000 characters."}
         require(amendId==null||amendReason.isNotBlank()){"An amendment requires a reason."}
+        // Photo uploads advance encounter revision. Keep edited text intact.
+        if(!demo && editorCaseRevision != revision) {
+            persistEditor()
+            reloadCase()
+            if(editorCaseRevision != revision) {
+                notice="New sources were added. Review the report and select the current revision before saving. Your text is preserved."
+                throw IllegalStateException("Review report against updated encounter before saving.")
+            }
+        }
         val before=localRevision
         val p=obj("text" to editor,"template" to editorTemplate,"expected_revision" to editorCaseRevision,"amends_id" to amendId,"reason" to amendReason.ifBlank{null})
         if(editorTemplate=="custom"){require(customName.trim().length in 1..120 && customInstructions.trim().length in 1..2000){"Enter a custom template name and layout instructions."};p.put("custom_template",obj("name" to customName.trim(),"instructions" to customInstructions.trim()))}
