@@ -40,6 +40,17 @@ def command(args, timeout=600, step=''):
 
 class Cloud:
     def call(self, method, path, body=None):
+        # Google sometimes answers 503 UNAVAILABLE briefly. An etag-guarded update is safe to resend:
+        # a stale etag is rejected rather than applied twice.
+        for wait in (15, 45, 90, None):
+            try:
+                return self._call(method, path, body)
+            except Stop as error:
+                if wait is None or 'HTTP 503' not in str(error):
+                    raise
+                time.sleep(wait)
+
+    def _call(self, method, path, body=None):
         if not path.startswith(('projects/' + PROJECT + '/locations/' + REGION + '/', NAME)):
             raise Stop('Unexpected cloud resource.')
         token = command(['gcloud', 'auth', 'print-access-token'], timeout=30, step='cloud_token')
