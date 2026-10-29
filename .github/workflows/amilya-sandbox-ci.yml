@@ -162,7 +162,7 @@ jobs:
     timeout-minutes: 35
     environment: amilya-repair
     permissions:
-      contents: read
+      contents: write
       id-token: write
     # Never cancel a job while it could be restoring the service template.
     concurrency:
@@ -213,6 +213,31 @@ jobs:
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
         with:
           project_id: woundcopilot-20260905
+      - name: Keep a private copy of the unchanged live report files
+        # Read-only: copies files out of the pinned live image into a private pre-release so the
+        # report repair can start from the exact live code. Never blocks the deployment.
+        if: steps.connection.outputs.ready == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          parent="$(sed -n 's/^FROM //p' repairs/live-00021-lrx/Dockerfile)"
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          docker pull -q "$parent"
+          box="$(docker create "$parent")"
+          out="$RUNNER_TEMP/live-source"; mkdir -p "$out"
+          for f in quick_workflows.py main.py clinical.py core.py kosmo.py; do
+            docker cp "$box:/app/server/$f" "$out/$f" || true
+          done
+          docker cp "$box:/app/server/prompts" "$out/prompts"
+          docker rm "$box" >/dev/null
+          tar -czf "$RUNNER_TEMP/live-00021-lrx-server.tar.gz" -C "$out" .
+          sha256sum "$RUNNER_TEMP/live-00021-lrx-server.tar.gz"
+          gh release view live-00021-source >/dev/null 2>&1 || \
+            gh release create live-00021-source --prerelease --target "$GITHUB_SHA" \
+              --title "Private copy of live server files (00021-lrx)" --notes "Read-only copy from the pinned live image, for the narrow repair."
+          gh release upload live-00021-source "$RUNNER_TEMP/live-00021-lrx-server.tar.gz" --clobber
       - name: Install synthetic-check dependencies
         if: steps.connection.outputs.ready == 'true'
         run: |
