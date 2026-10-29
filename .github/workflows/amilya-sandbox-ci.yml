@@ -68,6 +68,8 @@ jobs:
           retention-days: 30
 
   android:
+    permissions:
+      contents: write  # only to attach the Test app to a private pre-release
     name: Android build + unit tests + build-flag checks
     runs-on: ubuntu-24.04
     timeout-minutes: 60
