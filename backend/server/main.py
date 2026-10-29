@@ -104,7 +104,9 @@ def public_config():
     from . import render_owner_test
     if render_owner_test.required():
         ai = ai and render_owner_test.available()
-    speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key))
+    speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key
+        or settings.openrouter_speech_enabled and settings.openrouter_api_key))
+    if render_owner_test.required(): speech = speech and render_owner_test.available()
     paused='Live assistance is configured but paused while the owner completes provider activation. Manual documentation remains available.'
     return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':bool(settings.allow_signup or owner_enrollment),
         'signup_scope':'public' if settings.allow_signup else 'owner_test' if owner_enrollment else 'closed',

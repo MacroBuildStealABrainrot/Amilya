@@ -52,6 +52,18 @@ def test_existing_claim_stops_before_provider_import_or_execution(monkeypatch, c
     assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED\n'
 
 
+def test_cost_comparison_needs_five_minutes_before_original_deadline(monkeypatch,capsys):
+    import render_owner_activation
+    monkeypatch.setattr(probe.os,'environ',environment() | {'AMILYA_RENDER_SYNTHETIC_PROBE':probe.COMPARISON_VERSION})
+    monkeypatch.setattr(probe,'time',SimpleNamespace(time=lambda:render_owner_activation.APPROVAL_END-100))
+    def forbidden(*args):
+        pytest.fail('A short/closed test window reached a provider key or durable claim')
+    monkeypatch.setattr(render_owner_activation,'check_key',forbidden)
+    monkeypatch.setattr(probe,'claim_once',forbidden)
+    assert probe.main()==1
+    assert capsys.readouterr().out=='AMILYA_SYNTHETIC_PROBE status=BLOCKED\n'
+
+
 @pytest.mark.parametrize('version', probe.HTTP_VERSIONS)
 def test_each_http_probe_has_a_separate_once_only_claim(monkeypatch, capsys, version):
     from types import SimpleNamespace
@@ -227,3 +239,4 @@ def test_http_probe_accepts_visible_synthetic_wound_but_rejects_unrelated_shapes
     assert probe.check_http_workflows(wound=True, photo_only=photo_only)
     assert len(gateway.http.calls) == (2 if photo_only else 5)
     assert capsys.readouterr().out.count('status=PASS') == (2 if photo_only else 4)
+

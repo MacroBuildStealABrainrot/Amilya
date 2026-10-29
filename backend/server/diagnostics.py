@@ -124,7 +124,7 @@ def safe_number(value):
 
 def cloud_event(data):
     """Closed metadata only; remains available if diagnostic DB writes fail."""
-    from .providers import MODEL_PRICES, TASK_FILES, photo_error_headers, known_model_id, FINISH_REASONS
+    from .providers import MODEL_PRICES, SPEECH_MODEL_IDS, TASK_FILES, photo_error_headers, known_model_id, FINISH_REASONS
     c=active.get()
     if not c:return
     try:request_id=str(uuid.UUID(str(c['id'])))
@@ -135,7 +135,7 @@ def cloud_event(data):
             'status':data.get('status') if data.get('status') in {'success','failed','cancelled'} else 'unknown'}
     for key in ('selected_model','reported_model'):
         value=data.get(key)
-        record[key]=value if known_model_id(value) and (key=='reported_model' or value in MODEL_PRICES) else None
+        record[key]=value if known_model_id(value) and (key=='reported_model' or value in MODEL_PRICES or value in SPEECH_MODEL_IDS) else None
     value=data.get('provider')
     record['provider']=value if value in {'openrouter','cloudflare','groq','deepgram'} else None
     for key in ('http_status','duration_ms','retry_count','max_output_tokens'):
@@ -309,4 +309,5 @@ def detail(request_id:uuid.UUID,user:User=Depends(require_admin)):
         origin=row.data.get('generation_request_id',row.id)
         generation=[e for e in data if e['request_id']==origin and e.get('source') in {'provider','replay'} and e.get('stage') in {'quick_draft','quick_refine','quick_repair','improve_report','draft'}]
         return {'request_id':row.id,'job_id':row.job_id,'task':row.task,**row.data,'last_generation_model':generation[-1].get('selected_model') if generation else None,'generation_request_id':origin if generation else None,'client_retry_count':sum(e.get('stage')=='retry' for e in data),'provider_retry_count':sum(e.get('source')=='provider' and e.get('retry_count',0)>0 for e in data),'events':data}
+
 
