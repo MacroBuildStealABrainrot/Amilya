@@ -54,6 +54,9 @@ jobs:
           mkdir -p ../ci-out
           python -m pytest -v -p no:cacheprovider 2>&1 | tee ../ci-out/backend-pytest.log
           test ${PIPESTATUS[0]} -eq 0
+      - name: Show failing test names
+        if: failure()
+        run: grep -E '^(FAILED|ERROR) ' ci-out/backend-pytest.log | head -20 | cut -c1-300 | sed 's/^/::error::/' || true
       - name: Static safety checks
         run: python -I verification/python_static_checks.py | tee ci-out/python-static-checks.log
       - uses: actions/upload-artifact@v4
