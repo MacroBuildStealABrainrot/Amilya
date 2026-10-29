@@ -19,7 +19,9 @@ PROVIDER='github-repair'
 WORKFLOW=f'{REPO}/.github/workflows/amilya-sandbox-ci.yml@{BRANCH}'
 CONDITION=("assertion.repository_id=='1426546615' && assertion.repository_owner_id=='217506124'"
     f" && assertion.ref=='{BRANCH}' && assertion.workflow_ref=='{WORKFLOW}'"
-    f" && assertion.sub=='repo:{REPO}:environment:amilya-repair' && assertion.event_name=='push'")
+    # GitHub issues the immutable-ID subject format for this repository (verified 2026-10-29).
+    " && assertion.sub=='repo:MacroBuildStealABrainrot@217506124/Amilya@1426546615:environment:amilya-repair'"
+    " && assertion.event_name=='push'")
 ROLES={
     'amilyaRepairService': ['run.services.get','run.services.update','run.revisions.get','run.revisions.list'],
     'amilyaRepairOperations': ['run.operations.get'],
