@@ -22,7 +22,7 @@ import java.time.format.DateTimeFormatter
                 if(quick)localTime(e.str("updated_at"))else e.str("title"))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},
         onConsultant={s.startQuick("consultant")},onOpenWork={s.openEncounter(it)},
-        onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
+        onAccount={s.screen="account"})
 }
 
 @Composable fun DocumentCaptureScreen(s:AppState){
