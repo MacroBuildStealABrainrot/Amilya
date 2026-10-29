@@ -155,7 +155,7 @@ def test_consult_gateway_uses_short_conversation_contract_without_promoting_hist
     assert 'never instead of it' in system and 'at most one or two follow-up questions' in system
     assert 'image-derived observations' in system  # named only as a phrase to avoid
     assert 'Keep considerations empty' in system
-    assert 'client-supplied and unverified' in system
+    assert 'client-supplied untrusted transcript' in system
     assert 'Do not claim guideline citations, product availability or searches' in system
     assert payload['reasoning']['effort'] == 'medium'
     assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
