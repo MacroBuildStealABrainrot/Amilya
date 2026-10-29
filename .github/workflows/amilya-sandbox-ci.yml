@@ -143,6 +143,14 @@ jobs:
           name: INSTALL-THIS-Amilya-Test-15
           path: ci-out/install/Amilya-Test-15.apk
           retention-days: 30
+      - name: Attach the Test app to a private pre-release
+        if: success() && startsWith(github.ref, 'refs/heads/combined/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="test15-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" ci-out/install/Amilya-Test-15.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "Amilya Test 15 (build ${GITHUB_RUN_NUMBER})" --notes "Pilot test app only. Synthetic data only."
       - uses: actions/upload-artifact@v4
         if: always()
         with:
