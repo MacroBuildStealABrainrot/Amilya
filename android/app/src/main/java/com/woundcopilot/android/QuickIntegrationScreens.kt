@@ -15,14 +15,6 @@ import java.time.format.DateTimeFormatter
 @Composable fun HomeScreen(s:AppState){
     LaunchedEffect(s.user?.str("id")){s.refreshRecordingJobs()}
     StartScreen(
-        recovery={
-            s.recordingJobs.take(3).forEachIndexed{index,job->
-                TextButton({s.resumeRecording(job)},enabled=!s.loading){Text(if(job.str("resume_from")=="REPORT_READY")"Review recovered report ${index+1}"else "Resume saved recording ${index+1}")}
-            }
-            if(s.recordingJobs.size>3)DetailDisclosure("More saved recordings","${s.recordingJobs.size-3} more"){
-                s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Resume saved recording ${index+4}")}}
-            }
-        },
         savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}.take(4).map { e ->
             val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
             val name=s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name").orEmpty()
@@ -30,7 +22,7 @@ import java.time.format.DateTimeFormatter
                 if(quick)localTime(e.str("updated_at"))else e.str("title"))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},
         onConsultant={s.startQuick("consultant")},onOpenWork={s.openEncounter(it)},
-        onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
+        onAccount={s.screen="account"})
 }
 
 @Composable fun DocumentCaptureScreen(s:AppState){
