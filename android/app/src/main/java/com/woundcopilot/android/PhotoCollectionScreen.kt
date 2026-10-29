@@ -43,6 +43,7 @@ import org.json.JSONObject
                 TextButton({deleting=id},enabled=!s.loading){Text("Remove")}
             }
         }
+        val sendParts=mutableListOf<String>()
         photos.groupBy{it.str("group")}.entries.forEachIndexed{index,(groupName,views)->
             val ids=views.map{it.str("id")}.toSet()
             Text(if(groupName.startsWith("Unassigned"))"Photo ${photos.indexOf(views.first())+1} · wound not assigned"else groupName,style=MaterialTheme.typography.titleMedium)
@@ -53,9 +54,11 @@ import org.json.JSONObject
             if(findings.isEmpty())Text("No assessable findings. Review or retake these photos.")
             // One chart-ready paragraph: wound bed, edges, periwound, then exudate.
             val order=listOf("wound_tissue","wound_edges","periwound","exudate")
-            if(findings.isNotEmpty())Text(findings.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
-                .map{prettyValue(it.opt("value")).trim().let{t->if(t.isEmpty()||t.last() in ".!?")t else "$t."}}.filter{it.isNotBlank()}.joinToString(" "))
+            val paragraph=findings.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
+                .map{prettyValue(it.opt("value")).trim().let{t->if(t.isEmpty()||t.last() in ".!?")t else "$t."}}.filter{it.isNotBlank()}.joinToString(" ")
+            if(paragraph.isNotBlank()){Text(paragraph);sendParts+=if(groupName.startsWith("Unassigned"))paragraph else "$groupName: $paragraph"}
         }
+        SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
         TextButton({s.saveWorkAndClose()},enabled=!s.loading&&photos.isNotEmpty()){Text("Save assessment")}
         WcpButton("Done",{s.finishPhotoAssessment()},Modifier.fillMaxWidth(),enabled=!s.loading)
         TextButton({s.chooseQuickMode("document");if(s.editor.isBlank())s.quickReport()else s.screen="editor"},enabled=!s.loading){Text("Add to Report")}

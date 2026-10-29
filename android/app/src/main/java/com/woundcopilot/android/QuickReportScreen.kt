@@ -114,19 +114,14 @@ fun QuickReportScreen(s: AppState) {
                 WcpButton("I reviewed the current sources", { s.useCurrentRevision() }, Modifier.fillMaxWidth(), enabled = !s.loading, secondary = true)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (!signed) WcpButton("Fix by Voice", { s.fixByVoice() }, Modifier.weight(1f), enabled = s.editor.isNotBlank() && !s.loading, secondary = true)
-            WcpButton("Copy", {
-                copySensitiveReport(context, s.editor)
-                s.notice = "Report copied."
-            }, Modifier.weight(1f), enabled = s.editor.isNotBlank() && !s.loading, secondary = true)
-        }
+        if (!signed) WcpButton("Fix by Voice", { s.fixByVoice() }, Modifier.fillMaxWidth(), enabled = s.editor.isNotBlank() && !s.loading, secondary = true)
         if (!signed && !exactSaved) WcpButton(
             "Save report", { s.persistEditor(); s.saveDocument() }, Modifier.fillMaxWidth(),
             enabled = s.editor.isNotBlank() && current && !s.loading && (s.amendId == null || s.amendReason.isNotBlank()),
         )
-        WcpButton("Send", { s.sendReports() }, Modifier.fillMaxWidth(), enabled = exactSaved && !s.loading, secondary = !exactSaved)
-        SendReportToPhone(s)
+        // One Send button: text message, another app, computer (one-time link) or copy.
+        SendOptions(s.editor, documentTypeTitle(s.editorTemplate), s.loading,
+            onComputer = { s.sendToComputer() }, onMessage = { s.notice = it })
 
         DetailDisclosure("More options") {
             TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text("Add photo, recording or files") }
@@ -138,7 +133,7 @@ fun QuickReportScreen(s: AppState) {
                 TextButton(onClick = { regenerate = true }, enabled = !s.loading) { Text("Generate again from sources") }
                 if (s.hasRecoverableDraft) TextButton(onClick = { s.restorePreviousDraft() }, enabled = !s.loading) { Text("Recover previous wording") }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (false) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("PDF", "Text").forEach { format ->
                     WcpButton("Share $format", {
                         s.runTask("Preparing ${format.lowercase()} export") {

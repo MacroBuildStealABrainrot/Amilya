@@ -815,6 +815,14 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();screen="record"}
     fun recordConsultantMessage(){if(loading)return;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();screen="record"}
     fun cancelVoiceMessage(){if(RecordingService.state.value.recording)return;voiceMessage=false;notice=null;dismissError();screen="consultant"}
+    /** Send > Computer: saves the current wording first if needed, then makes a one-time link and code. */
+    fun sendToComputer()=runTask("Preparing secure link"){
+        require(!demo){"Secure links are available after signing in. Use Another app or Copy for this sample."}
+        val saved=case?.items("documents")?.firstOrNull{it.str("id")==savedId}
+        if(saved==null || saved.str("text")!=editor || saved.str("template")!=editorTemplate)saveDocumentNow()
+        val id=savedId;require(id!=null){"Save the report before sending it to a computer."}
+        transfer=api.call("/transfers","POST",obj("document_ids" to JSONArray(listOf(id)))) as JSONObject
+    }
     fun sendReports(all:Boolean=false)=runTask("Preparing secure transfer"){
         require(!demo){"Secure transfer is available after signing in. Sample reports can be shared as PDF or text."}
         val documents=if(all){
