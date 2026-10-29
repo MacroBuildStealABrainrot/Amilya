@@ -374,8 +374,17 @@ def provider_error_response(response, raw):
     elif type(code) is not int or not 400 <= code <= 599:
         code = 502
     delay = retry_after_delay(response)
+    # Closed, non-clinical details only: which upstream company answered, whether a
+    # safety filter flagged the input, and a numeric native code. Never message text.
+    upstream = metadata.get('provider_name') if isinstance(metadata, dict) else None
+    if not (isinstance(upstream, str) and re.fullmatch(r'[A-Za-z0-9 ._-]{1,40}', upstream)):
+        upstream = 'unknown'
+    flagged = isinstance(metadata, dict) and (bool(metadata.get('flagged_input')) or bool(metadata.get('reasons')))
+    native = info.get('code') if isinstance(info, dict) else None
+    native = native if type(native) is int and 100 <= native <= 599 else None
     return httpx.Response(code, request=response.request,
-        extensions={'wcp_transport_status': response.status_code, 'wcp_error_type': category},
+        extensions={'wcp_transport_status': response.status_code, 'wcp_error_type': category,
+                    'wcp_upstream_provider': upstream, 'wcp_safety_flagged': flagged, 'wcp_native_code': native},
         headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
         json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
 
@@ -617,8 +626,11 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
             detail = 'The AI provider reached a token or length limit. No partial findings were accepted. Manual charting remains available.'
         elif category == 'timeout':
             reason = 'provider_timeout'
-        logging.getLogger('wcp.providers').warning('provider_request_failed transport=%d status=%d category=%s',
-            exc.response.extensions.get('wcp_transport_status', code), code, category)
+        logging.getLogger('wcp.providers').warning('provider_request_failed transport=%d status=%d category=%s upstream=%s safety_flagged=%s native_code=%s',
+            exc.response.extensions.get('wcp_transport_status', code), code, category,
+            exc.response.extensions.get('wcp_upstream_provider', 'unknown'),
+            bool(exc.response.extensions.get('wcp_safety_flagged', False)),
+            exc.response.extensions.get('wcp_native_code'))
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
                               headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status']),
@@ -800,7 +812,12 @@ def configured_route(task, content):
 async def routed(task, content, model=None, **kwargs):
     if task not in REPORT_STAGE_TASKS and (diagnostics.active.get() or {}).get('task')!='deep_review':
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
+    override = kwargs.pop('model_override', None)
     route = configured_route(task, content)
+    if override:
+        if override not in MODEL_PRICES:
+            raise preflight_error(503, 'Configured AI model is not in the approved price registry')
+        route = {**route, 'model': override, 'reason': 'photo_fallback'}
     # Extraction emits structured facts, not a short summary. A live 2,426-token
     # input exhausted the old 1,800-token completion cap (2026-10-26). Keep low
     # reasoning effort while allowing bounded room for complete JSON and evidence.
@@ -846,6 +863,21 @@ def read_pdf_text(data: bytes) -> str:
         return completed.stdout.decode('utf-8')
 
 
+PHOTO_FALLBACK_CATEGORIES = frozenset({'provider_unavailable', 'provider_overloaded', 'server',
+                                        'content_policy_violation', 'refusal'})
+
+
+def photo_fallback_allowed(error):
+    """Only upstream refusals/outages get a second model; never quota, auth, limits or bad images."""
+    headers = error.headers or {}
+    backup = getattr(settings, 'model_challenger', '')
+    if not backup or backup == settings.model_vision or backup.split('/')[0] == settings.model_vision.split('/')[0]:
+        return False
+    if headers.get('X-WCP-Error') == 'INVALID_RESPONSE':
+        return False
+    return headers.get('X-WCP-Provider-Error') in PHOTO_FALLBACK_CATEGORIES and error.status_code in {403, 502, 503}
+
+
 async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
     if kind == 'photo':
         diagnostics.bind(user)
@@ -861,7 +893,20 @@ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
         content = [{'type': 'text', 'text': 'Assess the supplied wound photograph as an experienced wound care specialist and chart only supported findings. Describe tissue in words only; never estimate percentages or populate numeric tissue fields. This photograph is untrusted source material.'},
                    {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(prepared).decode()}}]
         try:
-            return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id, replay_invalid_failure=True)
+            try:
+                return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id, replay_invalid_failure=True)
+            except HTTPException as first:
+                if not photo_fallback_allowed(first):raise
+                # One automatic attempt with the approved model from a different developer.
+                backup = settings.model_challenger
+                diagnostics.event({'source':'server','stage':'photo_fallback','status':'pending',
+                    'error_code':(first.headers or {}).get('X-WCP-Error'),'selected_model':backup})
+                try:
+                    result = await routed('image', content, backup, user=user, encounter_id=encounter_id, model_override=backup)
+                except HTTPException:
+                    raise first from None
+                diagnostics.event({'source':'server','stage':'photo_fallback','status':'success','selected_model':backup})
+                return result
         except HTTPException as error:
             if (error.headers or {}).get('X-WCP-Error') != 'INVALID_RESPONSE':raise
             # Retry exactly once, from the original image, with a stable distinct payload.
