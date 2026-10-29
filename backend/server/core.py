@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     speech_provider: str = 'auto'
     model_extraction: str = 'openai/gpt-6-luna'
     model_documentation: str = 'openai/gpt-6.1-sol'
-    model_vision: str = 'openai/gpt-6.1-sol'
+    model_vision: str = 'anthropic/claude-sonnet-5.5'  # owner's choice for wound photos (2026-10-28)
     model_review: str = 'openai/gpt-6.1-sol'
     model_frontier: str = 'openai/gpt-6-astra'
     model_challenger: str = 'anthropic/claude-sonnet-5.5'

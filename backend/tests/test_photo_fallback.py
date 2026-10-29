@@ -53,6 +53,9 @@ def test_no_backup_for_account_or_budget_problems(gateway, status):
 def test_no_backup_when_both_settings_use_the_same_developer(gateway):
     gateway.config.model_vision = 'openai/gpt-6.1-sol'
     gateway.config.model_challenger = 'openai/gpt-6-astra'
+    gateway.config.model_review = 'openai/gpt-6.1-sol'
+    gateway.config.model_documentation = 'openai/gpt-6.1-sol'
+    gateway.config.model_frontier = 'openai/gpt-6-astra'
     gateway.http.responses = [refused('provider_unavailable')]
     with pytest.raises(HTTPException):
         assess(gateway)
@@ -78,3 +81,12 @@ def test_invented_upstream_label_cannot_enter_the_refusal_log(gateway,caplog):
     assert 'upstream=unknown' in caplog.text
     assert 'SYNTHETIC_PERSON_MEDICATION' not in caplog.text
 
+
+
+def test_claude_photo_model_falls_back_to_the_other_developer(gateway):
+    gateway.config.model_vision = 'anthropic/claude-sonnet-5.5'
+    gateway.config.model_challenger = 'anthropic/claude-sonnet-5.5'
+    gateway.config.model_review = 'openai/gpt-6.1-sol'
+    gateway.http.responses = [refused('content_policy_violation', 'Anthropic'), wound_result()]
+    assess(gateway)
+    assert [call['json']['model'] for call in gateway.http.calls] == ['anthropic/claude-sonnet-5.5', 'openai/gpt-6.1-sol']
