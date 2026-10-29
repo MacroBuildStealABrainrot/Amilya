@@ -83,3 +83,26 @@ def test_repair_photo_instructions_match_the_reviewed_file():
     repair = (root / 'repairs/live-00021-lrx/40_wound_image_assessment.system.md').read_bytes()
     assert repair == (root / 'backend/server/prompts/40_wound_image_assessment.system.md').read_bytes()
     assert repair == (root / 'Amilya/repairs/live-00021-lrx/40_wound_image_assessment.system.md').read_bytes()
+
+
+def test_live_consultant_answers_with_claude_and_the_owner_voice(live, gateway):
+    answer = 'Check perfusion before any sharp debridement. If adequate, start autolytic debridement with hydrogel.'
+    gateway.http.responses = [completion({'answer': answer, 'considerations': []})]
+    context = {'case_facts': [], 'untrusted_sources': [], 'rejected_claims_do_not_reinstate': []}
+    result = asyncio.run(live.wound_consultant(context, 'How should I treat this heel wound?', [],
+                                               user=gateway.user, encounter_id='synthetic-consult'))
+    payload = gateway.http.calls[0]['json']
+    assert result['answer'] == answer
+    assert payload['model'] == 'anthropic/claude-sonnet-5.5'
+    assert payload['max_tokens'] >= 5000
+    system = payload['messages'][0]['content']
+    assert 'experienced wound care consultant' in system and 'Use conditions instead of refusing' in system
+
+
+def test_live_consultant_instructions_ship_identically():
+    root = Path(__file__).resolve().parents[2]
+    name = '91_wound_consultant.system.md'
+    shipped = (root / 'repairs/live-00021-lrx' / name).read_bytes()
+    assert shipped == (root / 'Amilya/repairs/live-00021-lrx' / name).read_bytes()
+    assert shipped == (providers.PROMPTS / name).read_bytes()
+    assert f'COPY {name} /app/server/prompts/{name}' in (root / 'repairs/live-00021-lrx/Dockerfile').read_text()

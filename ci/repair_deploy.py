@@ -246,19 +246,19 @@ def deploy(cloud, image, sha, run, state_path, smoke):
         recover(cloud, state)
 
 
-PROMPT_FILE = '40_wound_image_assessment.system.md'
-PROMPT_PATH = '/app/server/prompts/' + PROMPT_FILE
+PROMPT_FILES = ('40_wound_image_assessment.system.md', '91_wound_consultant.system.md')
+PROMPT_DIR = '/app/server/prompts/'
 
 
 def build(sha, root):
     folder = root / 'repairs/live-00021-lrx'
     provider = folder / 'providers.py'
-    prompt_file = folder / PROMPT_FILE
-    for name in ('providers.py', PROMPT_FILE):
+    for name in ('providers.py',) + PROMPT_FILES:
         if (folder / name).read_bytes() != (root / 'Amilya/repairs/live-00021-lrx' / name).read_bytes():
             raise Stop('Repair source copies differ.')
-    if (folder / 'Dockerfile').read_text() != (f'FROM {PARENT}\nCOPY providers.py /app/server/providers.py\n'
-                                               f'COPY {PROMPT_FILE} {PROMPT_PATH}\n'):
+    contract = f'FROM {PARENT}\nCOPY providers.py /app/server/providers.py\n' + ''.join(
+        f'COPY {name} {PROMPT_DIR}{name}\n' for name in PROMPT_FILES)
+    if (folder / 'Dockerfile').read_text() != contract:
         raise Stop('Repair Dockerfile differs from the pinned delivery contract.')
     command(['gcloud','auth','configure-docker',f'{REGION}-docker.pkg.dev','--quiet'], step='registry_login')
     command(['docker','pull',PARENT], step='pull_live_image')
@@ -270,9 +270,10 @@ def build(sha, root):
     digest = hashlib.sha256(provider.read_bytes()).hexdigest()
     if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',probe], step='check_built_file') != digest:
         raise Stop('Built provider checksum mismatch.')
-    prompt_probe = f"import hashlib;print(hashlib.sha256(open('{PROMPT_PATH}','rb').read()).hexdigest())"
-    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',prompt_probe], step='check_photo_instructions') != hashlib.sha256(prompt_file.read_bytes()).hexdigest():
-        raise Stop('Built photo instruction checksum mismatch.')
+    for name in PROMPT_FILES:
+        prompt_probe = f"import hashlib;print(hashlib.sha256(open('{PROMPT_DIR}{name}','rb').read()).hexdigest())"
+        if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',prompt_probe], step='check_instructions') != hashlib.sha256((folder / name).read_bytes()).hexdigest():
+            raise Stop('Built instruction checksum mismatch.')
     command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',
              "compile(open('/app/server/providers.py').read(), 'providers.py', 'exec')"], step='compile_file')
     # The patched file must import inside the unchanged live app. Report only the error class name.

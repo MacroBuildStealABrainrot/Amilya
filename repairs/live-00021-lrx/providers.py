@@ -63,6 +63,8 @@ MODEL_PRICES = {
 PHOTO_MODEL = 'anthropic/claude-sonnet-5.5'
 PHOTO_BACKUP_MODEL = 'openai/gpt-5.6-sol'
 NOTE_MODEL = 'anthropic/claude-haiku-5.5'
+# Owner's choice (2026-10-29): Ask Consultant answers with Claude Sonnet 5.5 like an experienced wound consultant.
+CONSULT_MODEL = 'anthropic/claude-sonnet-5.5'
 SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
 PHOTO_FALLBACK_CATEGORIES = frozenset({'provider_unavailable', 'provider_overloaded', 'server',
                                         'content_policy_violation', 'refusal'})
@@ -687,6 +689,8 @@ async def routed(task, content, model=None, **kwargs):
         route = {**route, 'model': override or PHOTO_MODEL, 'effort_level': 'high', 'reason': 'owner_photo_model'}
     elif task in {'quick_draft', 'quick_refine', 'quick_repair'} and simple_note_template(content):
         route = {**route, 'model': NOTE_MODEL, 'reason': 'owner_note_model'}
+    elif task == 'consult':
+        route = {**route, 'model': override or CONSULT_MODEL, 'reason': 'owner_consult_model'}
     # Structured evidence needs room beyond the old 1,800-token cap.
     minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
     if task in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
@@ -696,6 +700,9 @@ async def routed(task, content, model=None, **kwargs):
     elif task == 'image':
         # High-effort reasoning shares this allowance; leave room for the answer.
         minimum = max(minimum, 12000)
+    elif task == 'consult':
+        # Room for a practical plan after the model's own reasoning.
+        minimum = max(minimum, 5000)
     kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), minimum)
     return await structured(task, content, route['model'], routing=route, **kwargs)
 
