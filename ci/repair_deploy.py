@@ -49,6 +49,15 @@ class Cloud:
         try:
             with urllib.request.urlopen(req, timeout=45) as response:
                 return json.load(response)
+        except urllib.error.HTTPError as error:
+            # Only the HTTP status and Google's closed status enum; never the message or body.
+            reason = ''
+            try:
+                reason = str(json.loads(error.read().decode('utf-8', 'replace')).get('error', {}).get('status', ''))
+            except (ValueError, AttributeError, OSError):
+                pass
+            reason = re.sub(r'[^A-Z_]', '', reason)[:40]
+            raise Stop(f'Cloud API {method} request failed with HTTP {error.code}' + (f' {reason}' if reason else '') + '; no response body was logged.') from None
         except (urllib.error.URLError, ValueError):
             raise Stop('Cloud API request failed; no response body was logged.') from None
 
