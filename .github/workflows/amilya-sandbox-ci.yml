@@ -197,7 +197,7 @@ jobs:
           part = sys.argv[1].split('.')[1]
           claims = json.loads(base64.urlsafe_b64decode(part + '=' * (-len(part) % 4)))
           for key in ('sub', 'ref', 'workflow_ref', 'repository_id', 'repository_owner_id', 'event_name', 'environment'):
-              print(f'{key}={claims.get(key)}')
+              print(f'::notice::{key}={claims.get(key)}')
           PY
       - name: Authenticate with short-lived Google credentials
         id: cloud_auth
