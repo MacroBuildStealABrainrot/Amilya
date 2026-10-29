@@ -138,3 +138,17 @@ def test_live_report_instructions_keep_the_live_rules_and_add_the_charting_voice
     assert text.startswith('Generate the selected document from the original visit sources')
     assert 'Consultant suggestions (not confirmed)' in text and 'CHARTING VOICE' in text
     assert 'consultation' in (root / '86_quick_documentation_qa.system.md').read_text(encoding='utf-8')
+
+
+@pytest.mark.parametrize('task,result,effort', [
+    ('quick_draft', {'text': 'Synthetic note.', 'status': 'ready', 'ui_alerts': []}, 'low'),
+    ('quick_qa', {'passed': True, 'discrepancies': []}, 'medium'),
+])
+def test_live_standard_notes_are_written_and_checked_fast_on_haiku(live, gateway, task, result, effort):
+    gateway.http.responses = [completion(result)]
+    content = json.dumps({'template': 'soap', 'case_facts': [], 'untrusted_sources': [
+        {'id': 's1', 'kind': 'typed', 'text': 'Synthetic: purulent drainage today.'}]})
+    asyncio.run(live.routed(task, content, user=gateway.user, encounter_id='synthetic-fast-note'))
+    payload = gateway.http.calls[0]['json']
+    assert payload['model'] == 'anthropic/claude-haiku-5.5'
+    assert payload['reasoning']['effort'] == effort

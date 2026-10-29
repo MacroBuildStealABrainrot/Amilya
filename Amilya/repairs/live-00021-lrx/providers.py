@@ -688,7 +688,11 @@ async def routed(task, content, model=None, **kwargs):
     if task == 'image':
         route = {**route, 'model': override or PHOTO_MODEL, 'effort_level': 'high', 'reason': 'owner_photo_model'}
     elif task in {'quick_draft', 'quick_refine', 'quick_repair'} and simple_note_template(content):
-        route = {**route, 'model': NOTE_MODEL, 'reason': 'owner_note_model'}
+        # Owner's choice (2026-10-29): notes must come back fast. Haiku writes with a light reasoning budget.
+        route = {**route, 'model': NOTE_MODEL, 'effort_level': 'low', 'reason': 'owner_note_model'}
+    elif task == 'quick_qa' and simple_note_template(content):
+        # The accuracy check on a standard note also runs on Haiku, with a moderate reasoning budget.
+        route = {**route, 'model': NOTE_MODEL, 'effort_level': 'medium', 'reason': 'owner_fast_note_check'}
     elif task == 'consult':
         route = {**route, 'model': override or CONSULT_MODEL, 'reason': 'owner_consult_model'}
     # Structured evidence needs room beyond the old 1,800-token cap.
