@@ -19,7 +19,7 @@ check "$(ls $APKS/debug/*.apk | head -1)" com.woundcopilot.android false
 check "$(ls $APKS/sandbox/*.apk | head -1)" com.woundcopilot.android.sandbox true
 # Pilot keeps the original recorder until clinical and device compatibility approval.
 check "$(ls $APKS/pilot/*.apk | head -1)" com.woundcopilot.android.pilot2 false
-check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair false
+check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair2 false
 check "$(ls $APKS/renderTest/*.apk | head -1)" com.woundcopilot.android.rendertest false
 APKSIGNER="${AAPT2%aapt2}apksigner"
 "$APKSIGNER" verify --verbose --print-certs "$(ls $APKS/renderTest/*.apk | head -1)"

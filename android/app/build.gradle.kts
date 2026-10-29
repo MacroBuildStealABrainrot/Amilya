@@ -71,9 +71,11 @@ android {
         // Isolated repair verification app: never replaces a recording-bearing install.
         create("repair") {
             initWith(getByName("pilot"))
-            applicationIdSuffix = ".repair"
+            // ".repair2": installs beside any older repair app (different signing key), never over it.
+            applicationIdSuffix = ".repair2"
             buildConfigField("boolean", "REPAIR_SERVER", "true")
-            versionNameSuffix = "-photo-repair13"
+            versionNameSuffix = "-server-test"
+            manifestPlaceholders["appLabel"] = "Amilya Server Test"
             buildConfigField("String", "API_BASE_URL", "\"https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1\"")
             matchingFallbacks += listOf("pilot", "debug")
         }
