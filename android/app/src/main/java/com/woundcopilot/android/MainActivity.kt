@@ -117,7 +117,6 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     Text(s.case?.optJSONObject("patient")?.str("display_name").orEmpty(),style=MaterialTheme.typography.titleMedium,maxLines=2,overflow=TextOverflow.Ellipsis)
                     Text(s.case?.optJSONObject("wound")?.str("label")?.ifBlank{null}?:s.case?.optJSONObject("encounter")?.str("title").orEmpty(),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant,maxLines=2,overflow=TextOverflow.Ellipsis)
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
-                TroubleshootingShare(s)
                 if(inCase)TouchIcon("record","Voice commands",{s.voiceCommandsOpen=true},!s.loading)
                 if(s.demo)Text("SAMPLE",Modifier.padding(horizontal=10.dp),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
                 else if(page !in listOf("login","signup","admin"))TouchIcon("refresh","Refresh workspace",{s.refresh()},!s.loading)
