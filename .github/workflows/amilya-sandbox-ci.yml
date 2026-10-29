@@ -217,6 +217,7 @@ jobs:
           AMILYA_SMOKE_WORKSPACE_ID: ${{ vars.AMILYA_SMOKE_WORKSPACE_ID }}
         run: |
           export AMILYA_SMOKE_AUDIO="$RUNNER_TEMP/amilya-synthetic.wav"
+          export AMILYA_REPAIR_CHECKS="${{ steps.connection.outputs.checks }}"
           python3 ci/repair_deploy.py --state "$RUNNER_TEMP/amilya-repair-private/state.json"
       - name: Recover template and previous repair tag if interrupted
         if: always() && steps.cloud_auth.outcome == 'success'

@@ -1,0 +1,85 @@
+"""Owner-approved features added to the narrow live repair file; synthetic data, intercepted provider calls only."""
+import asyncio
+import importlib.util
+import io
+import json
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+from PIL import Image
+
+from server import providers
+from test_providers import gateway, completion
+
+
+@pytest.fixture
+def live(gateway, monkeypatch):
+    path = Path(__file__).resolve().parents[2] / 'repairs/live-00021-lrx/providers.py'
+    spec = importlib.util.spec_from_file_location('server.live_repair_features', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'PROMPTS', providers.PROMPTS)
+    monkeypatch.setattr(module, 'settings', gateway.config)
+    monkeypatch.setattr(module, 'SessionLocal', gateway.sessions)
+    monkeypatch.setattr(module, 'check_rate', lambda *a, **k: None)
+    return module
+
+
+def photo():
+    out = io.BytesIO()
+    Image.new('RGB', (40, 30), (120, 60, 50)).save(out, format='PNG')
+    return out.getvalue()
+
+
+def assess(module, gateway):
+    return asyncio.run(module.analyze_media(photo(), 'image/png', 'photo', user=gateway.user, encounter_id='synthetic-photo'))
+
+
+def wound_result():
+    return completion({'facts': [{'name': 'wound_tissue', 'value': {'text': 'Wound bed with adherent slough.', 'slough': 60.0}, 'quote': ''}],
+                       'warnings': [], 'quality': {'status': 'sufficient', 'reason': 'none'}})
+
+
+def refused(error_type):
+    return (200, {'error': {'code': 502, 'metadata': {'error_type': error_type}}})
+
+
+def test_photo_uses_claude_with_a_careful_look_and_room_to_answer(live, gateway):
+    gateway.http.responses = [wound_result()]
+    result = assess(live, gateway)
+    payload = gateway.http.calls[0]['json']
+    assert payload['model'] == 'anthropic/claude-sonnet-5.5'
+    assert payload['reasoning']['effort'] == 'high'
+    assert payload['max_tokens'] >= 12000
+    assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    # Tissue is charted in the sentence only, without duplicate numbers.
+    assert result['facts'][0]['value'] == {'text': 'Wound bed with adherent slough.'}
+
+
+@pytest.mark.parametrize('error_type', ['provider_unavailable', 'content_policy_violation', 'refusal'])
+def test_refused_photo_gets_one_backup_attempt(live, gateway, error_type):
+    gateway.http.responses = [refused(error_type), wound_result()]
+    assess(live, gateway)
+    assert [c['json']['model'] for c in gateway.http.calls] == ['anthropic/claude-sonnet-5.5', 'openai/gpt-5.6-sol']
+
+
+def test_no_backup_for_budget_problems(live, gateway):
+    gateway.http.responses = [(402, {'error': {'code': 402}})]
+    with pytest.raises(HTTPException):
+        assess(live, gateway)
+    assert len(gateway.http.calls) == 1
+
+
+@pytest.mark.parametrize('template,expected', [('nursing', True), ('soap', True), ('custom', False)])
+def test_standard_notes_use_haiku(live, template, expected):
+    content = json.dumps({'template': template})
+    assert live.simple_note_template(content) is expected
+    assert 'anthropic/claude-haiku-5.5' in live.MODEL_PRICES and 'anthropic/claude-sonnet-5.5' in live.MODEL_PRICES
+
+
+def test_repair_photo_instructions_match_the_reviewed_file():
+    root = Path(__file__).resolve().parents[2]
+    repair = (root / 'repairs/live-00021-lrx/40_wound_image_assessment.system.md').read_bytes()
+    assert repair == (root / 'backend/server/prompts/40_wound_image_assessment.system.md').read_bytes()
+    assert repair == (root / 'Amilya/repairs/live-00021-lrx/40_wound_image_assessment.system.md').read_bytes()

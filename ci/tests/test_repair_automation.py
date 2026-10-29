@@ -140,7 +140,15 @@ class ConnectionTests(unittest.TestCase):
     def test_missing_connection_is_explicitly_blocked(self):
         result=readiness({})
         self.assertFalse(result['ready'])
-        self.assertEqual(len(result['missing']),6)
+        self.assertEqual(len(result['missing']),3)
+
+    def test_without_a_synthetic_account_only_health_checks_run(self):
+        env={'AMILYA_GCP_WIF_PROVIDER':'projects/123/locations/global/workloadIdentityPools/amilya-repair/providers/github',
+            'AMILYA_GCP_DEPLOY_ACCOUNT':'amilya-repair-ci@woundcopilot-20260905.iam.gserviceaccount.com',
+            'AMILYA_REPAIR_DEPLOY_ENABLED':'true'}
+        self.assertEqual(readiness(env),{'ready':True,'missing':[],'checks':'health_only'})
+        partial={**env,'AMILYA_SMOKE_EMAIL':'smoke@example.test'}
+        self.assertFalse(readiness(partial)['ready'])
 
     def test_only_exact_deploy_identity_and_synthetic_account_allowed(self):
         env={'AMILYA_GCP_WIF_PROVIDER':'projects/123/locations/global/workloadIdentityPools/amilya-repair/providers/github',

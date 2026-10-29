@@ -220,17 +220,24 @@ def deploy(cloud, image, sha, run, state_path, smoke):
         save_state(state_path, state)
         return {'status':'repair_updated', 'commit':sha, 'revision':revision,
                 'normal_traffic_unchanged':True, 'template_restored':True,
-                'feature_checks':'passed'}
+                'feature_checks':'passed' if os.environ.get('AMILYA_REPAIR_CHECKS') != 'health_only' else 'health_only'}
     finally:
         recover(cloud, state)
+
+
+PROMPT_FILE = '40_wound_image_assessment.system.md'
+PROMPT_PATH = '/app/server/prompts/' + PROMPT_FILE
 
 
 def build(sha, root):
     folder = root / 'repairs/live-00021-lrx'
     provider = folder / 'providers.py'
-    if provider.read_bytes() != (root / 'Amilya/repairs/live-00021-lrx/providers.py').read_bytes():
-        raise Stop('Repair source copies differ.')
-    if (folder / 'Dockerfile').read_text() != f'FROM {PARENT}\nCOPY providers.py /app/server/providers.py\n':
+    prompt_file = folder / PROMPT_FILE
+    for name in ('providers.py', PROMPT_FILE):
+        if (folder / name).read_bytes() != (root / 'Amilya/repairs/live-00021-lrx' / name).read_bytes():
+            raise Stop('Repair source copies differ.')
+    if (folder / 'Dockerfile').read_text() != (f'FROM {PARENT}\nCOPY providers.py /app/server/providers.py\n'
+                                               f'COPY {PROMPT_FILE} {PROMPT_PATH}\n'):
         raise Stop('Repair Dockerfile differs from the pinned delivery contract.')
     command(['gcloud','auth','configure-docker',f'{REGION}-docker.pkg.dev','--quiet'])
     command(['docker','pull',PARENT])
@@ -242,8 +249,14 @@ def build(sha, root):
     digest = hashlib.sha256(provider.read_bytes()).hexdigest()
     if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',probe]) != digest:
         raise Stop('Built provider checksum mismatch.')
+    prompt_probe = f"import hashlib;print(hashlib.sha256(open('{PROMPT_PATH}','rb').read()).hexdigest())"
+    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',prompt_probe]) != hashlib.sha256(prompt_file.read_bytes()).hexdigest():
+        raise Stop('Built photo instruction checksum mismatch.')
     command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',
              "compile(open('/app/server/providers.py').read(), 'providers.py', 'exec')"])
+    # The patched file must import inside the unchanged live app (no missing names).
+    command(['docker','run','--rm','--network','none','-e','APP_SECRET=' + 'x' * 40,'--entrypoint','python',tag,'-c',
+             'import server.providers'])
     command(['docker','push',tag])
     result = command(['docker','inspect','--format','{{json .RepoDigests}}',tag])
     digests = json.loads(result)
@@ -269,11 +282,13 @@ def main():
         # Validate service before consuming build resources.
         assert_baseline(cloud.get())
         image = build(sha, Path(__file__).resolve().parents[1])
-        from repair_smoke import run as smoke
+        from repair_smoke import run as full_smoke
+        health_only = os.environ.get('AMILYA_REPAIR_CHECKS') == 'health_only'
+        smoke = (lambda url, full=True: full_smoke(url, full=False)) if health_only else full_smoke
         report = deploy(cloud, image, sha, os.environ['GITHUB_RUN_ID'] + os.environ.get('GITHUB_RUN_ATTEMPT','1'), args.state, smoke)
         print(json.dumps(report))
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-            summary.write('\nRepair server updated; synthetic checks passed. Normal traffic unchanged; template restored.\n')
+            summary.write('\nRepair server updated; ' + ('health checks passed (owner tests the repair app by hand)' if health_only else 'synthetic checks passed') + '. Normal traffic unchanged; template restored.\n')
     except (Stop, KeyError, ValueError) as error:
         print('::error::' + (str(error) if isinstance(error, Stop) else 'Deployment configuration is incomplete.'))
         raise SystemExit(1) from None
