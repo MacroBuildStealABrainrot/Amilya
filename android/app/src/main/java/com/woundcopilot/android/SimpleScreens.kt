@@ -78,18 +78,10 @@ fun StartScreen(
     val c = MaterialTheme.colorScheme
     Page {
         InstrumentTitle("What do you need?")
-        recovery()
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            StartAction("Document", "Speak or write. Get your report.", "record", c.primary, !busy, onDocument)
-            StartAction("Photo Assessment", "Add a photo. See visible findings.", "photo", c.tertiary, !busy, onPhoto)
-            StartAction("Wound Consultant", "Ask a question. Talk it through.", "kosmo", c.secondary, !busy, onConsultant)
-        }
-        if (onSavedWork != null || onSendAll != null) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                if (onSavedWork == null) Spacer(Modifier.weight(1f))
-                onSavedWork?.let { TextButton(onClick = it, enabled = !busy) { InstrumentIcon("document", Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Saved work") } }
-                onSendAll?.let { TextButton(onClick = it, enabled = !busy) { Text("Send All") } }
-            }
+            StartAction("Mic", "Speak and create your report.", "record", c.primary, !busy, onDocument)
+            StartAction("Camera", "Take a wound photo.", "photo", c.tertiary, !busy, onPhoto)
+            StartAction("Ask Consultant", "Ask a question. Talk it through.", "kosmo", c.secondary, !busy, onConsultant)
         }
         if (savedWork.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
