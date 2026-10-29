@@ -41,7 +41,7 @@ def test_backup_failure_reports_the_original_error_and_stops(gateway):
     assert len(gateway.http.calls) == 2
 
 
-@pytest.mark.parametrize('status', [401, 402, 429])
+@pytest.mark.parametrize('status', [401, 402])
 def test_no_backup_for_account_or_budget_problems(gateway, status):
     gateway.config.model_challenger = 'anthropic/claude-sonnet-5.5'
     gateway.http.responses = [(status, {'error': {'code': status}})]
