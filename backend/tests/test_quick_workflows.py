@@ -296,3 +296,44 @@ def test_new_tasks_keep_strict_provider_contracts(task):
 def test_quick_routes_keep_csrf_dependency():
     for route in quick.router.routes:
         assert any(dependency.call is quick.require_csrf for dependency in route.dependant.dependencies)
+
+
+def test_ask_consultant_conversation_can_become_a_report(quick_api, monkeypatch):
+    case = start(quick_api, 'consultant')
+    add_source(quick_api, case, 'Clinician photo note: synthetic heel wound photo attached.')
+    case_id = case['encounter']['id']
+    seen = []
+    async def generate(context, template, length, **kwargs):
+        seen.append(context)
+        return {'text': 'Clinician asked about delayed healing.', 'routing': {}, 'effort_level': 'medium', 'usage': {}}
+    monkeypatch.setattr(providers, 'quick_documentation', generate)
+    turns = [{'role': 'user', 'content': 'Fictional: heel wound not healing for 6 weeks.'},
+             {'role': 'assistant', 'content': 'Consider checking offloading and nutrition.'}]
+    response = quick_api.client.post(f'/api/v1/encounters/{case_id}/quick-report',
+                                     json={'template': 'soap', 'consultation': turns})
+    assert response.status_code == 200, response.text
+    consultation = seen[0]['consultation']
+    assert [t['speaker'] for t in consultation['turns']] == ['clinician_message', 'ai_consultant_suggestion']
+    assert 'never document them' in consultation['how_to_use']
+    assert seen[0]['untrusted_sources'][0]['text'].startswith('Clinician photo note')
+    # Nothing from the conversation is stored on the server.
+    with quick_api.sessions() as db:
+        rows = list(db.scalars(select(Evidence).where(Evidence.encounter_id == case_id)))
+        assert all('heel wound not healing' not in (row.text or '') for row in rows)
+
+
+def test_consultation_alone_is_enough_for_a_report(quick_api, monkeypatch):
+    case = start(quick_api, 'consultant')
+    async def generate(context, template, length, **kwargs):
+        return {'text': 'Clinician reported a fictional leg wound.', 'routing': {}, 'effort_level': 'medium', 'usage': {}}
+    monkeypatch.setattr(providers, 'quick_documentation', generate)
+    response = quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",
+                                     json={'consultation': [{'role': 'user', 'content': 'Fictional leg wound, 2 cm.'}]})
+    assert response.status_code == 200 and response.json()['text'].startswith('Clinician reported')
+
+
+def test_consultation_size_is_bounded(quick_api):
+    case = start(quick_api, 'consultant')
+    turns = [{'role': 'user', 'content': 'x' * 9000}] * 5
+    response = quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report", json={'consultation': turns})
+    assert response.status_code == 422
