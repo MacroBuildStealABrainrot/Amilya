@@ -3,6 +3,7 @@ import asyncio
 import importlib.util
 import io
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,6 +113,8 @@ def live_quick_workflows():
     path = Path(__file__).resolve().parents[2] / 'repairs/live-00021-lrx/quick_workflows.py'
     spec = importlib.util.spec_from_file_location('server.live_quick_workflows', path)
     module = importlib.util.module_from_spec(spec)
+    # Registered like a normal import so pydantic can resolve the file's postponed type names.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
