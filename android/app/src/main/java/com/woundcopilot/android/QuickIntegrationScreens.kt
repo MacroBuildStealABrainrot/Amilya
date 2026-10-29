@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -85,8 +86,20 @@ import java.time.format.DateTimeFormatter
     ConsultantChatScreen(s.encounterId,s.consultantMessages.map{ConsultantMessage(it.str("id"),it.str("content"),it.str("role")=="user",it.str("effort"))},
         initialDraft=s.consultantDraft,draftResetKey=s.consultantReset,busy=s.loading,
         attachments=ConsultantAttachments(photoCount=sources.count{it.str("kind")=="photo"},fileCount=sources.count{it.str("kind")=="document"},recordingCount=sources.count{it.str("kind")=="audio"},otherCount=sources.count{it.str("kind") !in listOf("photo","document","audio")}),
-        onDraftChange={s.updateConsultantDraft(it)},onSend={s.sendConsultant(it)},onAddPhoto={s.screen="photo"},onAddFiles={s.screen="upload"},onRecord={s.screen="record"},onDone={s.doneQuick()},
+        onDraftChange={s.updateConsultantDraft(it)},onSend={s.sendConsultant(it)},onAddPhoto={s.screen="photo"},onAddFiles={s.screen="upload"},onRecord={s.screen="record"},onDone={s.finishConsultant()},
         onVoiceMessage={s.recordConsultantMessage()},onOpenReport=if(s.editor.isNotBlank()){{s.chooseQuickMode("document");s.screen="editor"}}else null)
+    if(s.consultantReportPrompt){
+        var format by rememberSaveable{mutableStateOf(s.editorTemplate)}
+        AlertDialog(onDismissRequest={s.consultantReportPrompt=false},
+            title={Text("Create a report from this consultation?")},
+            text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
+                DocumentTypeSelector(format,true){format=it}
+                Text("Closing without a report discards this conversation.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }},
+            confirmButton={TextButton({s.reportFromConsultant(format)}){Text("Create report")}},
+            dismissButton={Row{TextButton({s.consultantReportPrompt=false}){Text("Keep talking")};TextButton({s.closeConsultantWithoutReport()}){Text("Close")}}})
+    }
 }
 
 @Composable fun ActiveTransferDialog(s:AppState){

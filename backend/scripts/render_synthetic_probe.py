@@ -28,6 +28,7 @@ PHOTO_HTTP_VERSION = 'photo-note-v5'
 WOUND_HTTP_VERSION = 'wound-http-v6'
 QUALITATIVE_HTTP_VERSION = 'photo-words-v7'
 COMPARISON_VERSION = 'photo-cost-v8'
+REPORT_COMPARISON_VERSION = 'report-haiku-v10'
 HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION, COMPARISON_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
@@ -35,7 +36,8 @@ MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031
            PHOTO_HTTP_VERSION: 'd34dd3d6-1af0-5b13-b4c2-0698a85c9446',
            WOUND_HTTP_VERSION: 'd21a0ad3-5dbd-5e06-bc29-676b7e13b045',
            QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997',
-           COMPARISON_VERSION: '2755c513-29b4-5f9c-b1d1-070793e7041a'}
+           COMPARISON_VERSION: '2755c513-29b4-5f9c-b1d1-070793e7041a',
+           REPORT_COMPARISON_VERSION: 'b7e3d915-6c42-5f08-8a1d-2e9f4c7b0a36'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -263,14 +265,15 @@ def main():
             raise ConfigurationError('PROBE_OPT_IN_REQUIRED')
         if not env.get('OPENROUTER_API_KEY') or env.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1') != 'https://openrouter.ai/api/v1':
             raise ConfigurationError('PROBE_PROVIDER_REQUIRED')
-        if version in HTTP_VERSIONS:
+        if version in HTTP_VERSIONS or version == REPORT_COMPARISON_VERSION:
             from render_owner_activation import APPROVAL_END, check_key
             now = time.time()
-            if now >= APPROVAL_END:
+            deadline = int(env.get('AMILYA_RENDER_OWNER_TEST_UNTIL', str(APPROVAL_END)))
+            if not now < deadline <= APPROVAL_END:
                 raise ConfigurationError('TEST_WINDOW_CLOSED')
-            if version == COMPARISON_VERSION and now + 300 >= APPROVAL_END:
+            if version in (COMPARISON_VERSION, REPORT_COMPARISON_VERSION) and now + 300 >= deadline:
                 raise ConfigurationError('TEST_WINDOW_TOO_SHORT')
-            check_key(env, APPROVAL_END, now)
+            check_key(env, deadline, now)
         if not claim_once(env):
             print('AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED', flush=True)
             return 0
@@ -321,6 +324,12 @@ def main():
                 account.period_start, account.period_end = int(time.time()) - 60, int(time.time()) + 3600
                 account.plan_micros = 1_000_000  # fixture balance only; no payment or subscription
                 db.commit()
+            if version == REPORT_COMPARISON_VERSION:
+                from render_report_comparison import compare as compare_reports
+                try:
+                    return 0 if compare_reports(actor) else 1
+                finally:
+                    engine.dispose()
             try:
                 passed = asyncio.run(check_workflows(actor, ('extract',) if version == EXTRACTION_VERSION else STAGES))
             finally:

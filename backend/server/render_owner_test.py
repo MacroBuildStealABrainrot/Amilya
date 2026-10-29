@@ -4,7 +4,7 @@ import time
 from uuid import UUID
 from .core import settings
 
-APPROVAL_END = 1793235000
+APPROVAL_END = 1793843400
 
 
 def required():
@@ -28,3 +28,4 @@ def available():
 def allows(user):
     return bool(available() and user.id == settings.render_owner_test_user_id
                 and user.is_active and not user.is_platform_admin)
+

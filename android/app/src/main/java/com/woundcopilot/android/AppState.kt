@@ -142,6 +142,9 @@ class AppState(application:Application):AndroidViewModel(application) {
     var loading by mutableStateOf(false); private set
     var quickMode by mutableStateOf<String?>(null); private set
     var consultantMessages by mutableStateOf<List<JSONObject>>(emptyList()); private set
+    /** Done on Ask Consultant asks whether to turn the conversation into a report instead of losing it. */
+    var consultantReportPrompt by mutableStateOf(false)
+    private var reportFromConsultation=false
     var consultantDraft by mutableStateOf(""); private set
     var consultantReset by mutableIntStateOf(0); private set
     var transfer by mutableStateOf<JSONObject?>(null)
@@ -424,7 +427,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         val key="capture-${user?.str("id")}-${encounterId}-$kind"
         vault.remove(key);vault.remove("$key-mime");vault.remove("$key-review")
     }
-    fun upload(file:File,mime:String,kind:String,photoReview:JSONObject?=null):Unit=runTask(when(kind){"audio"->"Transcribing your recording";"photo"->"Assessing your photo";else->"Reading your document"},purpose=kind,retry={upload(file,mime,kind,photoReview)}) {uploadNow(file,mime,kind,photoReview)}
+    fun upload(file:File,mime:String,kind:String,photoReview:JSONObject?=null):Unit=runTask(when(kind){"audio"->"Transcribing recording";"photo"->"Assessing your photo";else->"Reading your document"},purpose=kind,retry={upload(file,mime,kind,photoReview)}) {uploadNow(file,mime,kind,photoReview)}
     private suspend fun uploadNow(file:File,mime:String,kind:String,photoReview:JSONObject?=null){
         if(kind=="audio" && quickMode=="document" && !voiceCorrection && !voiceMessage){rememberRecording(file,mime);processingRecording=file;recordingStage("WAITING_FOR_UPLOAD")}
         ensureRemoteDocument()
@@ -527,6 +530,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun chooseQuickMode(mode:String){quickMode=mode;vault.write(storeKey("quick-mode"),mode)}
     fun startQuick(mode:String){
         if(loading)return
+        reportFromConsultation=false;consultantReportPrompt=false
         processingRecording=null
         recordingConsent=false
         if(mode=="document" && !demo){
@@ -646,6 +650,33 @@ class AppState(application:Application):AndroidViewModel(application) {
         quickMode=null;screen="home";notice=null;dismissError();if(demo)publishDemo()
     }
     fun quickConsultant(){if(loading)return;chooseQuickMode("consultant");screen="consultant";notice=null;dismissError()}
+    /** Done on Ask Consultant: offer a report first when there is a conversation to keep. */
+    fun finishConsultant(){
+        if(loading)return
+        if(quickMode=="consultant" && consultantMessages.isNotEmpty() && editor.isBlank()){consultantReportPrompt=true;return}
+        doneQuick()
+    }
+    fun closeConsultantWithoutReport(){consultantReportPrompt=false;doneQuick()}
+    /** Writes the selected report type from the whole consultation: questions, answers and attached photos and files. */
+    fun reportFromConsultant(format:String):Unit=runTask("Creating report",purpose="report",retry={reportFromConsultant(format)}){
+        consultantReportPrompt=false;reportFromConsultation=true
+        recordingNotice=unreadableAttachments()
+        updateTemplate(format);chooseQuickMode("document")
+        draftQuick(true,format)
+    }
+    /** Names every attached photo or file that could not be read, so it is never silently left out. */
+    private fun unreadableAttachments():String?{
+        val sources=case?.items("evidence").orEmpty().filter{it.str("kind") in listOf("photo","document","result")}
+        val photos=sources.filter{it.str("kind")=="photo"};val files=sources.filter{it.str("kind")!="photo"}
+        val missing=photos.mapIndexedNotNull{i,it->
+            val retake=it.optJSONObject("metadata")?.optJSONObject("photo_quality")?.optBoolean("retake_required")==true
+            if(retake||it.str("text").isBlank())"Photo ${i+1} (it could not be assessed)" else null
+        }+files.mapIndexedNotNull{i,it->
+            val name=it.optJSONObject("metadata")?.str("filename").orEmpty().ifBlank{"File ${i+1}"}
+            if(it.str("text").isBlank())"$name (it could not be read)" else null
+        }
+        return if(missing.isEmpty())null else "Not included in the report: ${missing.joinToString("; ")}. These attachments are still kept with this work."
+    }
     fun finishPhotoAssessment(){if(loading)return;notice=null;dismissError();when(quickMode){"consultant"->screen="consultant";"document"->screen=if(editor.isBlank())"document_capture"else "editor";else->doneQuick()}}
     fun photoLayout():List<JSONObject>{
         val photos=case?.items("evidence").orEmpty().filter{it.str("kind")=="photo"}
@@ -702,12 +733,23 @@ class AppState(application:Application):AndroidViewModel(application) {
         recordingStage("GENERATING_REPORT");Performance.start("report_request")
         // Once a source is accepted, retry only drafting, never its successful upload.
         taskRecovery("report"){reformatOrRetry(ai,format)}
-        taskLabel=if(ai)"Preparing and checking your report"else "Preparing your draft"
-        val start=localRevision;val sourceRevision=revision;val intent="quick-report-$sourceRevision"
+        taskLabel=if(ai)"Creating report"else "Preparing your draft"
+        val start=localRevision;val sourceRevision=revision
         val payload=obj("template" to format,"use_ai" to ai,"preferred_length" to reportLength)
         if(format=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
+        val consultation=if(reportFromConsultation)consultantMessages.filter{it.str("content").isNotBlank()}.takeLast(40)
+            .map{obj("role" to (if(it.str("role")=="user")"user" else "assistant"),"content" to it.str("content").take(10000))} else emptyList()
+        if(consultation.isNotEmpty())payload.put("consultation",JSONArray(consultation))
+        var intent="quick-report-$sourceRevision"+if(consultation.isEmpty())"" else "-consult-"+hash(canonical(JSONArray(consultation))).take(16)
+        suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload)}catch(e:ApiException){
+            if(consultation.isEmpty() || e.status!=422 || !payload.has("consultation"))throw e
+            // An older server cannot read the conversation yet: still write the report from the attachments, and say so.
+            recordingNotice=listOfNotNull(recordingNotice,"This server cannot include the conversation yet, so the report uses only your attached photos and files.").joinToString("\n")
+            payload.remove("consultation");intent="quick-report-$sourceRevision"
+            mutation(intent,"/encounters/$encounterId/quick-report",payload)
+        }
         val response=if(demo)sampleDocument(case!!,format)
-            else try{mutation(intent,"/encounters/$encounterId/quick-report",payload)}catch(e:ApiException){
+            else try{request()}catch(e:ApiException){
                 if(!ai || e.status !in listOf(402,429,502,503,504))throw e
                 // The failed AI draft is never promoted. Reuse acknowledged original sources.
                 // A distinct stable identity prevents a failed AI replay from blocking local drafting.
@@ -724,7 +766,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
         editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)acknowledge(intent,payload);Performance.start("report_ui");screen="editor"
     }
-    fun quickReport(ai:Boolean=true)=runTask(if(ai)"Preparing your report" else "Preparing a source-based draft"){draftQuick(ai)}
+    fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
     private fun reformatOrRetry(ai:Boolean,format:String)=runTask("Preparing your report"){draftQuick(ai,format)}
     fun reformatQuick(format:String)=runTask("Changing report format"){draftQuick(true,format)}
     fun applyVoiceCorrection():Unit=runTask("Applying your correction",purpose="report",retry={applyVoiceCorrection()}){

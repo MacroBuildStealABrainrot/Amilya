@@ -67,6 +67,7 @@ MODEL_PRICES = {
     'openai/gpt-6.1-sol': ('2', '10', '.2'),
     'openai/gpt-6-astra': ('10', '50', '.4'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
+    'anthropic/claude-haiku-5.5': ('.10', '.50', '.01'),
 }
 # Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
 # Exact aliases only: never accept arbitrary date suffixes or another model.
@@ -75,6 +76,8 @@ MODEL_SNAPSHOTS = {
     'openai/gpt-6.1-sol': frozenset({'openai/gpt-6.1-sol-20260929'}),
     'openai/gpt-6-astra': frozenset({'openai/gpt-6-astra-20260903'}),
     'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
+    # Snapshot slug per the public genai-prices review of OpenRouter (released 2026-10-07).
+    'anthropic/claude-haiku-5.5': frozenset({'anthropic/claude-haiku-5.5-20261007'}),
 }
 FINISH_REASONS = frozenset({'stop', 'length', 'content_filter', 'tool_calls', 'function_call'})
 OPENROUTER_SPEECH_MODEL = 'openai/whisper-large-v3'
@@ -383,7 +386,7 @@ def provider_error_response(response, raw):
     # Closed, non-clinical details only: which upstream company answered, whether a
     # safety filter flagged the input, and a numeric native code. Never message text.
     upstream = metadata.get('provider_name') if isinstance(metadata, dict) else None
-    if not (isinstance(upstream, str) and re.fullmatch(r'[A-Za-z0-9 ._-]{1,40}', upstream)):
+    if upstream not in ('Azure', 'OpenAI', 'Anthropic', 'Google', 'DeepInfra', 'Together', 'Groq', 'Cloudflare'):
         upstream = 'unknown'
     flagged = isinstance(metadata, dict) and (bool(metadata.get('flagged_input')) or bool(metadata.get('reasons')))
     native = info.get('code') if isinstance(info, dict) else None
@@ -799,6 +802,19 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
 
 
+# Owner's blind review (2026-10-28) preferred Haiku's notes; custom layouts stay on the main model until tested.
+SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
+
+
+def simple_note_template(content):
+    """Standard note types; custom layouts keep the main model."""
+    try:
+        data = json.loads(content) if isinstance(content, str) else {}
+    except (ValueError, TypeError):
+        return False
+    return isinstance(data, dict) and data.get('template') in SIMPLE_NOTE_TEMPLATES and not data.get('untrusted_layout_preferences')
+
+
 def configured_route(task, content):
     """Keep automatic effort selection while honoring the owner's model settings."""
     route = select_route(TASK_FAMILIES.get(task, task), content)
@@ -806,6 +822,8 @@ def configured_route(task, content):
     if task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
     elif route['effort_level'] == 'high': selected = settings.model_frontier
+    elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
+        selected = settings.model_documentation_simple
     elif family in {'draft', 'qa'}: selected = settings.model_documentation
     elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
     else: selected = settings.model_extraction
@@ -1315,6 +1333,7 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+
 
 
 

@@ -74,6 +74,13 @@ def test_output_contains_only_fixed_labels_and_numeric_metrics():
         comparison.metric_line('patient_name','wound',True,3,{})
 
 
+def test_backup_model_cannot_be_reported_as_a_same_model_comparison():
+    row=SimpleNamespace(model=comparison.MODEL,provider='openrouter')
+    assert comparison.primary_only([row])
+    assert not comparison.primary_only([])
+    assert not comparison.primary_only([row,SimpleNamespace(model='anthropic/claude-sonnet-5.5',provider='openrouter')])
+
+
 def test_gate_rejects_missing_coverage_percentages_and_confirmation():
     body={'facts':[{'name':n,'value':{'text':'Synthetic observation'},'confirmation_state':'unconfirmed'}
                    for n in comparison.CORE_FIELDS],
@@ -111,13 +118,17 @@ def test_comparison_uses_normal_http_and_identical_images_without_public_change(
     assert all('Synthetic observation' not in line and 'granulation' not in line for line in lines)
 
 
-def test_comparison_cannot_start_after_original_deadline(client,gateway,monkeypatch):
+@pytest.mark.parametrize('activated', [False, True])
+def test_comparison_cannot_start_after_original_deadline(client,gateway,monkeypatch,activated):
     from server import db as database,providers
     import render_owner_activation
     _,factory=client
     monkeypatch.setattr(database,'SessionLocal',factory)
     monkeypatch.setattr(providers,'SessionLocal',factory)
-    monkeypatch.setattr(render_owner_activation,'APPROVAL_END',int(time.time())-1)
+    monkeypatch.delenv('AMILYA_RENDER_OWNER_TEST_UNTIL',raising=False)
+    monkeypatch.setattr(render_owner_activation,'APPROVAL_END',int(time.time())+(3600 if activated else -1))
+    if activated:
+        monkeypatch.setenv('AMILYA_RENDER_OWNER_TEST_UNTIL',str(int(time.time())-1))
     with pytest.raises(ValueError,match='Test window too short'):
         comparison.compare()
     assert not gateway.http.calls
