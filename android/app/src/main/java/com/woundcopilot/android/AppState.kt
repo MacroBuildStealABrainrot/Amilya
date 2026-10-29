@@ -554,7 +554,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         persistEditor()
         processingRecording?.let{file->vault.write("recording-owner-${file.name}","$owner:$encounterId");recordingRecovery.remember(file,owner,response,format)}
     }
-    private fun startRemoteQuick(mode:String)=runTask("Opening ${if(mode=="consultant")"Wound Consultant" else mode}") {
+    private fun startRemoteQuick(mode:String)=runTask("Opening ${if(mode=="consultant")"Ask Consultant" else mode}") {
         require(mode in listOf("document","photo","consultant"))
         persistEditor();voiceCorrection=false;voiceMessage=false;voiceInstruction=""
         val key="quick-start-${user?.str("id")?:"sample"}-$mode"
@@ -670,7 +670,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun retakePhoto(){if(loading)return;clearCaptureSelection("photo");notice=null;dismissError();screen="photo"}
     fun updateConsultantDraft(text:String){consultantDraft=text;vault.write(storeKey("consult-draft"),consultantDraft)}
-    fun sendConsultant(message:String):Unit=runTask("Wound Consultant is responding",purpose="consultant",retry={sendConsultant(message)}) {
+    fun sendConsultant(message:String):Unit=runTask("Consultant is responding",purpose="consultant",retry={sendConsultant(message)}) {
         ensureRemoteDocument()
         val text=message.trim();require(text.isNotBlank()&&text.length<=2000){"Enter a question within 2,000 characters."}
         val pending=consultantMessages.lastOrNull()?.let{it.str("role")=="user"&&it.str("content")==text}==true
@@ -678,7 +678,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!pending){consultantMessages=consultantMessages+obj("id" to UUID.randomUUID().toString(),"role" to "user","content" to text);vault.write(storeKey("consult-chat"),JSONArray(consultantMessages).toString())}
         val payload=obj("message" to text,"history" to JSONArray(boundedConsultHistory(history).map{obj("role" to it.str("role"),"content" to it.str("content"))}))
         val sourceRevision=revision;val intent="consult-$sourceRevision"
-        val reply=if(demo)obj("answer" to "This is the local sample. In a connected visit, Wound Consultant can start with your question and the information you choose to add. No model was called.","case_revision" to revision)else mutation(intent,"/encounters/$encounterId/consult",payload)
+        val reply=if(demo)obj("answer" to "This is the local sample. In a connected visit, Ask Consultant can start with your question and the information you choose to add. No model was called.","case_revision" to revision)else mutation(intent,"/encounters/$encounterId/consult",payload)
         require(reply.optInt("case_revision")==revision){"Your sources changed. Ask again using the current sources."}
         consultantMessages=consultantMessages+obj("id" to UUID.randomUUID().toString(),"role" to "assistant","content" to reply.str("answer"),"effort" to reply.str("effort_level"))
         vault.write(storeKey("consult-chat"),JSONArray(consultantMessages.takeLast(100)).toString());updateConsultantDraft("");consultantReset++

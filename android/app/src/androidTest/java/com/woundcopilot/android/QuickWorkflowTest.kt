@@ -177,7 +177,7 @@ class QuickWorkflowTest {
     }
 
     @Test fun consultantStartsWithQuestionAndNoEvidence() {
-        click("Wound Consultant")
+        click("Ask Consultant")
         awaitTask()
         val question = "What information would help explain delayed healing?"
         compose.onNodeWithTag("consultant-composer").performTextReplacement(question)
@@ -320,7 +320,10 @@ class QuickWorkflowTest {
 
     private fun click(text: String) {
         // A previous sample consultation can share its title with the primary home action.
-        compose.onAllNodesWithText(text).onFirst().performScrollTo().performClick()
+        // Home actions are icon-only; their name lives in the screen-reader label.
+        val byText = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        (if (byText) compose.onAllNodesWithText(text) else compose.onAllNodesWithContentDescription(text, substring = true))
+            .onFirst().performScrollTo().performClick()
         compose.waitForIdle()
     }
 

@@ -73,11 +73,8 @@ import java.time.format.DateTimeFormatter
             sources.forEach{EvidenceItem(s,it)}
             if(s.editor.isBlank())TextButton({s.quickReport(false)},enabled=!s.loading){Text("Create draft without AI")}
         }
-        s.recordingJobs.filter{it.optJSONObject("case")?.optJSONObject("encounter")?.str("id")==s.encounterId && it.str("resume_from")!="REPORT_READY"}.forEach{job->
-            Text("Recording saved on this device.")
-            TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Retry recording")}
-        }
-        TextButton({s.doneQuick()},enabled=!s.loading){Text("Done")}
+        // Saved-recording status, Retry recording and Done removed at the owner's request;
+        // unfinished recordings remain in Saved work > Recovery & older work.
     }
 }
 

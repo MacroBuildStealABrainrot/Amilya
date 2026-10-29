@@ -118,10 +118,8 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     Text(s.case?.optJSONObject("patient")?.str("display_name").orEmpty(),style=MaterialTheme.typography.titleMedium,maxLines=2,overflow=TextOverflow.Ellipsis)
                     Text(s.case?.optJSONObject("wound")?.str("label")?.ifBlank{null}?:s.case?.optJSONObject("encounter")?.str("title").orEmpty(),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant,maxLines=2,overflow=TextOverflow.Ellipsis)
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
-                TroubleshootingShare(s)
-                if(inCase)TouchIcon("record","Voice commands",{s.voiceCommandsOpen=true},!s.loading)
+                // Owner's layout request (2026-10-28): no share, top microphone or refresh in the shared header.
                 if(s.demo)Text("SAMPLE",Modifier.padding(horizontal=10.dp),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
-                else if(page !in listOf("login","signup","admin"))TouchIcon("refresh","Refresh workspace",{s.refresh()},!s.loading)
             }
             if(rec.recording&&page!="record")Surface(onClick={navigate("record")},color=c.errorContainer){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){InstrumentIcon("record",Modifier.size(18.dp),c.onErrorContainer);Text("${if(rec.paused)"Paused" else "Recording"} · ${rec.elapsedSeconds/60}:${(rec.elapsedSeconds%60).toString().padStart(2,'0')}",Modifier.weight(1f).padding(start=10.dp),style=MaterialTheme.typography.labelLarge);Text("Open",style=MaterialTheme.typography.labelLarge)}}
             if(s.loading){LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp));Text(s.taskLabel,Modifier.padding(horizontal=20.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium,color=c.onSurfaceVariant)}
@@ -204,7 +202,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         Text("Care,\nin focus.",style=MaterialTheme.typography.displayLarge.copy(fontFamily=FontFamily.Serif,fontWeight=FontWeight.Normal,fontSize=60.sp,lineHeight=62.sp,letterSpacing=(-2).sp))
         Text("Documentation and wound support, when you need it.",style=MaterialTheme.typography.bodyMedium,color=c.onSurfaceVariant)
         GlassPanel(Modifier.fillMaxWidth()){
-            listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Wound Consultant","Talk through a question.")).forEach{(icon,title,detail)->
+            listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Ask Consultant","Talk through a question.")).forEach{(icon,title,detail)->
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
                     InstrumentIcon(icon,Modifier.size(26.dp),c.primary)
                     Column{Text(title,style=MaterialTheme.typography.titleMedium);Text(detail,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}
@@ -233,7 +231,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty()
             val type=when(mode.lowercase()){
                 "photo","photo_assessment","image"->"Photo assessment"
-                "consultant","wound_consultant","ask_consultant"->"Wound consultant"
+                "consultant","wound_consultant","ask_consultant"->"Ask Consultant"
                 "document","report","nursing"->"Nursing visit"
                 else->"Visit"
             }

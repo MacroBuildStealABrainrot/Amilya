@@ -18,7 +18,7 @@ internal fun canRetryRequest(error:Exception)=
 
 internal fun clinicianError(error:Exception,purpose:String?=null):String {
     val api=error as? ApiException
-    val task=when(purpose){"audio"->"Recording processing";"report"->"Report generation";"photo"->"Photo assessment";"consultant"->"Wound Consultant";else->"Request"}
+    val task=when(purpose){"audio"->"Recording processing";"report"->"Report generation";"photo"->"Photo assessment";"consultant"->"Ask Consultant";else->"Request"}
     var code=api?.category
     val reason=when {
         error is java.net.SocketTimeoutException -> {code="NETWORK_TIMEOUT";"The connection timed out. Check request status before retrying; the server may still be processing."}

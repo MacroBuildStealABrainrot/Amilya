@@ -202,7 +202,7 @@ fun Wordmark(compact: Boolean = false) {
         Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
-                "WoundCoPilot",
+                "Amilya",
                 color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontSize = if (compact) 20.sp else 23.sp,

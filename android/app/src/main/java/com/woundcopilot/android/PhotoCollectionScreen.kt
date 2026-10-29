@@ -59,7 +59,7 @@ import org.json.JSONObject
         TextButton({s.saveWorkAndClose()},enabled=!s.loading&&photos.isNotEmpty()){Text("Save assessment")}
         WcpButton("Done",{s.finishPhotoAssessment()},Modifier.fillMaxWidth(),enabled=!s.loading)
         TextButton({s.chooseQuickMode("document");if(s.editor.isBlank())s.quickReport()else s.screen="editor"},enabled=!s.loading){Text("Add to Report")}
-        TextButton({s.quickConsultant()},enabled=!s.loading){Text("Ask Wound Consultant")}
+        TextButton({s.quickConsultant()},enabled=!s.loading){Text("Ask Consultant")}
     }
     editing?.let{p->AlertDialog(onDismissRequest={editing=null},title={Text("Photo details")},text={Column{
         OutlinedTextField(label,{label=it.take(120)},label={Text("View label")},placeholder={Text("Overview, close-up, measurement view")})

@@ -77,21 +77,21 @@ fun StartScreen(
 ) {
     val c = MaterialTheme.colorScheme
     Page {
-        InstrumentTitle("What do you need?")
-        recovery()
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Three icon-only actions. Unfinished recordings stay reachable in Saved work > Recovery.
+        Spacer(Modifier.height(40.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             StartAction("Document", "Speak or write. Get your report.", "record", c.primary, !busy, onDocument)
-            StartAction("Photo Assessment", "Add a photo. See visible findings.", "photo", c.tertiary, !busy, onPhoto)
-            StartAction("Wound Consultant", "Ask a question. Talk it through.", "kosmo", c.secondary, !busy, onConsultant)
+            StartAction("Photo Assessment", "Add a photo. See visible findings.", "photo", c.primary, !busy, onPhoto)
+            StartAction("Ask Consultant", "Ask a question. Talk it through.", "kosmo", c.primary, !busy, onConsultant)
         }
-        if (onSavedWork != null || onSendAll != null) {
+        if (false && (onSavedWork != null || onSendAll != null)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 if (onSavedWork == null) Spacer(Modifier.weight(1f))
                 onSavedWork?.let { TextButton(onClick = it, enabled = !busy) { InstrumentIcon("document", Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Saved work") } }
                 onSendAll?.let { TextButton(onClick = it, enabled = !busy) { Text("Send All") } }
             }
         }
-        if (savedWork.isNotEmpty()) {
+        if (false && savedWork.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
             Text("Recent work", style = MaterialTheme.typography.titleSmall, color = c.onSurfaceVariant, modifier = Modifier.semantics { heading() })
             // Home is a preview; the complete history remains in Saved work.
@@ -129,15 +129,10 @@ private fun StartAction(title: String, detail: String, icon: String, accent: Col
             .clickable(interactionSource = interaction, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick),
         accent = accent,
     ) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 82.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-            Box(Modifier.size(52.dp).background(accent.copy(alpha = .14f), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-                InstrumentIcon(icon, Modifier.size(29.dp), accent)
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
-            }
-            InstrumentIcon("arrow", Modifier.size(19.dp), accent)
+        // Icon only, centred; the title and description stay as the screen-reader label.
+        Box(Modifier.fillMaxWidth().heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = "$title. $detail" },
+            contentAlignment = Alignment.Center) {
+            InstrumentIcon(icon, Modifier.size(52.dp), accent)
         }
     }
 }
@@ -204,7 +199,7 @@ fun PhotoAssessmentScreen(
             }
             WcpButton("Done", onDone, Modifier.fillMaxWidth())
             WcpButton("Add to Report", onAddToReport, Modifier.fillMaxWidth(), enabled = !busy, secondary = true)
-            WcpButton("Ask Wound Consultant", onAskConsultant, Modifier.fillMaxWidth(), enabled = !busy, secondary = true)
+            WcpButton("Ask Consultant", onAskConsultant, Modifier.fillMaxWidth(), enabled = !busy, secondary = true)
         } else if (busy) {
             GlassPanel(Modifier.fillMaxWidth(), accent = c.tertiary) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -259,7 +254,7 @@ fun ConsultantChatScreen(
         Column(Modifier.widthIn(max = 780.dp).fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(42.dp).background(c.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { InstrumentIcon("kosmo", Modifier.size(26.dp), c.primary) }
-                Text("Wound Consultant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
+                Text("Ask Consultant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
                 onOpenReport?.let { TextButton(onClick = it, enabled = !busy) { Text("Report") } }
                 TextButton(onClick = onDone) { Text("Done") }
             }
@@ -334,7 +329,7 @@ private fun ConsultantBubble(message: ConsultantMessage) {
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromClinician) Arrangement.End else Arrangement.Start) {
         Column(Modifier.fillMaxWidth(if (message.fromClinician) .89f else .96f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!message.fromClinician) Text("Wound Consultant", Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelSmall, color = c.primary)
+            if (!message.fromClinician) Text("Consultant", Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelSmall, color = c.primary)
             SelectionContainer {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     paragraphs.forEachIndexed { index, paragraph ->

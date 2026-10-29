@@ -130,7 +130,7 @@ fun QuickReportScreen(s: AppState) {
 
         DetailDisclosure("More options") {
             TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text("Add photo, recording or files") }
-            TextButton(onClick = { s.quickConsultant() }, enabled = !s.loading) { Text("Ask Wound Consultant") }
+            TextButton(onClick = { s.quickConsultant() }, enabled = !s.loading) { Text("Ask Consultant") }
             TextButton(onClick = { s.screen = "documents" }, enabled = !s.loading) { Text("Saved versions") }
             if (signed && document != null) WcpButton("Create amendment", { s.startAmendment(document) }, Modifier.fillMaxWidth(), enabled = !s.loading, secondary = true)
             if (!signed) {
