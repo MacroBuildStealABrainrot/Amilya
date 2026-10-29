@@ -246,38 +246,44 @@ def deploy(cloud, image, sha, run, state_path, smoke):
         recover(cloud, state)
 
 
-PROMPT_FILES = ('40_wound_image_assessment.system.md', '91_wound_consultant.system.md')
+# Live code files replaced by the repair, with the checksum each must have in the unchanged live image.
+CODE_FILES = {'providers.py': PARENT_PROVIDER_SHA,
+              'quick_workflows.py': '79d3843bbeeac94bbd12189e0f57d328d76d910de09bc786a08372880f80fd7e'}
+PROMPT_FILES = ('40_wound_image_assessment.system.md', '81_quick_documentation.system.md',
+                '86_quick_documentation_qa.system.md', '91_wound_consultant.system.md')
 PROMPT_DIR = '/app/server/prompts/'
 
 
 def build(sha, root):
     folder = root / 'repairs/live-00021-lrx'
-    provider = folder / 'providers.py'
-    for name in ('providers.py',) + PROMPT_FILES:
+    for name in tuple(CODE_FILES) + PROMPT_FILES:
         if (folder / name).read_bytes() != (root / 'Amilya/repairs/live-00021-lrx' / name).read_bytes():
             raise Stop('Repair source copies differ.')
-    contract = f'FROM {PARENT}\nCOPY providers.py /app/server/providers.py\n' + ''.join(
+    contract = f'FROM {PARENT}\n' + ''.join(f'COPY {name} /app/server/{name}\n' for name in CODE_FILES) + ''.join(
         f'COPY {name} {PROMPT_DIR}{name}\n' for name in PROMPT_FILES)
     if (folder / 'Dockerfile').read_text() != contract:
         raise Stop('Repair Dockerfile differs from the pinned delivery contract.')
     command(['gcloud','auth','configure-docker',f'{REGION}-docker.pkg.dev','--quiet'], step='registry_login')
     command(['docker','pull',PARENT], step='pull_live_image')
-    probe = "import hashlib;print(hashlib.sha256(open('/app/server/providers.py','rb').read()).hexdigest())"
-    if command(['docker','run','--rm','--network','none','--entrypoint','python',PARENT,'-c',probe], step='check_live_file') != PARENT_PROVIDER_SHA:
-        raise Stop('Parent provider checksum mismatch.')
+    def probe(name):
+        return f"import hashlib;print(hashlib.sha256(open('/app/server/{name}','rb').read()).hexdigest())"
+    for name, live_sha in CODE_FILES.items():
+        if command(['docker','run','--rm','--network','none','--entrypoint','python',PARENT,'-c',probe(name)], step='check_live_file') != live_sha:
+            raise Stop('Parent file checksum mismatch.')
     tag = f'{REGION}-docker.pkg.dev/{PROJECT}/wcp/app:ci-{sha}'
     command(['docker','build','--pull','-t',tag,str(folder)], step='build_image')
-    digest = hashlib.sha256(provider.read_bytes()).hexdigest()
-    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',probe], step='check_built_file') != digest:
-        raise Stop('Built provider checksum mismatch.')
+    for name in CODE_FILES:
+        if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',probe(name)], step='check_built_file') != hashlib.sha256((folder / name).read_bytes()).hexdigest():
+            raise Stop('Built file checksum mismatch.')
     for name in PROMPT_FILES:
         prompt_probe = f"import hashlib;print(hashlib.sha256(open('{PROMPT_DIR}{name}','rb').read()).hexdigest())"
         if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',prompt_probe], step='check_instructions') != hashlib.sha256((folder / name).read_bytes()).hexdigest():
             raise Stop('Built instruction checksum mismatch.')
-    command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',
-             "compile(open('/app/server/providers.py').read(), 'providers.py', 'exec')"], step='compile_file')
-    # The patched file must import inside the unchanged live app. Report only the error class name.
-    import_probe = ("import sys\ntry:\n import server.providers\nexcept Exception as e:\n print('IMPORT_' + type(e).__name__)\nelse:\n print('ok')")
+    for name in CODE_FILES:
+        command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',
+                 f"compile(open('/app/server/{name}').read(), '{name}', 'exec')"], step='compile_file')
+    # The patched files must import inside the unchanged live app. Report only the error class name.
+    import_probe = ("import sys\ntry:\n import server.providers\n import server.quick_workflows\nexcept Exception as e:\n print('IMPORT_' + type(e).__name__)\nelse:\n print('ok')")
     def load(image):
         return command(['docker','run','--rm','--network','none','-e','APP_SECRET=' + 'x' * 40,'--entrypoint','python',image,'-c',import_probe], step='import_file')
     imported, baseline = load(tag), load(PARENT)

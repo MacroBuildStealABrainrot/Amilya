@@ -106,3 +106,32 @@ def test_live_consultant_instructions_ship_identically():
     assert shipped == (root / 'Amilya/repairs/live-00021-lrx' / name).read_bytes()
     assert shipped == (providers.PROMPTS / name).read_bytes()
     assert f'COPY {name} /app/server/prompts/{name}' in (root / 'repairs/live-00021-lrx/Dockerfile').read_text()
+
+
+def live_quick_workflows():
+    path = Path(__file__).resolve().parents[2] / 'repairs/live-00021-lrx/quick_workflows.py'
+    spec = importlib.util.spec_from_file_location('server.live_quick_workflows', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_live_report_accepts_a_consultation_and_labels_who_said_what():
+    module = live_quick_workflows()
+    report = module.QuickReport.model_validate({'template': 'nursing', 'consultation': [
+        {'role': 'user', 'content': 'Synthetic: pedal pulses palpable.'},
+        {'role': 'assistant', 'content': 'Synthetic: consider toe pressures.'}]})
+    context = module.consultation_context(report.consultation)
+    assert [t['speaker'] for t in context['turns']] == ['clinician_message', 'ai_consultant_suggestion']
+    assert 'Consultant suggestions (not confirmed)' in context['how_to_use']
+    assert module.QuickReport.model_validate({'template': 'nursing'}).consultation == []
+    with pytest.raises(Exception):
+        module.QuickReport.model_validate({'template': 'nursing', 'consultation': [{'role': 'user', 'content': 'x' * 10000}] * 5})
+
+
+def test_live_report_instructions_keep_the_live_rules_and_add_the_charting_voice():
+    root = Path(__file__).resolve().parents[2] / 'repairs/live-00021-lrx'
+    text = (root / '81_quick_documentation.system.md').read_text(encoding='utf-8')
+    assert text.startswith('Generate the selected document from the original visit sources')
+    assert 'Consultant suggestions (not confirmed)' in text and 'CHARTING VOICE' in text
+    assert 'consultation' in (root / '86_quick_documentation_qa.system.md').read_text(encoding='utf-8')
