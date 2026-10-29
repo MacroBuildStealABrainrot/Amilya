@@ -30,18 +30,19 @@ class Stop(RuntimeError):
     """Application-owned message; never include an upstream exception/body."""
 
 
-def command(args, timeout=600):
+def command(args, timeout=600, step=''):
     try:
         return subprocess.run(args, check=True, capture_output=True, text=True, timeout=timeout).stdout.strip()
     except (subprocess.SubprocessError, OSError):
-        raise Stop('A deployment command failed; sensitive command output was suppressed.') from None
+        # Fixed step names only; command output can contain configuration and is never shown.
+        raise Stop('A deployment command failed' + (' at step ' + step if step else '') + '; sensitive command output was suppressed.') from None
 
 
 class Cloud:
     def call(self, method, path, body=None):
         if not path.startswith(('projects/' + PROJECT + '/locations/' + REGION + '/', NAME)):
             raise Stop('Unexpected cloud resource.')
-        token = command(['gcloud', 'auth', 'print-access-token'], timeout=30)
+        token = command(['gcloud', 'auth', 'print-access-token'], timeout=30, step='cloud_token')
         req = urllib.request.Request('https://run.googleapis.com/v2/' + path,
             data=json.dumps(body).encode() if body is not None else None,
             headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}, method=method)
@@ -239,26 +240,28 @@ def build(sha, root):
     if (folder / 'Dockerfile').read_text() != (f'FROM {PARENT}\nCOPY providers.py /app/server/providers.py\n'
                                                f'COPY {PROMPT_FILE} {PROMPT_PATH}\n'):
         raise Stop('Repair Dockerfile differs from the pinned delivery contract.')
-    command(['gcloud','auth','configure-docker',f'{REGION}-docker.pkg.dev','--quiet'])
-    command(['docker','pull',PARENT])
+    command(['gcloud','auth','configure-docker',f'{REGION}-docker.pkg.dev','--quiet'], step='registry_login')
+    command(['docker','pull',PARENT], step='pull_live_image')
     probe = "import hashlib;print(hashlib.sha256(open('/app/server/providers.py','rb').read()).hexdigest())"
-    if command(['docker','run','--rm','--network','none','--entrypoint','python',PARENT,'-c',probe]) != PARENT_PROVIDER_SHA:
+    if command(['docker','run','--rm','--network','none','--entrypoint','python',PARENT,'-c',probe], step='check_live_file') != PARENT_PROVIDER_SHA:
         raise Stop('Parent provider checksum mismatch.')
     tag = f'{REGION}-docker.pkg.dev/{PROJECT}/wcp/app:ci-{sha}'
-    command(['docker','build','--pull','-t',tag,str(folder)])
+    command(['docker','build','--pull','-t',tag,str(folder)], step='build_image')
     digest = hashlib.sha256(provider.read_bytes()).hexdigest()
-    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',probe]) != digest:
+    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',probe], step='check_built_file') != digest:
         raise Stop('Built provider checksum mismatch.')
     prompt_probe = f"import hashlib;print(hashlib.sha256(open('{PROMPT_PATH}','rb').read()).hexdigest())"
-    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',prompt_probe]) != hashlib.sha256(prompt_file.read_bytes()).hexdigest():
+    if command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',prompt_probe], step='check_photo_instructions') != hashlib.sha256(prompt_file.read_bytes()).hexdigest():
         raise Stop('Built photo instruction checksum mismatch.')
     command(['docker','run','--rm','--network','none','--entrypoint','python',tag,'-c',
-             "compile(open('/app/server/providers.py').read(), 'providers.py', 'exec')"])
-    # The patched file must import inside the unchanged live app (no missing names).
-    command(['docker','run','--rm','--network','none','-e','APP_SECRET=' + 'x' * 40,'--entrypoint','python',tag,'-c',
-             'import server.providers'])
-    command(['docker','push',tag])
-    result = command(['docker','inspect','--format','{{json .RepoDigests}}',tag])
+             "compile(open('/app/server/providers.py').read(), 'providers.py', 'exec')"], step='compile_file')
+    # The patched file must import inside the unchanged live app. Report only the error class name.
+    import_probe = ("import sys\ntry:\n import server.providers\nexcept Exception as e:\n print('IMPORT_' + type(e).__name__)\nelse:\n print('ok')")
+    imported = command(['docker','run','--rm','--network','none','-e','APP_SECRET=' + 'x' * 40,'--entrypoint','python',tag,'-c',import_probe], step='import_file')
+    if imported != 'ok':
+        raise Stop('The patched file does not load inside the live app (' + re.sub(r'[^A-Za-z_]', '', imported)[:60] + ').')
+    command(['docker','push',tag], step='push_image')
+    result = command(['docker','inspect','--format','{{json .RepoDigests}}',tag], step='read_image_digest')
     digests = json.loads(result)
     if len(digests) != 1:
         raise Stop('Could not resolve the pushed immutable image.')
