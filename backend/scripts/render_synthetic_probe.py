@@ -28,7 +28,7 @@ PHOTO_HTTP_VERSION = 'photo-note-v5'
 WOUND_HTTP_VERSION = 'wound-http-v6'
 QUALITATIVE_HTTP_VERSION = 'photo-words-v7'
 COMPARISON_VERSION = 'photo-cost-v8'
-REPORT_COMPARISON_VERSION = 'report-haiku-v9'
+REPORT_COMPARISON_VERSION = 'report-haiku-v10'
 HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION, COMPARISON_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
@@ -37,7 +37,7 @@ MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031
            WOUND_HTTP_VERSION: 'd21a0ad3-5dbd-5e06-bc29-676b7e13b045',
            QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997',
            COMPARISON_VERSION: '2755c513-29b4-5f9c-b1d1-070793e7041a',
-           REPORT_COMPARISON_VERSION: '9c1f2a47-3d8e-5b6a-9e21-4f7c0d5a8b93'}
+           REPORT_COMPARISON_VERSION: 'b7e3d915-6c42-5f08-8a1d-2e9f4c7b0a36'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')

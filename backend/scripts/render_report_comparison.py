@@ -45,20 +45,27 @@ async def one(case_id, template, text, model, actor):
                                                      encounter_id='fictional-compare-%d-%s' % (case_id, model.split('/')[0]))
         return {'ok': bool(result.get('text', '').strip()), 'qa': (result.get('qa') or {}).get('passed') is True,
                 'text': result.get('text', ''), 'ms': int((time.monotonic() - started) * 1000)}
-    except Exception:
-        return {'ok': False, 'qa': False, 'text': '', 'ms': int((time.monotonic() - started) * 1000)}
+    except Exception as exc:
+        from render_synthetic_probe import error_code
+        return {'ok': False, 'qa': False, 'text': '', 'ms': int((time.monotonic() - started) * 1000),
+                'code': error_code(exc)}
 
 
 def compare(actor):
     from server import providers
     original = providers.settings.model_documentation
+    original_simple = getattr(providers.settings, 'model_documentation_simple', '')
     if CANDIDATE not in providers.MODEL_PRICES or CURRENT not in providers.MODEL_PRICES:
         print('AMILYA_REPORT_COMPARE status=BLOCKED', flush=True)
         return False
 
     async def run_model(model):
         providers.settings.model_documentation = model
-        return await asyncio.gather(*(one(i, template, text, model, actor) for i, (template, text) in enumerate(CASES, 1)))
+        # The comparison controls the writer itself; disable the automatic nursing-note route.
+        if hasattr(providers.settings, 'model_documentation_simple'):
+            providers.settings.model_documentation_simple = ''
+        # One report at a time: parallel requests can exceed a small provider key's remaining limit.
+        return [await one(i, template, text, model, actor) for i, (template, text) in enumerate(CASES, 1)]
 
     try:
         # Models run one after another so the setting is never shared mid-request.
@@ -66,14 +73,16 @@ def compare(actor):
         candidate = asyncio.run(run_model(CANDIDATE))
     finally:
         providers.settings.model_documentation = original
+        if hasattr(providers.settings, 'model_documentation_simple'):
+            providers.settings.model_documentation_simple = original_simple
     rng = random.SystemRandom()
     for case_id, (first, second) in enumerate(zip(current, candidate), 1):
         pair = [('current', first), ('haiku', second)]
         rng.shuffle(pair)
         for variant, (name, result) in zip('AB', pair):
             encoded = base64.b64encode(result['text'][:6000].encode('utf-8')).decode('ascii')
-            print('AMILYA_REPORT_COMPARE case=%d variant=%s status=%s qa=%s latency_ms=%d text_b64=%s' % (
+            print('AMILYA_REPORT_COMPARE case=%d variant=%s status=%s qa=%s code=%s latency_ms=%d text_b64=%s' % (
                 case_id, variant, 'PASS' if result['ok'] else 'FAIL', 'PASS' if result['qa'] else 'FAIL',
-                min(result['ms'], 999999999), encoded), flush=True)
+                result.get('code', 'NONE'), min(result['ms'], 999999999), encoded), flush=True)
         print('AMILYA_REPORT_COMPARE_KEY case=%d A=%s B=%s' % (case_id, pair[0][0], pair[1][0]), flush=True)
     return all(r['ok'] for r in current + candidate)

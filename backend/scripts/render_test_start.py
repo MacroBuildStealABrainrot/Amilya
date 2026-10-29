@@ -85,7 +85,7 @@ def main():
         # A separate process, fixed inputs and a durable once-only claim. Never
         # activate provider execution in this public HTTP application's settings.
         try:
-            long_run = env.get('AMILYA_RENDER_SYNTHETIC_PROBE') == 'report-haiku-v9'
+            long_run = env.get('AMILYA_RENDER_SYNTHETIC_PROBE') == 'report-haiku-v10'
             probe = subprocess.run([sys.executable, str(root / 'scripts/render_synthetic_probe.py')],
                                    cwd=root, env=env, capture_output=True, timeout=540 if long_run else 240)
             for line in probe.stdout.decode('utf-8', errors='replace').splitlines():
@@ -93,7 +93,7 @@ def main():
                     print(line, flush=True)
                 elif re.fullmatch(r'AMILYA_PHOTO_COMPARE profile=(?:high|medium) image=(?:shapes|wound) status=(?:PASS|FAIL) fields=[0-4] cost_micros=(?:UNKNOWN|\d{1,9}) latency_ms=(?:UNKNOWN|\d{1,9}) input_tokens=(?:UNKNOWN|\d{1,9}) output_tokens=(?:UNKNOWN|\d{1,9}) cached_tokens=(?:UNKNOWN|\d{1,9})', line):
                     print(line, flush=True)
-                elif re.fullmatch(r'AMILYA_REPORT_COMPARE case=[1-4] variant=[AB] status=(?:PASS|FAIL) qa=(?:PASS|FAIL) latency_ms=\d{1,9} text_b64=[A-Za-z0-9+/=]{0,8200}', line) \
+                elif re.fullmatch(r'AMILYA_REPORT_COMPARE case=[1-4] variant=[AB] status=(?:PASS|FAIL) qa=(?:PASS|FAIL) code=[A-Z0-9_]{1,40} latency_ms=\d{1,9} text_b64=[A-Za-z0-9+/=]{0,8200}', line) \
                         or re.fullmatch(r'AMILYA_REPORT_COMPARE_KEY case=[1-4] A=(?:current|haiku) B=(?:current|haiku)', line) \
                         or line == 'AMILYA_REPORT_COMPARE status=BLOCKED':
                     # Fixed fictional visits only; generated text is synthetic training output.

@@ -36,7 +36,7 @@ def test_output_lines_pass_the_startup_filter(gateway, capsys, monkeypatch):
     assert comparison.compare(gateway.user)
     assert providers.settings.model_documentation == original
     lines = capsys.readouterr().out.splitlines()
-    report = re.compile(r'AMILYA_REPORT_COMPARE case=[1-4] variant=[AB] status=(?:PASS|FAIL) qa=(?:PASS|FAIL) latency_ms=\d{1,9} text_b64=[A-Za-z0-9+/=]{0,8200}')
+    report = re.compile(r'AMILYA_REPORT_COMPARE case=[1-4] variant=[AB] status=(?:PASS|FAIL) qa=(?:PASS|FAIL) code=[A-Z0-9_]{1,40} latency_ms=\d{1,9} text_b64=[A-Za-z0-9+/=]{0,8200}')
     key = re.compile(r'AMILYA_REPORT_COMPARE_KEY case=[1-4] A=(?:current|haiku) B=(?:current|haiku)')
     assert len(lines) == 12 and all(report.fullmatch(x) or key.fullmatch(x) for x in lines)
     keys = {int(m.group(1)): (m.group(2), m.group(3)) for m in
@@ -47,4 +47,4 @@ def test_output_lines_pass_the_startup_filter(gateway, capsys, monkeypatch):
             who = keys[int(m.group(1))][0 if m.group(2) == 'A' else 1]
             expected = comparison.CANDIDATE if who == 'haiku' else comparison.CURRENT
             assert base64.b64decode(m.group(3)).decode() == 'Report by ' + expected
-    assert "report-haiku-v9" in START and 'AMILYA_REPORT_COMPARE_KEY' in START
+    assert "report-haiku-v10" in START and 'AMILYA_REPORT_COMPARE_KEY' in START
