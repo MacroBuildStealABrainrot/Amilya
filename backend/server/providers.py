@@ -873,11 +873,20 @@ PHOTO_FALLBACK_CATEGORIES = frozenset({'provider_unavailable', 'provider_overloa
                                         'content_policy_violation', 'refusal'})
 
 
+def photo_backup_model():
+    """First approved configured model from a different developer than the photo model."""
+    primary = settings.model_vision.split('/')[0]
+    for name in ('model_challenger', 'model_review', 'model_documentation', 'model_frontier'):
+        candidate = getattr(settings, name, '')
+        if candidate and candidate in MODEL_PRICES and candidate.split('/')[0] != primary:
+            return candidate
+    return None
+
+
 def photo_fallback_allowed(error):
     """Only upstream refusals/outages get a second model; never quota, auth, limits or bad images."""
     headers = error.headers or {}
-    backup = getattr(settings, 'model_challenger', '')
-    if not backup or backup == settings.model_vision or backup.split('/')[0] == settings.model_vision.split('/')[0]:
+    if not photo_backup_model():
         return False
     if headers.get('X-WCP-Error') == 'INVALID_RESPONSE':
         return False
@@ -904,7 +913,7 @@ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
             except HTTPException as first:
                 if not photo_fallback_allowed(first):raise
                 # One automatic attempt with the approved model from a different developer.
-                backup = settings.model_challenger
+                backup = photo_backup_model()
                 diagnostics.event({'source':'server','stage':'photo_fallback','status':'pending',
                     'error_code':(first.headers or {}).get('X-WCP-Error'),'selected_model':backup})
                 try:
