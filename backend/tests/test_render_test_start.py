@@ -72,7 +72,9 @@ def test_private_probe_cannot_enable_public_ai_or_print_child_secrets(monkeypatc
         if 'alembic' in args:
             return SimpleNamespace(returncode=0)
         return SimpleNamespace(returncode=1,
-            stdout=b'private-key-or-provider-body\nAMILYA_SYNTHETIC_PROBE stage=photo status=FAIL code=HTTP_502\n')
+            stdout=b'private-key-or-provider-body\nAMILYA_SYNTHETIC_PROBE stage=photo status=FAIL code=HTTP_502\n'
+                b'AMILYA_PHOTO_COMPARE profile=high image=wound status=PASS fields=3 cost_micros=1000 latency_ms=50 input_tokens=1000 output_tokens=200 cached_tokens=0\n'
+                b'AMILYA_PHOTO_COMPARE profile=patient_name image=wound status=PASS fields=3 cost_micros=SECRET\n')
     class Started(Exception):
         pass
     def execute(path, args, env):
@@ -87,4 +89,6 @@ def test_private_probe_cannot_enable_public_ai_or_print_child_secrets(monkeypatc
     assert len(calls) == 2
     assert calls[1][1]['timeout'] == 240
     assert calls[1][1]['env']['PROVIDER_EXECUTION_ENABLED'] == 'false'
-    assert capsys.readouterr().out == 'AMILYA_SYNTHETIC_PROBE stage=photo status=FAIL code=HTTP_502\n'
+    assert capsys.readouterr().out == ('AMILYA_SYNTHETIC_PROBE stage=photo status=FAIL code=HTTP_502\n'
+        'AMILYA_PHOTO_COMPARE profile=high image=wound status=PASS fields=3 cost_micros=1000 latency_ms=50 input_tokens=1000 output_tokens=200 cached_tokens=0\n')
+

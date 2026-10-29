@@ -27,13 +27,15 @@ AUDIO_HTTP_VERSION = 'audio-http-v4'
 PHOTO_HTTP_VERSION = 'photo-note-v5'
 WOUND_HTTP_VERSION = 'wound-http-v6'
 QUALITATIVE_HTTP_VERSION = 'photo-words-v7'
-HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION)
+COMPARISON_VERSION = 'photo-cost-v8'
+HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION, COMPARISON_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
            AUDIO_HTTP_VERSION: '6b3a9bb9-5e66-5637-a578-cf6d5447a58e',
            PHOTO_HTTP_VERSION: 'd34dd3d6-1af0-5b13-b4c2-0698a85c9446',
            WOUND_HTTP_VERSION: 'd21a0ad3-5dbd-5e06-bc29-676b7e13b045',
-           QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997'}
+           QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997',
+           COMPARISON_VERSION: '2755c513-29b4-5f9c-b1d1-070793e7041a'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -266,6 +268,8 @@ def main():
             now = time.time()
             if now >= APPROVAL_END:
                 raise ConfigurationError('TEST_WINDOW_CLOSED')
+            if version == COMPARISON_VERSION and now + 300 >= APPROVAL_END:
+                raise ConfigurationError('TEST_WINDOW_TOO_SHORT')
             check_key(env, APPROVAL_END, now)
         if not claim_once(env):
             print('AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED', flush=True)
@@ -290,6 +294,12 @@ def main():
             from server.db import Base, engine, SessionLocal
             from server.identity import User, Workspace
             Base.metadata.create_all(engine)
+            if version == COMPARISON_VERSION:
+                from render_photo_comparison import compare
+                try:
+                    return 0 if compare() else 1
+                finally:
+                    engine.dispose()
             if version in HTTP_VERSIONS:
                 try:
                     return 0 if check_http_workflows(audio=version == AUDIO_HTTP_VERSION,
@@ -323,3 +333,4 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
