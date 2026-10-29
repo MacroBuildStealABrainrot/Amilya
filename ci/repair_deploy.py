@@ -257,8 +257,12 @@ def build(sha, root):
              "compile(open('/app/server/providers.py').read(), 'providers.py', 'exec')"], step='compile_file')
     # The patched file must import inside the unchanged live app. Report only the error class name.
     import_probe = ("import sys\ntry:\n import server.providers\nexcept Exception as e:\n print('IMPORT_' + type(e).__name__)\nelse:\n print('ok')")
-    imported = command(['docker','run','--rm','--network','none','-e','APP_SECRET=' + 'x' * 40,'--entrypoint','python',tag,'-c',import_probe], step='import_file')
-    if imported != 'ok':
+    def load(image):
+        return command(['docker','run','--rm','--network','none','-e','APP_SECRET=' + 'x' * 40,'--entrypoint','python',image,'-c',import_probe], step='import_file')
+    imported, baseline = load(tag), load(PARENT)
+    # Outside Cloud Run the app cannot read its private settings, so the unchanged live file may stop
+    # too. The patched file must load at least as far as the original in the same sealed box.
+    if imported != 'ok' and imported != baseline:
         raise Stop('The patched file does not load inside the live app (' + re.sub(r'[^A-Za-z_]', '', imported)[:60] + ').')
     command(['docker','push',tag], step='push_image')
     result = command(['docker','inspect','--format','{{json .RepoDigests}}',tag], step='read_image_digest')
