@@ -48,3 +48,28 @@ Local checks passed before incorporating the concurrent HTTP 429 test correction
 Preserve that correction: HTTP 429 can use the existing bounded same-model retry,
 so it is excluded from the single-request assertion. Existing rate-limit tests
 cover this behavior; no retry behavior is changed.
+
+## First deployment and benchmark expiry correction
+
+Renewal commit `4519bf14ad77a66fabd7a615e672455c4b23badd` passed CI
+`40800932679`: 996 backend tests passed / 1 skipped, Android build/unit/lint/flag
+checks passed, deployment safety passed; Google Cloud auth/CLI/deploy stayed
+skipped. Automatic Render deploy `dep-dbha7mvavr4c739jr20g` became live at
+01:40:35 UTC on October 29, with owner READY at 01:40:19 UTC. Public config
+confirmed photo/audio enabled, synthetic-only expiry 1793841600, clinical data
+off and the same overall $1 cap. No new APK or production traffic change.
+
+`photo-cost-v8` was selected only after those checks. Deploy
+`dep-dbha8aom7kps73eb6g0g` logged the benchmark BLOCKED at 01:41:41 UTC and owner
+READY at 01:41:45 UTC, becoming live at 01:42:03 UTC. The benchmark checked key
+metadata against the maximum hard date (20:50) rather than the actual activated
+deadline (20:20). The key correctly expires between those two times. The check
+therefore stopped before claiming the benchmark or making paid image calls;
+normal owner activation already used the correct earlier deadline and succeeded.
+
+Correct benchmark preflight to validate and use the explicit activated deadline
+within the unchanged hard boundary. Apply the same earlier deadline before each
+comparison upload. Regression tests cover the earlier legitimate deadline,
+invalid/expired dates, and expiry before a still-future hard boundary. No budget
+guard or privacy check is relaxed; no claim is reset. Leave the v8 opt-in in
+place so only the successfully checked corrected source can run it once.

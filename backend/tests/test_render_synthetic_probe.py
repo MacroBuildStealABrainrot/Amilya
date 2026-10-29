@@ -64,6 +64,39 @@ def test_cost_comparison_needs_five_minutes_before_original_deadline(monkeypatch
     assert capsys.readouterr().out=='AMILYA_SYNTHETIC_PROBE status=BLOCKED\n'
 
 
+def test_comparison_key_check_uses_the_earlier_activated_deadline(monkeypatch,capsys):
+    import render_owner_activation
+    deadline=render_owner_activation.APPROVAL_END-1800
+    now=deadline-3600
+    monkeypatch.setattr(probe.os,'environ',environment() | {
+        'AMILYA_RENDER_SYNTHETIC_PROBE':probe.COMPARISON_VERSION,
+        'AMILYA_RENDER_OWNER_TEST_UNTIL':str(deadline)})
+    monkeypatch.setattr(probe,'time',SimpleNamespace(time=lambda:now))
+    checks=[]
+    def check_key(env,requested,clock):
+        assert requested==deadline and clock==now
+        checks.append(True)
+    monkeypatch.setattr(render_owner_activation,'check_key',check_key)
+    monkeypatch.setattr(probe,'claim_once',lambda env:False)
+    assert probe.main()==0
+    assert checks==[True]
+    assert capsys.readouterr().out=='AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED\n'
+
+
+@pytest.mark.parametrize('deadline',['not-a-time','0','9999999999'])
+def test_invalid_activated_deadline_stops_before_claim_and_key_check(monkeypatch,capsys,deadline):
+    import render_owner_activation
+    monkeypatch.setattr(probe.os,'environ',environment() | {
+        'AMILYA_RENDER_SYNTHETIC_PROBE':probe.COMPARISON_VERSION,
+        'AMILYA_RENDER_OWNER_TEST_UNTIL':deadline})
+    def forbidden(*args):
+        pytest.fail('Invalid deadline reached key or durable claim')
+    monkeypatch.setattr(render_owner_activation,'check_key',forbidden)
+    monkeypatch.setattr(probe,'claim_once',forbidden)
+    assert probe.main()==1
+    assert capsys.readouterr().out=='AMILYA_SYNTHETIC_PROBE status=BLOCKED\n'
+
+
 @pytest.mark.parametrize('version', probe.HTTP_VERSIONS)
 def test_each_http_probe_has_a_separate_once_only_claim(monkeypatch, capsys, version):
     from types import SimpleNamespace

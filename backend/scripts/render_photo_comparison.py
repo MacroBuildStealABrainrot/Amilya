@@ -1,6 +1,7 @@
 """Fixed non-patient comparison; never changes the public app's reasoning setting."""
 from contextlib import contextmanager
 import math
+import os
 import secrets
 import time
 from uuid import uuid4
@@ -104,6 +105,9 @@ def compare():
     from server.billing_models import UsageOperation
     from render_owner_activation import APPROVAL_END
     from render_synthetic_probe import synthetic_image, synthetic_wound
+    deadline = int(os.environ.get('AMILYA_RENDER_OWNER_TEST_UNTIL', str(APPROVAL_END)))
+    if not 0 < deadline <= APPROVAL_END:
+        raise ValueError('Invalid activated test deadline')
     password = secrets.token_urlsafe(24)
     outcomes = []
     with TestClient(app, base_url='http://localhost') as client:
@@ -134,7 +138,7 @@ def compare():
             with reasoning_profile(profile):
                 for image in ('shapes', 'wound'):
                     # Do not start a request near the existing hard approval boundary.
-                    if time.time() + 90 >= APPROVAL_END:
+                    if time.time() + 90 >= deadline:
                         raise ValueError('Test window too short')
                     started = client.post('/api/v1/quick/start', headers=headers,
                         json={'mode':'photo','request_id':str(uuid4())})

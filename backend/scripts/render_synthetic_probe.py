@@ -266,11 +266,12 @@ def main():
         if version in HTTP_VERSIONS:
             from render_owner_activation import APPROVAL_END, check_key
             now = time.time()
-            if now >= APPROVAL_END:
+            deadline = int(env.get('AMILYA_RENDER_OWNER_TEST_UNTIL', str(APPROVAL_END)))
+            if not now < deadline <= APPROVAL_END:
                 raise ConfigurationError('TEST_WINDOW_CLOSED')
-            if version == COMPARISON_VERSION and now + 300 >= APPROVAL_END:
+            if version == COMPARISON_VERSION and now + 300 >= deadline:
                 raise ConfigurationError('TEST_WINDOW_TOO_SHORT')
-            check_key(env, APPROVAL_END, now)
+            check_key(env, deadline, now)
         if not claim_once(env):
             print('AMILYA_SYNTHETIC_PROBE status=ALREADY_CLAIMED', flush=True)
             return 0

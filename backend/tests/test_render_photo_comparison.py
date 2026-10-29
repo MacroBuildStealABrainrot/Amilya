@@ -118,13 +118,17 @@ def test_comparison_uses_normal_http_and_identical_images_without_public_change(
     assert all('Synthetic observation' not in line and 'granulation' not in line for line in lines)
 
 
-def test_comparison_cannot_start_after_original_deadline(client,gateway,monkeypatch):
+@pytest.mark.parametrize('activated', [False, True])
+def test_comparison_cannot_start_after_original_deadline(client,gateway,monkeypatch,activated):
     from server import db as database,providers
     import render_owner_activation
     _,factory=client
     monkeypatch.setattr(database,'SessionLocal',factory)
     monkeypatch.setattr(providers,'SessionLocal',factory)
-    monkeypatch.setattr(render_owner_activation,'APPROVAL_END',int(time.time())-1)
+    monkeypatch.delenv('AMILYA_RENDER_OWNER_TEST_UNTIL',raising=False)
+    monkeypatch.setattr(render_owner_activation,'APPROVAL_END',int(time.time())+(3600 if activated else -1))
+    if activated:
+        monkeypatch.setenv('AMILYA_RENDER_OWNER_TEST_UNTIL',str(int(time.time())-1))
     with pytest.raises(ValueError,match='Test window too short'):
         comparison.compare()
     assert not gateway.http.calls
