@@ -20,7 +20,7 @@ NOW = activation.APPROVAL_END - 3600
 
 
 def metadata():
-    return dict(limit=1, limit_remaining=.977, usage=.023, limit_reset=None,
+    return dict(limit=.64, limit_remaining=.617, usage=.023, limit_reset=None,
         is_management_key=False,
         expires_at=datetime.fromtimestamp(activation.APPROVAL_END + 120, timezone.utc).isoformat())
 
@@ -29,7 +29,7 @@ def test_only_approved_cap_and_expiry_qualify():
     assert activation.key_is_bounded(metadata(), NOW + 600, NOW)
 
 
-@pytest.mark.parametrize('change', [dict(limit=None), dict(limit=2), dict(limit=True),
+@pytest.mark.parametrize('change', [dict(limit=None), dict(limit=1), dict(limit=2), dict(limit=True),
     dict(limit_remaining=0), dict(limit_remaining=2), dict(usage=float('nan')),
     dict(limit_reset='daily'), dict(is_management_key=True), dict(expires_at=None),
     dict(expires_at='2027-01-01T00:00:00Z'), dict(expires_at='2026-10-28T00:00:00Z')])
@@ -108,7 +108,7 @@ def test_allowance_is_not_a_paid_subscription_and_expires(client, monkeypatch):
         assert exc.value.status_code == 402
 
 
-@pytest.mark.parametrize('mode', ['valid', 'other_user', 'two_users', 'inactive', 'admin', 'no_membership', 'no_acceptance'])
+@pytest.mark.parametrize('mode', ['valid', 'valid_week', 'other_user', 'two_users', 'inactive', 'admin', 'no_membership', 'no_acceptance'])
 def test_activation_reads_eligibility_without_writing_or_bypassing_consent(monkeypatch, mode):
     import psycopg
     actor_id = str(uuid4())
@@ -132,14 +132,15 @@ def test_activation_reads_eligibility_without_writing_or_bypassing_consent(monke
         def __exit__(self, *args): pass
         def cursor(self): return Cursor()
     monkeypatch.setattr(psycopg, 'connect', lambda *a, **kw: Connection())
-    monkeypatch.setattr(activation, 'time', SimpleNamespace(time=lambda: NOW))
+    clock = activation.APPROVAL_END - 6 * 86400 if mode == 'valid_week' else NOW
+    monkeypatch.setattr(activation, 'time', SimpleNamespace(time=lambda: clock))
     checks = []
     monkeypatch.setattr(activation, 'check_key', lambda *args: checks.append(True))
     env = dict(AMILYA_RENDER_OWNER_TEST_UNTIL=str(NOW+600),
         PUBLIC_BASE_URL='https://amilya-repair-test.onrender.com', OPENROUTER_API_KEY='synthetic-key',
         DATABASE_URL='postgresql+psycopg://synthetic:unused@dpg-fixture-a/amilya_repair_test_db',
         RENDER_OWNER_ENROLLMENT_EMAIL='synthetic@example.test')
-    if mode == 'valid':
+    if mode in {'valid', 'valid_week'}:
         result = activation.prepare(env)
         assert result['RENDER_OWNER_TEST_USER_ID'] == actor_id
         assert result['PROVIDER_EXECUTION_ENABLED'] == 'true'
@@ -149,3 +150,4 @@ def test_activation_reads_eligibility_without_writing_or_bypassing_consent(monke
         with pytest.raises(ValueError): activation.prepare(env)
         assert not checks
     assert all(query.startswith('SELECT ') for query in queries)
+

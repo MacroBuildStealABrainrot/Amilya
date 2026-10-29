@@ -76,6 +76,11 @@ def safe_metrics(rows, latency):
             'latency_ms': min(milliseconds, 9999999), **counters}
 
 
+def primary_only(rows):
+    """A backup model cannot be credited as a comparison of the same model."""
+    return bool(rows) and all(row.model == MODEL and row.provider == 'openrouter' for row in rows)
+
+
 def metric_line(profile, image, passed, fields, metrics):
     if profile not in PROFILES or image not in ('shapes', 'wound'):
         raise ValueError('Unknown fixed comparison input')
@@ -150,6 +155,8 @@ def compare():
                         rows = db.scalars(select(UsageOperation).where(UsageOperation.encounter_id==encounter,
                             UsageOperation.task=='image')).all()
                         metrics = safe_metrics(rows, latency)
+                        passed = passed and primary_only(rows)
                     print(metric_line(profile,image,passed,fields,metrics),flush=True)
                     outcomes.append(passed)
     return len(outcomes)==4 and all(outcomes)
+

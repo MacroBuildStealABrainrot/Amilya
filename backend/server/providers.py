@@ -383,7 +383,7 @@ def provider_error_response(response, raw):
     # Closed, non-clinical details only: which upstream company answered, whether a
     # safety filter flagged the input, and a numeric native code. Never message text.
     upstream = metadata.get('provider_name') if isinstance(metadata, dict) else None
-    if not (isinstance(upstream, str) and re.fullmatch(r'[A-Za-z0-9 ._-]{1,40}', upstream)):
+    if upstream not in ('Azure', 'OpenAI', 'Anthropic', 'Google', 'DeepInfra', 'Together', 'Groq', 'Cloudflare'):
         upstream = 'unknown'
     flagged = isinstance(metadata, dict) and (bool(metadata.get('flagged_input')) or bool(metadata.get('reasons')))
     native = info.get('code') if isinstance(info, dict) else None
@@ -1306,6 +1306,7 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+
 
 
 

@@ -8,7 +8,7 @@ import math
 import time
 from uuid import UUID
 
-APPROVAL_END = 1793235000  # 2026-10-29 00:50 UTC, before the approved key expires
+APPROVAL_END = 1793843400  # Renewed by Hazim: 2026-11-05 01:50 UTC (Nov 4, 20:50 Toronto)
 
 
 def key_is_bounded(data, deadline, now):
@@ -21,7 +21,7 @@ def key_is_bounded(data, deadline, now):
         expires = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
         if expires.tzinfo is None:
             return False
-        return (0 < cap <= 1 and 0 < remaining <= cap and 0 <= usage < cap
+        return (0 < cap <= .64 and 0 < remaining <= cap and 0 <= usage < cap
                 and data.get('limit_reset', 'missing') is None
                 and data.get('is_management_key') is False
                 and now < deadline <= expires.timestamp() <= APPROVAL_END + 180)
@@ -47,7 +47,7 @@ def prepare(env):
         deadline = int(env.get('AMILYA_RENDER_OWNER_TEST_UNTIL', '0'))
     except ValueError:
         raise ValueError('DEADLINE_INVALID') from None
-    if not now < deadline <= min(now + 86400, APPROVAL_END):
+    if not now < deadline <= min(now + 7 * 86400, APPROVAL_END):
         raise ValueError('TEST_WINDOW_CLOSED')
     if (env.get('PUBLIC_BASE_URL') != 'https://amilya-repair-test.onrender.com'
             or not env.get('OPENROUTER_API_KEY')
@@ -82,3 +82,4 @@ def prepare(env):
     check_key(env, deadline, now)
     return {'RENDER_OWNER_TEST_USER_ID': user_id, 'RENDER_OWNER_TEST_UNTIL': str(deadline),
             'PROVIDER_EXECUTION_ENABLED': 'true', 'OPENROUTER_REQUIRE_ZDR': 'true'}
+

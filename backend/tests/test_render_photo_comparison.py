@@ -74,6 +74,13 @@ def test_output_contains_only_fixed_labels_and_numeric_metrics():
         comparison.metric_line('patient_name','wound',True,3,{})
 
 
+def test_backup_model_cannot_be_reported_as_a_same_model_comparison():
+    row=SimpleNamespace(model=comparison.MODEL,provider='openrouter')
+    assert comparison.primary_only([row])
+    assert not comparison.primary_only([])
+    assert not comparison.primary_only([row,SimpleNamespace(model='anthropic/claude-sonnet-5.5',provider='openrouter')])
+
+
 def test_gate_rejects_missing_coverage_percentages_and_confirmation():
     body={'facts':[{'name':n,'value':{'text':'Synthetic observation'},'confirmation_state':'unconfirmed'}
                    for n in comparison.CORE_FIELDS],

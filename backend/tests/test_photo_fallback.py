@@ -68,3 +68,13 @@ def test_refusal_log_has_safe_category_only(gateway, caplog):
     assert 'category=content_policy_violation' in text
     assert 'upstream=Azure' in text and 'safety_flagged=True' in text
     assert 'SYNTHETIC_PRIVATE' not in text
+
+
+def test_invented_upstream_label_cannot_enter_the_refusal_log(gateway,caplog):
+    gateway.config.model_challenger='anthropic/claude-sonnet-5.5'
+    gateway.http.responses=[refused('refusal',provider='SYNTHETIC_PERSON_MEDICATION'),wound_result()]
+    with caplog.at_level(logging.WARNING,logger='wcp.providers'):
+        assess(gateway)
+    assert 'upstream=unknown' in caplog.text
+    assert 'SYNTHETIC_PERSON_MEDICATION' not in caplog.text
+
