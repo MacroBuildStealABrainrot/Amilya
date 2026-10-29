@@ -802,6 +802,18 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
 
 
+SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff'})
+
+
+def simple_note_template(content):
+    """Everyday nursing note types; doctor notes, letters and custom layouts keep the main model."""
+    try:
+        data = json.loads(content) if isinstance(content, str) else {}
+    except (ValueError, TypeError):
+        return False
+    return isinstance(data, dict) and data.get('template') in SIMPLE_NOTE_TEMPLATES and not data.get('untrusted_layout_preferences')
+
+
 def configured_route(task, content):
     """Keep automatic effort selection while honoring the owner's model settings."""
     route = select_route(TASK_FAMILIES.get(task, task), content)
@@ -809,6 +821,8 @@ def configured_route(task, content):
     if task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
     elif route['effort_level'] == 'high': selected = settings.model_frontier
+    elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
+        selected = settings.model_documentation_simple
     elif family in {'draft', 'qa'}: selected = settings.model_documentation
     elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
     else: selected = settings.model_extraction
