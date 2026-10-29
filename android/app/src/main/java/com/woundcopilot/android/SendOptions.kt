@@ -73,11 +73,8 @@ fun SendOptions(
                     }, Modifier.fillMaxWidth(), secondary = true)
                     if (onComputer != null) WcpButton("Computer", { open = false; onComputer() }, Modifier.fillMaxWidth(), secondary = true)
                     WcpButton("Copy", { copySensitive(context, text, title); open = false; onMessage("$title copied.") }, Modifier.fillMaxWidth(), secondary = true)
-                    Text(
-                        (if (onComputer != null) "Computer gives a one-time link and code to open on any computer. " else "") +
-                            "Send only through channels your workplace allows for patient information.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (onComputer != null) Text("Computer gives a one-time link and code to open on any computer.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
