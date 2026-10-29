@@ -46,3 +46,18 @@ Local checks: 59 passed, including synthetic HTTP, effort isolation/restoration,
 identical inputs, real-cost-versus-unknown handling, redacted numeric-only logs,
 missing field coverage, percentage rejection, and expiry blocking. All provider
 responses in these unit/integration tests are intercepted. CI results follow.
+
+## CI and current permission state
+
+Commit `d1591dcda9adec7cf0f39b0c94dd887e2aceab19` passed full CI
+`40796674025`: 984 backend tests passed / 1 skipped, Android build/unit/lint/flag
+checks passed, and deployment safety tests passed. Google Cloud authentication,
+CLI setup and deployment stayed skipped. No live comparison has been executed.
+The opt-in has not been set and no comparison claim has been reset or consumed.
+
+After the original approval expired, the public config returned HTTP 200 with
+photo/audio and synthetic testing disabled, clinical data still disallowed,
+expiry 1793235000 and the original US$1 cap unchanged. This is the intended time
+pause, not evidence that a photo request failed. Renewed time authorization and
+a valid bounded key are required before further paid tests. Prepared outputs
+are not measured savings and must not be presented as such.
