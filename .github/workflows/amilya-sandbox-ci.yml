@@ -188,6 +188,17 @@ jobs:
           AMILYA_SMOKE_EMAIL: ${{ secrets.AMILYA_SMOKE_EMAIL }}
           AMILYA_SMOKE_PASSWORD: ${{ secrets.AMILYA_SMOKE_PASSWORD }}
         run: python3 ci/repair_connection.py
+      - name: Show the identity claims GitHub presents (names only, no token)
+        if: steps.connection.outputs.ready == 'true'
+        run: |
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=amilya-claim-check" | python3 -c 'import sys,json;print(json.load(sys.stdin)["value"])')
+          python3 - "$token" <<'PY'
+          import base64, json, sys
+          part = sys.argv[1].split('.')[1]
+          claims = json.loads(base64.urlsafe_b64decode(part + '=' * (-len(part) % 4)))
+          for key in ('sub', 'ref', 'workflow_ref', 'repository_id', 'repository_owner_id', 'event_name', 'environment'):
+              print(f'{key}={claims.get(key)}')
+          PY
       - name: Authenticate with short-lived Google credentials
         id: cloud_auth
         if: steps.connection.outputs.ready == 'true'
