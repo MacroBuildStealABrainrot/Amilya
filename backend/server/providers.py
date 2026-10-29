@@ -67,6 +67,7 @@ MODEL_PRICES = {
     'openai/gpt-6.1-sol': ('2', '10', '.2'),
     'openai/gpt-6-astra': ('10', '50', '.4'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
+    'anthropic/claude-haiku-5.5': ('.10', '.50', '.01'),
 }
 # Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
 # Exact aliases only: never accept arbitrary date suffixes or another model.
@@ -75,6 +76,8 @@ MODEL_SNAPSHOTS = {
     'openai/gpt-6.1-sol': frozenset({'openai/gpt-6.1-sol-20260929'}),
     'openai/gpt-6-astra': frozenset({'openai/gpt-6-astra-20260903'}),
     'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
+    # Snapshot slug per the public genai-prices review of OpenRouter (released 2026-10-07).
+    'anthropic/claude-haiku-5.5': frozenset({'anthropic/claude-haiku-5.5-20261007'}),
 }
 FINISH_REASONS = frozenset({'stop', 'length', 'content_filter', 'tool_calls', 'function_call'})
 OPENROUTER_SPEECH_MODEL = 'openai/whisper-large-v3'
