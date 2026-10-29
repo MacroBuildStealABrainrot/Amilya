@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     speech_provider: str = 'auto'
     model_extraction: str = 'openai/gpt-6-luna'
     model_documentation: str = 'openai/gpt-6.1-sol'
-    # Owner-approved (2026-10-28): cheaper model for everyday nursing notes; checks stay on model_documentation.
+    # Owner-approved (2026-10-28): Haiku writes standard notes; accuracy checks stay on model_documentation.
     model_documentation_simple: str = 'anthropic/claude-haiku-5.5'
     model_vision: str = 'anthropic/claude-sonnet-5.5'  # owner's choice for wound photos (2026-10-28)
     model_review: str = 'openai/gpt-6.1-sol'

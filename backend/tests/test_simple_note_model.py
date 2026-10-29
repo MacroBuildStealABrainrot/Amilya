@@ -10,8 +10,10 @@ from test_providers import gateway
     ('nursing', 'quick_draft', 'anthropic/claude-haiku-5.5'),
     ('sbar', 'quick_draft', 'anthropic/claude-haiku-5.5'),
     ('handoff', 'quick_refine', 'anthropic/claude-haiku-5.5'),
-    ('soap', 'quick_draft', 'openai/gpt-6.1-sol'),
-    ('referral_letter', 'quick_draft', 'openai/gpt-6.1-sol'),
+    ('soap', 'quick_draft', 'anthropic/claude-haiku-5.5'),
+    ('referral_letter', 'quick_draft', 'anthropic/claude-haiku-5.5'),
+    ('physician_update', 'quick_draft', 'anthropic/claude-haiku-5.5'),
+    ('custom', 'quick_draft', 'openai/gpt-6.1-sol'),
     ('nursing', 'quick_qa', 'openai/gpt-6.1-sol'),
 ])
 def test_note_type_picks_the_model(gateway, template, task, expected):

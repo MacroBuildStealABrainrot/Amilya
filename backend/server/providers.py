@@ -802,11 +802,12 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
 
 
-SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff'})
+# Owner's blind review (2026-10-28) preferred Haiku's notes; custom layouts stay on the main model until tested.
+SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
 
 
 def simple_note_template(content):
-    """Everyday nursing note types; doctor notes, letters and custom layouts keep the main model."""
+    """Standard note types; custom layouts keep the main model."""
     try:
         data = json.loads(content) if isinstance(content, str) else {}
     except (ValueError, TypeError):
