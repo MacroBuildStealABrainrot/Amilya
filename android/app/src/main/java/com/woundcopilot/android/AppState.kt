@@ -668,9 +668,11 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun unreadableAttachments():String?{
         val sources=case?.items("evidence").orEmpty().filter{it.str("kind") in listOf("photo","document","result")}
         val photos=sources.filter{it.str("kind")=="photo"};val files=sources.filter{it.str("kind")!="photo"}
+        // A photo keeps no text of its own: its assessment is saved as findings that point back to it.
+        val assessed=case?.items("facts").orEmpty().map{it.str("source_ref")}.toSet()
         val missing=photos.mapIndexedNotNull{i,it->
             val retake=it.optJSONObject("metadata")?.optJSONObject("photo_quality")?.optBoolean("retake_required")==true
-            if(retake||it.str("text").isBlank())"Photo ${i+1} (it could not be assessed)" else null
+            if(retake||(it.str("text").isBlank()&&it.str("id") !in assessed))"Photo ${i+1} (it could not be assessed)" else null
         }+files.mapIndexedNotNull{i,it->
             val name=it.optJSONObject("metadata")?.str("filename").orEmpty().ifBlank{"File ${i+1}"}
             if(it.str("text").isBlank())"$name (it could not be read)" else null
