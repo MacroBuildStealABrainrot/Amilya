@@ -247,7 +247,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 if(e is CancellationException)throw e
                 if(taskPurpose in listOf("audio","report"))runCatching{recordingStage("FAILED_RETRYABLE")}
                 val hasRecording=activeRecording()?.let{it.isFile && it.length()>128}==true
-                val readable=clinicianError(e,taskPurpose)+if(hasRecording && e !is ReportRetryException && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
+                val readable=clinicianError(e,taskPurpose)+if(hasRecording && e !is ReportRetryException && e !is java.net.SocketException && e !is java.net.UnknownHostException && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
                 if(e is ApiException && e.status==401){persistEditor();api.clear();clearClinical();demo=false;user=null;legalRequired=false;screen="login"}
                 if(e is ApiException && e.status==428)legalRequired=true
                 consecutiveFailures++

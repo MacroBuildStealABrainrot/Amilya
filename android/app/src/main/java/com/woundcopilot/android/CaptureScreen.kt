@@ -165,7 +165,7 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
             TextButton(onClick={launchExternal(ExternalKind.AUDIO_PICKER)},modifier=Modifier.align(Alignment.CenterHorizontally),enabled=idle&&!rec.recording){Text("Import audio") }
             // Only recordings other than the one in use are listed, e.g. one left over after an interruption.
             val others = pending.filter { it.filePath != path && !(belongsHere && rec.recording && it.filePath == rec.filePath) }
-            if (others.isNotEmpty()) {
+            if (others.isNotEmpty() && !s.loading) {
                 SectionLabel("Earlier recordings for this visit")
                 others.forEachIndexed { index, saved ->
                     val storedFile = File(saved.filePath!!)

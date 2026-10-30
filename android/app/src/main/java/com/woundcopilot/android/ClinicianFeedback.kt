@@ -25,11 +25,11 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
     val task=when(purpose){"audio"->"Recording processing";"report"->"Report generation";"photo"->"Photo assessment";"consultant"->"Ask Consultant";else->"Request"}
     var code=api?.category
     val reason=when {
-        error is java.net.SocketTimeoutException -> {code="NETWORK_TIMEOUT";"The connection timed out. Check request status before retrying; the server may still be processing."}
-        error is java.net.UnknownHostException -> {code="DNS_LOOKUP_FAILED";"The server address could not be resolved. Check your internet connection or DNS settings."}
+        error is java.net.SocketTimeoutException -> "The connection was too slow. Your work is saved on this phone. Tap Try again."
+        error is java.net.UnknownHostException -> "No internet connection. Your work is saved on this phone. Tap Try again when you're back online."
         error is javax.net.ssl.SSLException -> {code="TLS_CONNECTION_FAILED";"The secure connection could not be verified. Check the device date and contact support if it persists."}
-        error is java.net.ConnectException -> {code="CONNECTION_REFUSED";"A connection to the server could not be established. Check connectivity and server availability."}
-        error is java.net.SocketException -> {code="CONNECTION_INTERRUPTED";"The connection was interrupted. Check request status before retrying."}
+        error is java.net.ConnectException -> "Couldn't reach the server. Your work is saved on this phone. Tap Try again."
+        error is java.net.SocketException -> "The connection dropped while sending. Your work is saved on this phone. Tap Try again."
         code=="PROVIDER_QUOTA" -> "The AI provider has insufficient funds or a spending limit. An administrator must check the provider account."
         code=="PROVIDER_AUTH" -> "The provider rejected the API key or account access. An administrator must check provider credentials and permissions."
         code=="MODEL_UNAVAILABLE" -> "No provider endpoint matches the configured model and privacy settings. An administrator must check routing."
