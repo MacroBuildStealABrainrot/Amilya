@@ -164,9 +164,9 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
             custom_template=custom_template, user=user, encounter_id=encounter_id)
     else:
         result = documentation.source_report(context, payload.template, clinical.fact_phrase)
-    # Owner's choice: at most two short review alerts under a report.
+    # Owner's choice: at most one short safety check under a report.
     if isinstance(result.get('ui_alerts'), list):
-        result['ui_alerts'] = result['ui_alerts'][:2]
+        result['ui_alerts'] = result['ui_alerts'][:1]
     db.refresh(encounter)
     if encounter.revision != expected:
         raise HTTPException(409, 'The source changed during drafting; generate again against the current information')
