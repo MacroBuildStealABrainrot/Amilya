@@ -35,7 +35,8 @@ internal fun parseVoiceCommand(input:String,wakePhrase:String="Hey WoundCoPilot"
         "finish report" to "finish","done" to "done","i'm done" to "done","finish" to "done",
         "read the report" to "read","read report" to "read","read it" to "read","repeat" to "read","stop reading" to "stop_reading","pause reading" to "stop_reading",
         "add another photo" to "photo","add photo" to "photo","take photo" to "photo","take a photo" to "photo","photo" to "photo",
-        "start recording" to "record","record" to "record","record a visit" to "record","stop" to "stop_reading",
+        "start recording" to "record","record" to "record","record a visit" to "record",
+        "record with consent" to "record_consent","consent given record" to "record_consent","consent given start recording" to "record_consent","start recording with consent" to "record_consent","stop" to "stop_reading",
         "ask consultant" to "consult","ask the consultant" to "consult","consultant" to "consult",
         "go home" to "home","home" to "home",
         "tell me the recording duration" to "duration","undo" to "undo","redo" to "redo")
@@ -46,6 +47,16 @@ internal fun parseVoiceCommand(input:String,wakePhrase:String="Hey WoundCoPilot"
     Regex("(?i)^remove (.+)$").matchEntire(original)?.let{return VoiceCommand("replace",it.groupValues[1],"")}
     Regex("(?i)^add wording (.+)$").matchEntire(original)?.let{return VoiceCommand("append",it.groupValues[1])}
     return null
+}
+
+/** Spoken answer to "Do you have consent to record?": true for yes, false for no, null if unclear. */
+internal fun consentAnswer(input:String):Boolean?{
+    val text=input.lowercase(Locale.ROOT).trim().trimEnd('.','!','?').removeSuffix(" please")
+    return when(text){
+        "yes","yeah","yep","yes i do","i do","yes record","yes start","consent given","i have consent","yes consent given","correct"->true
+        "no","nope","no i don't","not yet","cancel","no consent"->false
+        else->null
+    }
 }
 
 internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
@@ -76,8 +87,22 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
         recognizer?.cancel();listening=false
         if(ttsReady)text.chunked(TextToSpeech.getMaxSpeechInputLength().coerceAtMost(3500)).forEachIndexed{index,part->speech?.speak(part,if(index==0)TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,null,"report-$index")}
     }
+    // Recording a visit started by voice can also be consented by voice: no tap needed.
+    var awaitingConsent by remember{mutableStateOf(false)}
+    var listenRequest by remember{mutableIntStateOf(0)}
+    fun beginVisitRecording(){
+        s.voiceCommandsOpen=false
+        if(s.case==null)s.startQuick("document")else s.chooseQuickMode("document")
+        s.recordingConsent=true;s.autoStartRecording=true;s.screen="record"
+    }
     fun handle(raw:String){
         status="Heard: $raw";tones.startTone(ToneGenerator.TONE_PROP_ACK,70)
+        if(awaitingConsent){
+            awaitingConsent=false
+            if(consentAnswer(raw)==true){if(!s.loading&&!s.locked)beginVisitRecording()}
+            else status="Recording not started."
+            return
+        }
         val command=parseVoiceCommand(raw,wake,activelyListening=true)
         if(command==null){status="Command unclear. Please repeat it.";tones.startTone(ToneGenerator.TONE_PROP_NACK,90);return}
         if(s.loading||s.locked)return
@@ -96,7 +121,12 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
             "send"->{if(s.editor.isBlank())status="Open a report first." else {s.voiceCommandsOpen=false;s.screen="editor";s.sendRequested=true}}
             "done"->{s.voiceCommandsOpen=false;if(s.screen=="consultant")s.finishConsultant()else s.doneQuick()}
             "home"->{s.voiceCommandsOpen=false;if(s.quickMode!=null)s.doneQuick()else s.screen="home"}
-            "record"->{s.voiceCommandsOpen=false;if(s.case==null)s.startQuick("document")else s.chooseQuickMode("document");s.autoStartRecording=true;s.screen="record"}
+            "record"->if(s.recordingConsent)beginVisitRecording()else{
+                awaitingConsent=true;status="Do you have consent to record? Say yes or no."
+                if(ttsReady)speech?.speak(status,TextToSpeech.QUEUE_FLUSH,null,"consent-question")
+                listenRequest++
+            }
+            "record_consent"->beginVisitRecording()
             "export"->{s.voiceCommandsOpen=false;s.runTask("Preparing report export"){
                 require(s.editor.isNotBlank()){"Create or open a report first."}
                 val uri=ExportTools.createPdf(context,s.editor,documentTypeTitle(s.editorTemplate))
@@ -137,13 +167,15 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
         if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)listen()
         else if(s.externalCapture.begin(ExternalKind.PERMISSION,"audio","command"))try{permission.launch(Manifest.permission.RECORD_AUDIO)}catch(_:Exception){s.externalCapture.clear()}
     }
+    // After asking about consent out loud, listen for the spoken answer.
+    LaunchedEffect(listenRequest){if(listenRequest>0){kotlinx.coroutines.delay(if(ttsReady)2800L else 300L);listen()}}
     // One tap: the voice button opens this and listening starts straight away.
     LaunchedEffect(Unit){if(supported)listenWithPermission()}
     AlertDialog(onDismissRequest={recognizer?.cancel();s.voiceCommandsOpen=false},title={Text(if(listening)"Listening…" else "Voice")},text={Column(verticalArrangement=androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)){
         if(!supported)Text("Voice commands aren't available on this phone. You can still use the buttons.")
         if(status.isNotBlank())Text(status,style=MaterialTheme.typography.titleSmall)
         Text("Say one of these:",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Record · Take photo · Ask consultant\nSOAP note · Nursing note · SBAR · Handoff\nRead the report · Save · Send · Done · Go home\nReplace … with … · Undo",style=MaterialTheme.typography.bodyMedium)
+        Text("Record (then say yes for consent) · Take photo · Ask consultant\nSOAP note · Nursing note · SBAR · Handoff\nRead the report · Save · Send · Done · Go home\nReplace … with … · Undo",style=MaterialTheme.typography.bodyMedium)
         TextButton({try{context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}catch(_:Exception){status="Open Accessibility in Android Settings to turn on Voice Access."}}){Text("No hands at all? Set up Voice Access")}
     }},confirmButton={TextButton({listenWithPermission()},enabled=supported&&!listening&&!s.loading&&!recordingState.recording){Text(if(listening)"Listening…"else "Listen again")}},dismissButton={TextButton({recognizer?.cancel();s.voiceCommandsOpen=false}){Text("Close")}})
     candidate?.let{(before,after)->AlertDialog(onDismissRequest={candidate=null},title={Text("Confirm wording change")},text={Column{Text("Before\n$before");Text("After\n$after")}},confirmButton={TextButton({if(s.editor==before){previous=before;redo=null;s.edit(after)}else status="Report changed. Please repeat the edit.";candidate=null}){Text("Apply change")}},dismissButton={TextButton({candidate=null}){Text("Cancel")}})}

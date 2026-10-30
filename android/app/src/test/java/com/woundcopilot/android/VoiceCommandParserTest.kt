@@ -27,3 +27,13 @@ class VoiceCommandParserTest {
         assertNull(parseVoiceCommand("Send"))
     }
 }
+
+class VoiceConsentTest {
+    @Test fun spokenConsentIsUnderstood() {
+        org.junit.Assert.assertEquals(true, consentAnswer("Yes."))
+        org.junit.Assert.assertEquals(true, consentAnswer("consent given"))
+        org.junit.Assert.assertEquals(false, consentAnswer("no"))
+        org.junit.Assert.assertNull(consentAnswer("yes but wait for the daughter"))
+        org.junit.Assert.assertEquals("record_consent", parseVoiceCommand("record with consent", activelyListening = true)?.action)
+    }
+}
