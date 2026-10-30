@@ -758,7 +758,14 @@ class AppState(application:Application):AndroidViewModel(application) {
             mutation(intent,"/encounters/$encounterId/quick-report",payload)
         }
         val response=if(demo)sampleDocument(case!!,format)
-            else try{request()}catch(e:ApiException){
+            else try{
+                // One quiet automatic retry: a report the checker rejected or a busy service often succeeds the second time.
+                try{request()}catch(first:ApiException){
+                    if(!ai || first.status !in listOf(502,503,504))throw first
+                    taskLabel="Still writing the report"
+                    request()
+                }
+            }catch(e:ApiException){
                 if(!ai || e.status !in listOf(429,502,503,504))throw e
                 // The failed AI draft is never shown, and the raw transcript is not offered as a report.
                 // Sources stay saved; Try again redoes only the report (set by taskRecovery above).
