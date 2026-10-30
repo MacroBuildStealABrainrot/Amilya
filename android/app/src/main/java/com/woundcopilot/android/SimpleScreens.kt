@@ -74,11 +74,14 @@ fun StartScreen(
     onSavedWork: (() -> Unit)? = null,
     onSendAll: (() -> Unit)? = null,
     recovery: @Composable () -> Unit = {},
+    header: @Composable () -> Unit = {},
 ) {
     val c = MaterialTheme.colorScheme
     Page {
         // Three icon-only actions. Unfinished recordings stay reachable in Saved work > Recovery.
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(16.dp))
+        header()
+        Spacer(Modifier.height(20.dp))
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             StartAction("Document", "Speak or write. Get your report.", "record", c.primary, !busy, onDocument)
             StartAction("Photo Assessment", "Add a photo. See visible findings.", "photo", c.primary, !busy, onPhoto)

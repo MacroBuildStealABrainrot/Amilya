@@ -184,6 +184,8 @@ fun AccountScreen(state: AppState) {
             Switch(checked = state.dark, onCheckedChange = null)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        com.woundcopilot.android.NoteHelperSettings(state)
+        if (!state.demo) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Workspace credits", action = if (state.demo) null else "Refresh", onAction = { state.runTask { state.refreshHome() } })
         EvidenceRail {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

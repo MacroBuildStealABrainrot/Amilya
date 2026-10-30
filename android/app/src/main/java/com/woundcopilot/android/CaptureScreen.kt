@@ -133,7 +133,7 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
     val duration = if (belongsHere && (rec.recording || rec.filePath == path)) rec.elapsedSeconds else pending.firstOrNull { it.filePath == path }?.elapsedSeconds ?: 0
     val idle = !s.loading && !importBusy
     Page {
-        InstrumentTitle(when { purpose == "message" -> "Voice message"; purpose == "correction" -> "Fix by Voice"; audio -> "Record a visit"; photo -> "Photo assessment"; else -> "Add a document" })
+        InstrumentTitle(when { purpose == "message" -> "Voice message"; purpose == "correction" -> s.pendingMissed?.let { "Add: ${it.str("label")}" } ?: "Fix by Voice"; audio -> "Record a visit"; photo -> "Photo assessment"; else -> "Add a document" })
         if (audio) {
             if (rec.recording && !belongsHere) {
                 Text("Another encounter has an active recording. Stop it before starting or playing audio here. The saved file stays with its original encounter.", color = MaterialTheme.colorScheme.error)

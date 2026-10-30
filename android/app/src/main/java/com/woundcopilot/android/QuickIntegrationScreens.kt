@@ -15,7 +15,9 @@ import java.time.format.DateTimeFormatter
 
 @Composable fun HomeScreen(s:AppState){
     LaunchedEffect(s.user?.str("id")){s.refreshRecordingJobs()}
+    FirstModeChooser(s)
     StartScreen(
+        header={ModeBar(s)},
         recovery={
             val pending = s.recordingJobs.filter { it.str("resume_from") != "REPORT_READY" }
             val reports = s.recordingJobs.filter { it.str("resume_from") == "REPORT_READY" }

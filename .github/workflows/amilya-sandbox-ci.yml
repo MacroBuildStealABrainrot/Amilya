@@ -136,22 +136,22 @@ jobs:
         if: always()
         run: |
           mkdir -p ci-out/install
-          cp android/app/build/outputs/apk/pilot/*.apk ci-out/install/Amilya-Test-15.apk || true
+          cp android/app/build/outputs/apk/pilot/*.apk ci-out/install/Amilya-Test-16.apk || true
           cp android/app/build/outputs/apk/repair/*.apk ci-out/install/Amilya-Server-Test.apk || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: INSTALL-THIS-Amilya-Test-15
-          path: ci-out/install/Amilya-Test-15.apk
+          name: INSTALL-THIS-Amilya-Test-16
+          path: ci-out/install/Amilya-Test-16.apk
           retention-days: 30
       - name: Attach the Test app to a private pre-release
         if: success() && startsWith(github.ref, 'refs/heads/combined/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="test15-build-${GITHUB_RUN_NUMBER}"
-          gh release create "$tag" ci-out/install/Amilya-Test-15.apk ci-out/install/Amilya-Server-Test.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --prerelease --title "Amilya Test 15 (build ${GITHUB_RUN_NUMBER})" --notes "Pilot test app only. Synthetic data only."
+          tag="test16-build-${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" ci-out/install/Amilya-Test-16.apk ci-out/install/Amilya-Server-Test.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "Amilya Test 16 (build ${GITHUB_RUN_NUMBER})" --notes "Pilot test app only. Synthetic data only. Adds Nurse/NP/Doctor mode, anything-missed reminders and office computer inbox (these need the matching server update)."
       - uses: actions/upload-artifact@v4
         if: always()
         with:

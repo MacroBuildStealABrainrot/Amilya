@@ -31,6 +31,8 @@ fun SendOptions(
     onComputer: (() -> Unit)?,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
+    computerLabel: String = "Computer",
+    computerDetail: String = "Computer gives a one-time link and code to open on any computer.",
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -71,9 +73,9 @@ fun SendOptions(
                             }
                         }
                     }, Modifier.fillMaxWidth(), secondary = true)
-                    if (onComputer != null) WcpButton("Computer", { open = false; onComputer() }, Modifier.fillMaxWidth(), secondary = true)
+                    if (onComputer != null) WcpButton(computerLabel, { open = false; onComputer() }, Modifier.fillMaxWidth(), secondary = true)
                     WcpButton("Copy", { copySensitive(context, text, title); open = false; onMessage("$title copied.") }, Modifier.fillMaxWidth(), secondary = true)
-                    if (onComputer != null) Text("Computer gives a one-time link and code to open on any computer.",
+                    if (onComputer != null) Text(computerDetail,
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }

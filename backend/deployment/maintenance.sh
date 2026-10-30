@@ -1,6 +1,6 @@
 #!/bin/bash
 # Expire only transient provider replay/session/rate records, in bounded batches.
-# No patients, encounters, facts, documents, audits, payment or credit records are deleted.
+# Also expired office-computer inbox copies. No patients, encounters, facts, documents, audits, payment or credit records are deleted.
 set -euo pipefail
 docker exec -i --user postgres wcp-postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U wcp_owner -d woundcopilot <<'SQL'
 BEGIN;
@@ -10,6 +10,8 @@ WITH expired AS (SELECT id FROM provider_results WHERE created_at < now() - inte
 DELETE FROM provider_results WHERE id IN (SELECT id FROM expired);
 WITH expired AS (SELECT id FROM login_sessions WHERE expires_at < now() ORDER BY expires_at LIMIT 1000)
 DELETE FROM login_sessions WHERE id IN (SELECT id FROM expired);
+WITH expired AS (SELECT id FROM desk_notes WHERE expires_at < now() ORDER BY expires_at LIMIT 1000)
+DELETE FROM desk_notes WHERE id IN (SELECT id FROM expired);
 WITH expired AS (SELECT key FROM rate_windows WHERE expires < extract(epoch FROM now())::bigint ORDER BY expires LIMIT 1000)
 DELETE FROM rate_windows WHERE key IN (SELECT key FROM expired);
 COMMIT;

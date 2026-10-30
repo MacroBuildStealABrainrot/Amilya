@@ -76,6 +76,7 @@ fun QuickReportScreen(s: AppState) {
             }
             if (document != null) Text("Version ${document.optInt("version")}", style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant)
         }
+        if (!signed) MissedReminders(s)
         if (signed) {
             Surface(color = c.surface, shape = RoundedCornerShape(22.dp)) {
                 SelectionContainer { Text(s.editor, Modifier.fillMaxWidth().padding(22.dp), style = MaterialTheme.typography.bodyLarge) }
@@ -121,7 +122,9 @@ fun QuickReportScreen(s: AppState) {
         )
         // One Send button: text message, another app, computer (one-time link) or copy.
         SendOptions(s.editor, documentTypeTitle(s.editorTemplate), s.loading,
-            onComputer = { s.sendToComputer() }, onMessage = { s.notice = it })
+            onComputer = { if (s.officeComputerOn) s.sendToDesk() else s.sendToComputer() }, onMessage = { s.notice = it },
+            computerLabel = if (s.officeComputerOn) "Office computer" else "Computer",
+            computerDetail = if (s.officeComputerOn) "Office computer puts it on your signed-in computer, ready to copy." else "Computer gives a one-time link and code to open on any computer.")
 
         DetailDisclosure("More options") {
             TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text("Add photo, recording or files") }
@@ -179,7 +182,8 @@ fun QuickReportScreen(s: AppState) {
 fun VoiceCorrectionScreen(s: AppState) {
     val c = MaterialTheme.colorScheme
     Page {
-        InstrumentTitle("Fix by Voice")
+        InstrumentTitle(s.pendingMissed?.let { "Add: ${it.str("label")}" } ?: "Fix by Voice")
+        s.pendingMissed?.let { Text("This is added to the note as you said it. Check the wording, then tap Apply.", style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant) }
         OutlinedTextField(
             value = s.voiceInstruction,
             onValueChange = { s.voiceInstruction = it },

@@ -123,9 +123,10 @@ def public_config():
 
 app.include_router(identity.router,prefix='/api/v1')
 app.include_router(diagnostics.router,prefix='/api/v1')
-from server import clinical,billing,contact,audio_verification,quick_workflows,transfers,work_privacy,audio_parts,photo_collection
-for module in (clinical,billing,contact,providers,audio_verification,quick_workflows,transfers,work_privacy,audio_parts,photo_collection):app.include_router(module.router,prefix='/api/v1')
+from server import clinical,billing,contact,audio_verification,quick_workflows,transfers,work_privacy,audio_parts,photo_collection,desk
+for module in (clinical,billing,contact,providers,audio_verification,quick_workflows,transfers,work_privacy,audio_parts,photo_collection,desk):app.include_router(module.router,prefix='/api/v1')
 app.include_router(transfers.receiver_router)
+app.include_router(desk.page_router)
 
 FRONTEND=Path(settings.frontend_path).resolve()
 if (FRONTEND/'assets').exists():app.mount('/assets',StaticFiles(directory=FRONTEND/'assets'),name='assets')

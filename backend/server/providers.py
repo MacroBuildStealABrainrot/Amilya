@@ -163,6 +163,10 @@ def prompt(task: str) -> str:
     rules = (PROMPTS / '06_documentation_rules.system.md').read_text(encoding='utf-8') if task in DOCUMENT_TASKS | {'draft', 'qa', 'quick_qa'} else ''
     from .documentation_layers import instructions
     layers=instructions() if rules else ''
+    if task=='consult':
+        # Nurse / NP / Doctor mode sets the consultant's perspective; never the documentation layers.
+        from .documentation_layers import consultant_voice
+        role=role+'\n\n'+consultant_voice()
     return boundary + '\n\n' + rules + '\n\n' + layers + '\n\n' + role
 
 
@@ -1073,12 +1077,17 @@ async def refine_quick_documentation(context, text, instruction, template, *, cu
 async def wound_consultant(context, message, history, *, user, encounter_id):
     scope_guard(message)
     if not 1 <= len(message.strip()) <= 2000:
-        raise HTTPException(422, 'Ask a brief wound-care question')
+        raise HTTPException(422, 'Ask a brief clinical question')
     if re.search(r'(?i)\b(poem|song|recipe|vacation|holiday|stock price|investment|video game|javascript|python code|sports score)\b', message):
-        raise HTTPException(422, 'Wound Consultant supports wound-care questions and clinical documentation')
-    return await routed('consult', json.dumps({**context, 'untrusted_question': message,
-        'untrusted_conversation_history': history}, ensure_ascii=False, default=str),
-        user=user, encounter_id=encounter_id)
+        raise HTTPException(422, 'Ask Consultant supports clinical questions and clinical documentation')
+    from .documentation_layers import select as select_voice, selection
+    voice_token = select_voice(user, 'nursing')
+    try:
+        return await routed('consult', json.dumps({**context, 'untrusted_question': message,
+            'untrusted_conversation_history': history}, ensure_ascii=False, default=str),
+            user=user, encounter_id=encounter_id)
+    finally:
+        selection.reset(voice_token)
 
 
 def review_triggers(facts):

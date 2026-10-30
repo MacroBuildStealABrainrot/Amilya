@@ -59,7 +59,7 @@ def test_fresh_postgres_migrates_without_cloud_run_role():
             assert result.returncode==0, 'Fresh managed-role database migration failed'
             target=parsed.set(drivername='postgresql',database=name).render_as_string(hide_password=False)
             with psycopg.connect(target) as check:
-                assert check.execute('SELECT version_num FROM alembic_version').fetchone()==('0008',)
+                assert check.execute('SELECT version_num FROM alembic_version').fetchone()==('0009',)
                 assert check.execute("SELECT has_function_privilege(current_user,'public.wcp_erase_work(text,text,text,text)','EXECUTE')").fetchone()==(True,)
         finally:
             conn.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(name)))

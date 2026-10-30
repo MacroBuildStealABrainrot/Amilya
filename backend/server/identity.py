@@ -17,6 +17,7 @@ router=APIRouter(prefix='/auth',tags=['identity'])
 ph=PasswordHasher(time_cost=3,memory_cost=65536,parallelism=2)
 DUMMY_PASSWORD_HASH=ph.hash('unavailable-account-placeholder')
 COOKIE='wcp_session'
+CLINICIAN_MODES={'nurse','np','doctor'}
 
 
 class Workspace(Base):
@@ -279,9 +280,15 @@ def logout(request:Request,response:Response,db:Session=Depends(get_db),user:Use
 def update_profile(payload:ProfilePatch,user:User=Depends(current_user),db:Session=Depends(get_db)):
     if payload.display_name is not None:user.display_name=payload.display_name.strip()
     if payload.profile is not None:
-        allowed={'profession','care_setting','theme','review_mode','onboarding_complete','recovery_enabled'}
+        allowed={'profession','care_setting','theme','review_mode','onboarding_complete','recovery_enabled',
+                 'clinician_mode','missed_check','office_computer'}
         if set(payload.profile)-allowed:raise HTTPException(422,'Unknown profile setting.')
         if len(str(payload.profile))>4000:raise HTTPException(422,'Profile settings are too large.')
+        # Closed values only: the mode chooses application-owned writing rules, never free text.
+        if 'clinician_mode' in payload.profile and payload.profile['clinician_mode'] not in CLINICIAN_MODES:
+            raise HTTPException(422,'Choose Nurse, NP or Doctor.')
+        for flag in ('missed_check','office_computer'):
+            if flag in payload.profile and not isinstance(payload.profile[flag],bool):raise HTTPException(422,'This setting must be on or off.')
         user.profile={**user.profile,**payload.profile}
     from server.audit import write_audit
     write_audit(db,user,'profile.updated',user.id);db.commit();return user_out(user)

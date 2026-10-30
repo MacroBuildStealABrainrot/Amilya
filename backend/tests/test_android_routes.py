@@ -33,10 +33,10 @@ def normalize(path):
 def server_routes():
     import server.main  # noqa: F401  (registers every router exactly as production does)
     from server import (identity, diagnostics, clinical, billing, contact, providers, audio_verification,
-                        quick_workflows, transfers, work_privacy, audio_parts, photo_collection)
+                        quick_workflows, transfers, work_privacy, audio_parts, photo_collection, desk)
     routes = set()
     modules = (identity, diagnostics, clinical, billing, contact, providers, audio_verification,
-               quick_workflows, transfers, work_privacy, audio_parts, photo_collection)
+               quick_workflows, transfers, work_privacy, audio_parts, photo_collection, desk)
     for module in modules:
         for route in module.router.routes:
             for method in getattr(route, 'methods', None) or []:

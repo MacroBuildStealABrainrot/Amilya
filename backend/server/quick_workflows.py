@@ -212,9 +212,15 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
          'fact_count': len(context['case_facts']), 'source_count': len(context['untrusted_sources']),
          'consultation_turns': len(payload.consultation)})
     clinical.finish(db)
-    return {**documentation.visible_result(result), 'case_revision': expected, 'template': payload.template, 'custom_template': custom_template,
+    visible = documentation.visible_result(result)
+    from . import missed_check
+    from .documentation_layers import clinician_role
+    # Reminders only: shown beside the note, never written into it.
+    missing = (missed_check.missing_items(context, clinician_role(user), payload.template)
+               if visible['status'] == 'ready' and missed_check.enabled(user) else [])
+    return {**visible, 'case_revision': expected, 'template': payload.template, 'custom_template': custom_template,
             'fact_snapshot': context['case_facts'], 'source_ids': [source['id'] for source in context['untrusted_sources']],
-            'review_required': True, 'warnings': list(dict.fromkeys(warnings))}
+            'review_required': True, 'warnings': list(dict.fromkeys(warnings)), 'missing_items': missing}
 
 
 @router.post('/encounters/{encounter_id}/consult', dependencies=MUTATION)

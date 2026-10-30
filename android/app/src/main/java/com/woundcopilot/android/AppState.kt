@@ -170,6 +170,11 @@ class AppState(application:Application):AndroidViewModel(application) {
     var billing by mutableStateOf(JSONObject()); private set
     var audit by mutableStateOf<List<JSONObject>>(emptyList()); private set
     var documentAlerts by mutableStateOf<List<String>>(emptyList()); private set
+    /** "Anything missed?" topics for the current note. Reminders only; never written into the note by themselves. */
+    var missedItems by mutableStateOf<List<JSONObject>>(emptyList()); private set
+    /** The reminder being answered by voice right now, if any. */
+    var pendingMissed by mutableStateOf<JSONObject?>(null); private set
+    var modeChooserDismissed by mutableStateOf(false)
     var assessmentReview by mutableStateOf<JSONObject?>(null)
     var assessmentRevision by mutableIntStateOf(0); private set
     var assessmentEncounter by mutableStateOf(""); private set
@@ -577,7 +582,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         encounters=listOf(encounter)+encounters.filter{it.str("id")!=encounter.str("id")}
         patients=listOf(patient)+patients.filter{it.str("id")!=patient.str("id")}
         vault.remove(key)
-        if(editor.isBlank()){restoring=true;editorTemplate="nursing";restoring=false}
+        missedItems=emptyList();pendingMissed=null
+        if(editor.isBlank()){restoring=true;editorTemplate=ClinicianModes.defaultFormat(clinicianMode);restoring=false}
         screen=quickDestination()
     }
     var deleteWorkId by mutableStateOf<String?>(null)
@@ -769,19 +775,23 @@ class AppState(application:Application):AndroidViewModel(application) {
         vault.write("preferred-format-${user?.str("id")?:"sample"}",format)
         Performance.end("report_request");val persistStarted=Performance.now()
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
-        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)acknowledge(intent,payload);Performance.start("report_ui");screen="editor"
+        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);missedItems=if(missedCheckOn)response.items("missing_items")else emptyList();pendingMissed=null;recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)acknowledge(intent,payload);Performance.start("report_ui");screen="editor"
+        autoSendToDesk()
     }
     fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
     private fun reformatOrRetry(ai:Boolean,format:String)=runTask("Preparing your report"){draftQuick(ai,format)}
     fun reformatQuick(format:String)=runTask("Changing report format"){draftQuick(true,format)}
     fun applyVoiceCorrection():Unit=runTask("Applying your correction",purpose="report",retry={applyVoiceCorrection()}){
         require(voiceInstruction.isNotBlank()){"Enter the correction you want to make."}
-        val start=localRevision;val intent="refine-$revision";val payload=obj("text" to editor,"instruction" to voiceInstruction,"template" to editorTemplate)
+        val adding=pendingMissed
+        val instruction=adding?.let{"Clinician addition — ${it.str("label")}: "+voiceInstruction.trim()}?:voiceInstruction
+        val start=localRevision;val intent="refine-$revision";val payload=obj("text" to editor,"instruction" to instruction,"template" to editorTemplate)
         if(editorTemplate=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
         val response=if(demo)obj("text" to editor,"case_revision" to revision,"warnings" to JSONArray().put("Sample mode does not apply AI edits."))else mutation(intent,"/encounters/$encounterId/refine-report",payload)
         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed while the correction was being prepared. Your edits were preserved."}
         if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return@runTask}
-        snapshotDraft();editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;persistEditor();if(!demo)acknowledge(intent,payload);voiceCorrection=false;voiceInstruction="";warnings(response);screen="editor"
+        snapshotDraft();editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;persistEditor();if(!demo)acknowledge(intent,payload);voiceCorrection=false;voiceInstruction="";warnings(response)
+        if(adding!=null)missedItems=missedItems.filter{it.str("key")!=adding.str("key")};pendingMissed=null;screen="editor"
     }
     private fun acceptDocumentResult(result:JSONObject):Boolean {
         documentAlerts=result.items("ui_alerts").map{it.str("message")}.filter{it.isNotBlank()}
@@ -816,10 +826,75 @@ class AppState(application:Application):AndroidViewModel(application) {
         assessmentReview=result;assessmentRevision=sourceRevision;assessmentEncounter=visit
         if(!demo)acknowledge(intent,payload)
     }
-    fun cancelVoiceCorrection(){if(RecordingService.state.value.recording)return;voiceCorrection=false;voiceInstruction="";screen="editor";dismissError()}
+    fun cancelVoiceCorrection(){if(RecordingService.state.value.recording)return;voiceCorrection=false;voiceInstruction="";pendingMissed=null;screen="editor";dismissError()}
     fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();autoStartRecording=true;screen="record"}
     fun recordConsultantMessage(){if(loading)return;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
     fun cancelVoiceMessage(){if(RecordingService.state.value.recording)return;voiceMessage=false;notice=null;dismissError();screen="consultant"}
+    // ---------- Nurse / NP / Doctor mode ----------
+    private fun profile()=user?.optJSONObject("profile")
+    private fun modeKey()="clinician-mode-${user?.str("id")?:"sample"}"
+    /** "nurse", "np", "doctor", or blank when not chosen yet. */
+    val clinicianMode:String get(){
+        profile()?.str("clinician_mode")?.takeIf{ClinicianModes.isValid(it)}?.let{return it}
+        vault.read(modeKey())?.takeIf{ClinicianModes.isValid(it)}?.let{return it}
+        return ClinicianModes.fromProfession(profile()?.str("profession").orEmpty())
+    }
+    private suspend fun patchProfile(values:JSONObject){api.call("/auth/profile","PATCH",obj("profile" to values));refreshSession()}
+    fun setClinicianMode(mode:String)=runTask("Switching to ${ClinicianModes.title(mode)} mode"){
+        require(ClinicianModes.isValid(mode)){"Choose Nurse, NP or Doctor."}
+        if(!demo){
+            try{patchProfile(obj("clinician_mode" to mode))}
+            catch(e:ApiException){
+                if(e.status!=422)throw e
+                // An older server does not know the switch yet; it still picks the writing style from Profession.
+                patchProfile(obj("profession" to ClinicianModes.profession(mode)))
+            }
+        }
+        vault.write(modeKey(),mode)
+        val format=ClinicianModes.defaultFormat(mode)
+        vault.write("preferred-format-${user?.str("id")?:"sample"}",format)
+        if(editor.isBlank()){restoring=true;editorTemplate=format;restoring=false}
+        modeChooserDismissed=true
+        notice="${ClinicianModes.title(mode)} mode is on. New notes start as ${documentTypeTitle(format)}."
+    }
+
+    // ---------- "Anything missed?" ----------
+    val missedCheckOn:Boolean get()=profile()?.opt("missed_check")!=false
+    fun addMissed(item:JSONObject){if(loading)return;pendingMissed=item;fixByVoice()}
+    fun skipMissed(){missedItems=emptyList();pendingMissed=null}
+    fun setMissedCheck(on:Boolean)=runTask("Saving"){
+        require(!demo){"Available after signing in."}
+        try{patchProfile(obj("missed_check" to on))}catch(e:ApiException){if(e.status==422)throw IllegalArgumentException("Your Amilya server needs the update for this setting first.") else throw e}
+        if(!on)skipMissed()
+    }
+
+    // ---------- Office computer inbox ----------
+    val officeComputerOn:Boolean get()=profile()?.optBoolean("office_computer")==true
+    val deskAddress:String get()=BuildConfig.API_BASE_URL.removeSuffix("/").removeSuffix("/api/v1")+"/desk/"
+    fun setOfficeComputer(on:Boolean)=runTask("Saving"){
+        require(!demo){"Available after signing in."}
+        try{patchProfile(obj("office_computer" to on))}catch(e:ApiException){if(e.status==422)throw IllegalArgumentException(OfficeInbox.SERVER_UPDATE_NEEDED) else throw e}
+        notice=if(on)"Office computer is on. Open $deskAddress on your computer and sign in once." else "Office computer is off."
+    }
+    private fun deskPayload()=obj("encounter_id" to encounterId,"title" to OfficeInbox.title(editorTemplate),"text" to editor,"expires_at" to OfficeInbox.endOfToday())
+    /** Send > Office computer: the current wording replaces any copy of this visit already waiting there. */
+    fun sendToDesk()=runTask("Sending to your office computer"){
+        require(!demo){"Available after signing in. Use Copy for this sample."}
+        require(editor.isNotBlank()){"Create or write a report first."}
+        require(OfficeInbox.acceptsVisit(encounterId)){"This report can't go to the office computer yet. Use Copy instead."}
+        try{api.call("/desk/notes","POST",deskPayload())}catch(e:ApiException){if(e.status in listOf(404,405))throw IllegalArgumentException(OfficeInbox.SERVER_UPDATE_NEEDED) else throw e}
+        notice="Sent to your office computer. It's erased there after you copy it, or at the end of the day."
+    }
+    /** After a new report is ready. Quiet unless it fails; the note itself is never affected. */
+    private fun autoSendToDesk(){
+        if(demo || !officeComputerOn || editor.isBlank() || !OfficeInbox.acceptsVisit(encounterId))return
+        val payload=deskPayload()
+        viewModelScope.launch{
+            try{api.call("/desk/notes","POST",payload);notice=listOfNotNull(notice,"Also sent to your office computer.").joinToString("\n")}
+            catch(e:Exception){if(e is CancellationException)throw e;notice=listOfNotNull(notice,"Couldn't reach your office computer. Use Send > Office computer to try again.").joinToString("\n")}
+        }
+    }
+
     /** Send > Computer: saves the current wording first if needed, then makes a one-time link and code. */
     fun sendToComputer()=runTask("Preparing secure link"){
         require(!demo){"Secure links are available after signing in. Use Another app or Copy for this sample."}
@@ -861,7 +936,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
     }
     fun newDocument(){if(loading)return;snapshotDraft();documentAlerts=emptyList();restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();documentAlerts=emptyList();restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();documentAlerts=emptyList();missedItems=emptyList();pendingMissed=null;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {

@@ -53,6 +53,9 @@ def erase_work(db,row):
     if db.scalar(select(UsageOperation.id).where(UsageOperation.encounter_id==identifier,UsageOperation.status=='reserved').limit(1)):
         raise HTTPException(409,'This work is still processing. Wait for it to finish before deleting.')
     transfers=affected_transfers(db,row)
+    # A waiting office-computer copy of this visit goes with it.
+    from server.desk_models import DeskNote
+    db.execute(delete(DeskNote).where(DeskNote.encounter_id==identifier,DeskNote.created_by==row.created_by))
     if db.get_bind().dialect.name=='postgresql':
         db.execute(text("SELECT set_config('wcp.erasure_transfers',:ids,true)"),{'ids':','.join(transfers)})
         db.execute(text('SELECT public.wcp_erase_work(:id,:workspace,:actor,NULL)'),{'id':identifier,'workspace':row.workspace_id,'actor':row.created_by})
