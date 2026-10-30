@@ -129,10 +129,13 @@ private fun StartAction(title: String, detail: String, icon: String, accent: Col
             .clickable(interactionSource = interaction, indication = ripple(), enabled = enabled, role = Role.Button, onClick = onClick),
         accent = accent,
     ) {
-        // Icon only, centred; the title and description stay as the screen-reader label.
+        // Icon with a short label underneath, so a new user knows what each button does.
         Box(Modifier.fillMaxWidth().heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = "$title. $detail" },
             contentAlignment = Alignment.Center) {
-            InstrumentIcon(icon, Modifier.size(52.dp), accent)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                InstrumentIcon(icon, Modifier.size(48.dp), accent)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = c.onSurface)
+            }
         }
     }
 }

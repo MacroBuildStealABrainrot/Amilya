@@ -245,7 +245,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 if(e is CancellationException)throw e
                 if(taskPurpose in listOf("audio","report"))runCatching{recordingStage("FAILED_RETRYABLE")}
                 val hasRecording=activeRecording()?.let{it.isFile && it.length()>128}==true
-                val readable=clinicianError(e,taskPurpose)+if(hasRecording && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
+                val readable=clinicianError(e,taskPurpose)+if(hasRecording && e !is ReportRetryException && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
                 if(e is ApiException && e.status==401){persistEditor();api.clear();clearClinical();demo=false;user=null;legalRequired=false;screen="login"}
                 if(e is ApiException && e.status==428)legalRequired=true
                 consecutiveFailures++
@@ -389,7 +389,12 @@ class AppState(application:Application):AndroidViewModel(application) {
         case=api.call("/encounters/"+created.str("id")) as JSONObject
         vault.remove(creationKey);restoreDraft();screen="encounter"
     }
-    private fun warnings(result:JSONObject){val messages=result.optJSONArray("warnings");if(messages!=null&&messages.length()>0)notice=prettyValue(messages)}
+    private fun warnings(result:JSONObject){
+        // Standing reminders the clinician already knows (review before use) are not repeated after every step.
+        val messages=result.optJSONArray("warnings")?:return
+        val kept=(0 until messages.length()).map{messages.optString(it)}.filter{it.isNotBlank() && !routineReminder(it)}
+        if(kept.isNotEmpty())notice=kept.joinToString("\n")
+    }
     private fun canonical(value:Any?):String=when(value){
         is JSONObject->value.keys().asSequence().toList().sorted().joinToString(prefix="{",postfix="}"){JSONObject.quote(it)+":"+canonical(value.opt(it))}
         is JSONArray->(0 until value.length()).joinToString(prefix="[",postfix="]"){canonical(value.opt(it))}
@@ -752,13 +757,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         }
         val response=if(demo)sampleDocument(case!!,format)
             else try{request()}catch(e:ApiException){
-                if(!ai || e.status !in listOf(402,429,502,503,504))throw e
-                // The failed AI draft is never promoted. Reuse acknowledged original sources.
-                // A distinct stable identity prevents a failed AI replay from blocking local drafting.
-                val recovered=mutation("$intent-source-only","/encounters/$encounterId/quick-report",JSONObject(payload.toString()).put("use_ai",false))
-                recovered.put("ui_alerts",JSONArray().put(obj("field" to "review","message" to "AI generation or checking could not complete. This source-only draft has not passed an AI check. Review the original source before using it.")))
-                recovered.put("warnings",JSONArray().put("A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording."))
-                recovered
+                if(!ai || e.status !in listOf(429,502,503,504))throw e
+                // The failed AI draft is never shown, and the raw transcript is not offered as a report.
+                // Sources stay saved; Try again redoes only the report (set by taskRecovery above).
+                throw ReportRetryException(if(e.status==429)"Too many reports at once. Wait a moment, then tap Try again. Your recording and sources are saved."
+                    else "The report couldn't be finished this time. Your recording and sources are saved. Tap Try again.")
             }
         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed during generation. Your edits were preserved."}
         if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return}
@@ -814,8 +817,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!demo)acknowledge(intent,payload)
     }
     fun cancelVoiceCorrection(){if(RecordingService.state.value.recording)return;voiceCorrection=false;voiceInstruction="";screen="editor";dismissError()}
-    fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();screen="record"}
-    fun recordConsultantMessage(){if(loading)return;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();screen="record"}
+    fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();autoStartRecording=true;screen="record"}
+    fun recordConsultantMessage(){if(loading)return;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
     fun cancelVoiceMessage(){if(RecordingService.state.value.recording)return;voiceMessage=false;notice=null;dismissError();screen="consultant"}
     /** Send > Computer: saves the current wording first if needed, then makes a one-time link and code. */
     fun sendToComputer()=runTask("Preparing secure link"){

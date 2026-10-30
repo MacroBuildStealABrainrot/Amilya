@@ -43,7 +43,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
     val key = "capture-${s.user?.str("id")}-${s.encounterId}-$purpose"
     var path by rememberSaveable(key) { mutableStateOf(s.vault.read(key) ?: "") }
     var mime by rememberSaveable(key) { mutableStateOf(s.vault.read("$key-mime") ?: captureMimeFromExtension(path, kind)) }
-    var consent by rememberSaveable(key) { mutableStateOf(s.recordingConsent && purpose=="audio") }
+    // Consent is asked once per visit and then remembered for every recording in that visit.
+    var consent by rememberSaveable(key) { mutableStateOf(s.recordingConsent) }
     var consentPrompt by remember { mutableStateOf(false) }
     val importBusy=s.externalCapture.busy
     var recordingRequested by rememberSaveable(key) { mutableStateOf(false) }
@@ -95,9 +96,9 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
         }catch(_:Exception){s.externalCapture.clear();s.error="Microphone permission could not open."}
     }
     LaunchedEffect(s.autoStartRecording){
-        if(audio && purpose=="audio" && s.autoStartRecording){s.autoStartRecording=false;if(consent)beginWithPermission()else consentPrompt=true}
+        if(audio && s.autoStartRecording){s.autoStartRecording=false;if(consent)beginWithPermission()else consentPrompt=true}
     }
-    if(consentPrompt)AlertDialog(onDismissRequest={consentPrompt=false},title={Text("Record encounter")},text={Text("Confirm that you have consent to record and process this audio.")},confirmButton={TextButton({consent=true;s.recordingConsent=true;consentPrompt=false;beginWithPermission()}){Text("Confirm and record")}},dismissButton={TextButton({consentPrompt=false}){Text("Cancel")}})
+    if(consentPrompt)AlertDialog(onDismissRequest={consentPrompt=false},title={Text("Consent to record")},text={Text("Do you have consent to record? You will not be asked again during this visit.")},confirmButton={TextButton({consent=true;s.recordingConsent=true;consentPrompt=false;beginWithPermission()}){Text("Yes, record")}},dismissButton={TextButton({consentPrompt=false}){Text("Cancel")}})
 
     LaunchedEffect(ownerKey, audio) {
         if (audio && path.isNotBlank() && File(path).parentFile?.name == "recordings") {
@@ -116,6 +117,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
             try{
                 selectFile(completed, "audio/mp4")
                 if(!s.loading)s.rememberRecording(completed)
+                // A voice message or voice correction is turned into text as soon as recording stops.
+                if(purpose in listOf("message","correction") && consent && !s.loading && rec.error==null)s.upload(completed,"audio/mp4","audio")
             }catch(_:Exception){s.error="Audio was captured, but recovery details could not be saved. Keep this screen open and check available device storage."}
         }
         pending = withContext(Dispatchers.IO) {
@@ -149,23 +152,22 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                 }
             }
             StatusTag(when { belongsHere && rec.paused -> "Paused"; belongsHere && rec.recording -> "Recording"; selectedFile != null -> "Saved on this device"; else -> "Ready" })
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(consent, { consent = it }, enabled = !rec.recording)
-                Text("I have consent to record and process this audio.", Modifier.weight(1f))
-            }
+            if (consent) Text("Consent confirmed for this visit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             RecorderControl(
-                enabled=(belongsHere && rec.recording) || (consent && idle && !rec.recording),
+                enabled=(belongsHere && rec.recording) || (idle && !rec.recording),
                 recording=belongsHere && rec.recording, paused=rec.paused,
-                onRecord={ beginWithPermission() }, onStop={RecordingService.stop(context)}
+                onRecord={ if(consent)beginWithPermission() else consentPrompt=true }, onStop={RecordingService.stop(context)}
             )
             if (rec.recording && belongsHere) TextButton(onClick={if(rec.paused)RecordingService.resume(context)else RecordingService.pause(context)},modifier=Modifier.align(Alignment.CenterHorizontally)) { Text(if(rec.paused)"Resume" else "Pause") }
             if (belongsHere || recordingRequested) rec.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (belongsHere || recordingRequested) rec.notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             if (belongsHere && rec.recording) RecordingPermissions.notificationHint(android.os.Build.VERSION.SDK_INT, notificationsGranted())?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick={launchExternal(ExternalKind.AUDIO_PICKER)},modifier=Modifier.align(Alignment.CenterHorizontally),enabled=idle&&!rec.recording){Text("Import audio") }
-            if (pending.isNotEmpty()) {
-                SectionLabel("Saved for this encounter")
-                pending.forEachIndexed { index, saved ->
+            // Only recordings other than the one in use are listed, e.g. one left over after an interruption.
+            val others = pending.filter { it.filePath != path && !(belongsHere && rec.recording && it.filePath == rec.filePath) }
+            if (others.isNotEmpty()) {
+                SectionLabel("Earlier recordings for this visit")
+                others.forEachIndexed { index, saved ->
                     val storedFile = File(saved.filePath!!)
                     val time = localTime(java.time.Instant.ofEpochMilli(storedFile.lastModified()).toString())
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
