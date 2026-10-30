@@ -23,7 +23,9 @@ fun documentTypeTitle(value:String)=quickFormats[if(value=="referral")"physician
 }
 
 @Composable fun DocumentReviewTools(s:AppState){
-    s.documentAlerts.forEach{message->Text(message,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodyMedium)}
+    // Owner's request (2026-10-30): no red review notes under the report. Only a safety check
+    // (side, drug, dose or a number that may be misheard) is shown, as one small grey line.
+    s.documentAlerts.firstOrNull()?.let{message->Text(message,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)}
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
         TextButton(onClick={s.improveReport()},enabled=!s.loading && s.editor.isNotBlank() && s.editorCaseRevision==s.revision,modifier=Modifier.weight(1f)){Text("Improve Report")}
         TextButton(onClick={s.improveAssessment()},enabled=!s.loading,modifier=Modifier.weight(1f)){Text("Improve Assessment")}
