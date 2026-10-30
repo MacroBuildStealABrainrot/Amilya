@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.material3.*
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import java.util.Locale
 
 data class VoiceCommand(val action:String,val value:String="",val replacement:String="")
@@ -23,16 +24,24 @@ internal fun parseVoiceCommand(input:String,wakePhrase:String="Hey WoundCoPilot"
     val hasWake=trimmed.startsWith(wakePhrase,true)
     if(!hasWake&&!activelyListening)return null
     val original=if(hasWake)trimmed.drop(wakePhrase.length).trim(' ', ',')else trimmed
-    val text=original.lowercase(Locale.ROOT).trim().removeSuffix(".").removePrefix("please ")
-    val commands=mapOf("start a new report" to "new","new report" to "new","start another report" to "new",
-        "generate report" to "generate","prepare report" to "generate","try again" to "retry","try preparing the report again" to "retry",
-        "improve report" to "improve_report","improve assessment" to "improve_assessment","copy report" to "copy","save report" to "save","export report" to "export",
-        "finish report" to "finish","read the report" to "read","read report" to "read","repeat" to "read","stop reading" to "stop_reading",
-        "pause reading" to "stop_reading","add another photo" to "photo","add photo" to "photo","start recording" to "record",
+    // Whole-phrase matches only, so a sentence that merely contains a command word never triggers it.
+    val text=original.lowercase(Locale.ROOT).trim().trimEnd('.','!','?').removePrefix("please ").removeSuffix(" please").trim()
+    val commands=mapOf("start a new report" to "new","new report" to "new","start another report" to "new","new visit" to "new",
+        "generate report" to "generate","prepare report" to "generate","create report" to "generate","write report" to "generate","write the report" to "generate",
+        "try again" to "retry","try preparing the report again" to "retry",
+        "improve report" to "improve_report","improve assessment" to "improve_assessment","copy report" to "copy","copy" to "copy",
+        "save report" to "save","save" to "save","save the report" to "save","export report" to "export",
+        "send" to "send","send report" to "send","send the report" to "send","share report" to "send",
+        "finish report" to "finish","done" to "done","i'm done" to "done","finish" to "done",
+        "read the report" to "read","read report" to "read","read it" to "read","repeat" to "read","stop reading" to "stop_reading","pause reading" to "stop_reading",
+        "add another photo" to "photo","add photo" to "photo","take photo" to "photo","take a photo" to "photo","photo" to "photo",
+        "start recording" to "record","record" to "record","record a visit" to "record","stop" to "stop_reading",
+        "ask consultant" to "consult","ask the consultant" to "consult","consultant" to "consult",
+        "go home" to "home","home" to "home",
         "tell me the recording duration" to "duration","undo" to "undo","redo" to "redo")
     commands[text]?.let{return VoiceCommand(it)}
-    val formats=mapOf("nursing note" to "nursing","soap note" to "soap","sbar" to "sbar","physician update" to "physician_update","referral letter" to "referral_letter","handoff" to "handoff")
-    formats[text.removePrefix("create ")]?.let{return VoiceCommand("format",it)}
+    val formats=mapOf("nursing note" to "nursing","nursing" to "nursing","soap note" to "soap","soap" to "soap","sbar" to "sbar","physician update" to "physician_update","referral letter" to "referral_letter","handoff" to "handoff","hand off" to "handoff")
+    formats[text.removePrefix("create ").removePrefix("make ").removePrefix("switch to ").removePrefix("change to ").removePrefix("a ").removePrefix("an ")]?.let{return VoiceCommand("format",it)}
     Regex("(?i)^replace (.+) with (.+)$").matchEntire(original)?.let{return VoiceCommand("replace",it.groupValues[1],it.groupValues[2])}
     Regex("(?i)^remove (.+)$").matchEntire(original)?.let{return VoiceCommand("replace",it.groupValues[1],"")}
     Regex("(?i)^add wording (.+)$").matchEntire(original)?.let{return VoiceCommand("append",it.groupValues[1])}
@@ -57,7 +66,7 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
     var candidate by remember{mutableStateOf<Pair<String,String>?>(null)}
     var previous by remember(s.encounterId){mutableStateOf<String?>(null)}
     var redo by remember(s.encounterId){mutableStateOf<String?>(null)}
-    var wake by remember{mutableStateOf(s.vault.read("command-wake-phrase")?:"Hey WoundCoPilot")}
+    val wake=remember{s.vault.read("command-wake-phrase")?:"Hey WoundCoPilot"}
     val tones=remember{ToneGenerator(AudioManager.STREAM_NOTIFICATION,35)}
     var ttsReady by remember{mutableStateOf(false)}
     var speech by remember{mutableStateOf<TextToSpeech?>(null)}
@@ -80,7 +89,13 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
             "improve_assessment"->s.improveAssessment()
             "save"->s.saveDocument()
             "finish"->{s.persistEditor();status="Ready for your review. Nothing was sent or signed."}
-            "photo"->{s.voiceCommandsOpen=false;s.screen="photo"}
+            "photo"->{s.voiceCommandsOpen=false
+                // In an open visit the camera opens straight away; from Home a photo assessment starts first.
+                if(s.case!=null && s.quickMode!=null){s.screen="photo";(context as? MainActivity)?.launchCapture(ExternalKind.CAMERA,"photo","photo")}else s.startQuick("photo")}
+            "consult"->{s.voiceCommandsOpen=false;if(s.case!=null && s.quickMode!=null)s.quickConsultant()else s.startQuick("consultant")}
+            "send"->{if(s.editor.isBlank())status="Open a report first." else {s.voiceCommandsOpen=false;s.screen="editor";s.sendRequested=true}}
+            "done"->{s.voiceCommandsOpen=false;if(s.screen=="consultant")s.finishConsultant()else s.doneQuick()}
+            "home"->{s.voiceCommandsOpen=false;if(s.quickMode!=null)s.doneQuick()else s.screen="home"}
             "record"->{s.voiceCommandsOpen=false;if(s.case==null)s.startQuick("document")else s.chooseQuickMode("document");s.autoStartRecording=true;s.screen="record"}
             "export"->{s.voiceCommandsOpen=false;s.runTask("Preparing report export"){
                 require(s.editor.isNotBlank()){"Create or open a report first."}
@@ -118,15 +133,18 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
         recognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM).putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,1))
     }
     val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){granted->val valid=s.externalCapture.permissionReturned();if(granted&&valid)listen()}
-    AlertDialog(onDismissRequest={s.voiceCommandsOpen=false},title={Text("Voice commands")},text={Column{
-        Text("Tap Listen, then give a command. Dictation and voice commands use separate listening states.")
-        if(!supported)Text("On-device speech recognition is unavailable on this device. Touch controls remain available.")
-        if(status.isNotBlank())Text(status)
-        OutlinedTextField(wake,{wake=it.take(60);s.vault.write("command-wake-phrase",wake)},label={Text("Optional command prefix")})
-        Text("Try: Start recording, Generate report, Create SOAP note, Save report, Export report, or Read report.")
-        Text("For hands-free control during recording, use Android Voice Access with the labeled Record and Stop buttons. The in-app listener pauses during dictation to avoid microphone contention; concurrent voice control depends on your device.")
-        TextButton({try{context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}catch(_:Exception){status="Open Accessibility in Android Settings to configure Voice Access."}}){Text("Hands-free setup")}
-        Text("Review and editing are for use while safely stationary.")
-    }},confirmButton={TextButton({if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)listen()else if(s.externalCapture.begin(ExternalKind.PERMISSION,"audio","command"))try{permission.launch(Manifest.permission.RECORD_AUDIO)}catch(_:Exception){s.externalCapture.clear();status="Microphone permission could not open."}},enabled=supported&&!listening&&!s.loading&&!recordingState.recording){Text(if(listening)"Listening…"else "Listen")}},dismissButton={TextButton({s.voiceCommandsOpen=false}){Text("Close")}})
+    fun listenWithPermission(){
+        if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)listen()
+        else if(s.externalCapture.begin(ExternalKind.PERMISSION,"audio","command"))try{permission.launch(Manifest.permission.RECORD_AUDIO)}catch(_:Exception){s.externalCapture.clear()}
+    }
+    // One tap: the voice button opens this and listening starts straight away.
+    LaunchedEffect(Unit){if(supported)listenWithPermission()}
+    AlertDialog(onDismissRequest={recognizer?.cancel();s.voiceCommandsOpen=false},title={Text(if(listening)"Listening…" else "Voice")},text={Column(verticalArrangement=androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)){
+        if(!supported)Text("Voice commands aren't available on this phone. You can still use the buttons.")
+        if(status.isNotBlank())Text(status,style=MaterialTheme.typography.titleSmall)
+        Text("Say one of these:",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Record · Take photo · Ask consultant\nSOAP note · Nursing note · SBAR · Handoff\nRead the report · Save · Send · Done · Go home\nReplace … with … · Undo",style=MaterialTheme.typography.bodyMedium)
+        TextButton({try{context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))}catch(_:Exception){status="Open Accessibility in Android Settings to turn on Voice Access."}}){Text("No hands at all? Set up Voice Access")}
+    }},confirmButton={TextButton({listenWithPermission()},enabled=supported&&!listening&&!s.loading&&!recordingState.recording){Text(if(listening)"Listening…"else "Listen again")}},dismissButton={TextButton({recognizer?.cancel();s.voiceCommandsOpen=false}){Text("Close")}})
     candidate?.let{(before,after)->AlertDialog(onDismissRequest={candidate=null},title={Text("Confirm wording change")},text={Column{Text("Before\n$before");Text("After\n$after")}},confirmButton={TextButton({if(s.editor==before){previous=before;redo=null;s.edit(after)}else status="Report changed. Please repeat the edit.";candidate=null}){Text("Apply change")}},dismissButton={TextButton({candidate=null}){Text("Cancel")}})}
 }

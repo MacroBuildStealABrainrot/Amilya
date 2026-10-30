@@ -31,6 +31,8 @@ fun SendOptions(
     onComputer: (() -> Unit)?,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
+    openRequested: Boolean = false,
+    onOpenHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -38,6 +40,7 @@ fun SendOptions(
     var phone by remember { mutableStateOf(false) }
     var number by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(openRequested) { if (openRequested) { onOpenHandled(); if (text.isNotBlank() && !busy) { open = true; phone = false; problem = null } } }
     WcpButton("Send", { open = true; phone = false; problem = null }, modifier.fillMaxWidth(), enabled = text.isNotBlank() && !busy)
     if (!open) return
     AlertDialog(

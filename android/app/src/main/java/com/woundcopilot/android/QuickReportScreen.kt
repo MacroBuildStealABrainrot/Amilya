@@ -121,7 +121,8 @@ fun QuickReportScreen(s: AppState) {
         )
         // One Send button: text message, another app, computer (one-time link) or copy.
         SendOptions(s.editor, documentTypeTitle(s.editorTemplate), s.loading,
-            onComputer = { s.sendToComputer() }, onMessage = { s.notice = it })
+            onComputer = { s.sendToComputer() }, onMessage = { s.notice = it },
+            openRequested = s.sendRequested, onOpenHandled = { s.sendRequested = false })
 
         DetailDisclosure("More options") {
             TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text("Add photo, recording or files") }

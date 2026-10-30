@@ -119,6 +119,13 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     Text(s.case?.optJSONObject("wound")?.str("label")?.ifBlank{null}?:s.case?.optJSONObject("encounter")?.str("title").orEmpty(),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant,maxLines=2,overflow=TextOverflow.Ellipsis)
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
                 // Owner's layout request (2026-10-28): no share, top microphone or refresh in the shared header.
+                // Owner's request (2026-10-30): one Voice button for spoken commands (not dictation), hidden while recording.
+                if(page !in listOf("welcome","login","signup","reconnect","record") && !rec.recording && s.user!=null)
+                    Surface(onClick={if(!s.loading)s.voiceCommandsOpen=true},shape=RoundedCornerShape(50),color=c.surfaceVariant,modifier=Modifier.padding(end=4.dp).semantics{contentDescription="Voice commands"}){
+                        Row(Modifier.padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                            InstrumentIcon("voice",Modifier.size(18.dp),c.primary);Text("Voice",style=MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 if(s.demo)Text("SAMPLE",Modifier.padding(horizontal=10.dp),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
             }
             if(rec.recording&&page!="record")Surface(onClick={navigate("record")},color=c.errorContainer){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){InstrumentIcon("record",Modifier.size(18.dp),c.onErrorContainer);Text("${if(rec.paused)"Paused" else "Recording"} · ${rec.elapsedSeconds/60}:${(rec.elapsedSeconds%60).toString().padStart(2,'0')}",Modifier.weight(1f).padding(start=10.dp),style=MaterialTheme.typography.labelLarge);Text("Open",style=MaterialTheme.typography.labelLarge)}}

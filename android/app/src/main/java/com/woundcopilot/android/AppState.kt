@@ -149,6 +149,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     var consultantReset by mutableIntStateOf(0); private set
     var transfer by mutableStateOf<JSONObject?>(null)
     var voiceCommandsOpen by mutableStateOf(false)
+    /** Set by the voice command "Send": the report screen opens its Send choices. Nothing is sent without a tap. */
+    var sendRequested by mutableStateOf(false)
     var voiceInstruction by mutableStateOf("")
     var voiceCorrection by mutableStateOf(false); private set
     var voiceMessage by mutableStateOf(false); private set

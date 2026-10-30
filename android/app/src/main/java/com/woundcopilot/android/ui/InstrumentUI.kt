@@ -50,6 +50,10 @@ fun InstrumentIcon(name: String, modifier: Modifier = Modifier, tint: Color = Ma
                 line(7f,11f,17f,6f);line(7f,13f,17f,18f)
                 listOf(p(5f,12f),p(19f,5f),p(19f,19f)).forEach{drawCircle(tint,2.5f*k,it,style=Stroke(1.65f*k))}
             }
+            "voice" -> {
+                // Sound waves: spoken commands, distinct from the recording microphone.
+                line(5f,10f,5f,14f);line(9f,7f,9f,17f);line(13f,4f,13f,20f);line(17f,8f,17f,16f);line(21f,10.5f,21f,13.5f)
+            }
             "record", "audio" -> {
                 drawRoundRect(tint,p(9f,3f),Size(6*k,12*k),CornerRadius(3*k),style=Stroke(1.65f*k))
                 drawArc(tint,0f,180f,false,p(5.5f,7f),Size(13*k,12*k),style=Stroke(1.65f*k,cap=StrokeCap.Round))
