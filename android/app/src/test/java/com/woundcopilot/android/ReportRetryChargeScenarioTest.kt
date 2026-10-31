@@ -94,7 +94,7 @@ class ReportRetryChargeScenarioTest {
             val reply = server.request(record.code, record.payload, mode)
             if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage) }
             else if (reply.status == 422 && "\"consultation\"" in record.payload) {
-                journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage); includeChat = false
+                journal.clearPointerIfPointsTo(pointer, storage); includeChat = false      // the note and its request code are KEPT
                 return Outcome(null, CONSULTATION_REFUSED_MESSAGE)                  // no automatic second attempt without the conversation
             } else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
             return Outcome(reply, null)
@@ -268,7 +268,7 @@ class ReportRetryChargeScenarioTest {
         assertEquals("exactly one request, none without the conversation", 1, server.requests.size)
         assertTrue(server.requests[0].contains("right heel"))
         assertEquals(0, server.created); assertEquals(0, server.charges)
-        assertTrue("the refused request is not resumed later", phone.journal.pendingFor("pending-report", "1") == null)
+        assertTrue("the refused request is not forced back on the nurse's own next choice", phone.journal.pendingFor("pending-report", "1") == null)
     }
 
     @Test fun aDraftWithoutAi_neverErasesTheLinkToAnAlreadyPaidAiReport_1_1_1() {
@@ -283,5 +283,21 @@ class ReportRetryChargeScenarioTest {
         assertTrue("the original AI note comes back with its chat observation: ${back.reply.text}", back.reply.text!!.contains("right heel"))
         assertEquals("one request code for the AI report", 1, phone.codesUsed.toSet().size)
         check("manual draft in between", server)
+    }
+
+    @Test fun reportFinishes_replyLost_thenTheServerRefusesTheNextTry_theRequestCodeSurvives_1_1_1() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "file without the heel").reply!!.status)   // paid; reply lost
+        phone.reopenApp()
+        val refused = phone.generateFromChat(server, Mode.REFUSES_CHAT_422, chat, "file without the heel")                 // next try is refused
+        assertEquals(CONSULTATION_REFUSED_MESSAGE, refused.message)
+        assertTrue("every request that reached the server contained the conversation", server.requests.all { it.contains("right heel") })
+        phone.includeChat = true                                                                                          // the server accepts again; the nurse tries again
+        val back = phone.generateFromChat(server, Mode.OK, chat, "file without the heel")
+        assertEquals(200, back.reply!!.status)
+        assertTrue("the original note comes back with its chat observation: ${back.reply.text}", back.reply.text!!.contains("right heel"))
+        assertEquals("one request code the whole time", 1, phone.codesUsed.toSet().size)
+        check("refused next try, then recovered", server)
     }
 }

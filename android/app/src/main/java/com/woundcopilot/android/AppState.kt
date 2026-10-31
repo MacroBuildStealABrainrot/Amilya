@@ -688,12 +688,14 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun closeConsultantWithoutReport(){consultantReportPrompt=false;doneQuick()}
     /** Writes the selected report type from the whole consultation: questions, answers and attached photos and files. */
-    fun reportFromConsultant(format:String):Unit=runTask("Creating report",purpose="report",retry={reportFromConsultant(format)}){
-        consultantReportPrompt=false;reportFromConsultation=true
-        recordingNotice=unreadableAttachments()
+    fun reportFromConsultant(format:String,withConversation:Boolean=true):Unit=runTask("Creating report",purpose="report",retry={reportFromConsultant(format,withConversation)}){
+        consultantReportPrompt=false;reportFromConsultation=withConversation
+        recordingNotice=listOfNotNull(unreadableAttachments(),if(withConversation)null else CONSULTATION_LEFT_OUT_NOTICE).joinToString("\n").ifBlank{null}
         updateTemplate(format);chooseQuickMode("document")
         draftQuick(true,format)
     }
+    /** True when the whole Ask Consultant conversation can go into a report (see [consultationFits]). */
+    fun consultationFitsNow()=consultationFits(consultantMessages.map{it.str("content")}.filter{it.isNotBlank()})
     /** Names every attached photo or file that could not be read, so it is never silently left out. */
     private fun unreadableAttachments():String?{
         val sources=case?.items("evidence").orEmpty().filter{it.str("kind") in listOf("photo","document","result")}
@@ -793,9 +795,10 @@ class AppState(application:Application):AndroidViewModel(application) {
         fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
             if(e.status!=422 || !payload.has("consultation"))throw e
-            // The server checked the conversation and refused it before doing any work, and it will refuse this exact request every
-            // time (so no earlier try can have finished). Never write the report without the conversation on our own: stop and say so.
-            reportDone();reportFromConsultation=false
+            // The server refused the conversation. Never write the report without it on our own: stop and say so.
+            // Keep the note (and its request code): this try says nothing about an earlier try that may have finished and been charged.
+            // Only the pointer is cleared, so the nurse's own choice to go without the conversation is not forced back onto this request.
+            journal.clearPointerIfPointsTo(pointer,reportStorage);reportFromConsultation=false
             throw IllegalArgumentException(CONSULTATION_REFUSED_MESSAGE)
         }
         val response=if(demo)sampleDocument(case!!,reportFormat)

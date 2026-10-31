@@ -93,11 +93,13 @@ import java.time.format.DateTimeFormatter
         AlertDialog(onDismissRequest={s.consultantReportPrompt=false},
             title={Text("Create a report from this consultation?")},
             text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
+                val fits=s.consultationFitsNow()
+                if(fits)Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
+                else Text(CONSULTATION_DIALOG_TOO_LONG,color=MaterialTheme.colorScheme.error)
                 DocumentTypeSelector(format,true){format=it}
                 Text("Closing without a report discards this conversation.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
-            confirmButton={TextButton({s.reportFromConsultant(format)}){Text("Create report")}},
+            confirmButton={val fits=s.consultationFitsNow();TextButton({s.reportFromConsultant(format,withConversation=fits)}){Text(if(fits)"Create report" else "Create report without the conversation")}},
             dismissButton={Row{TextButton({s.consultantReportPrompt=false}){Text("Keep talking")};TextButton({s.closeConsultantWithoutReport()}){Text("Close")}}})
     }
 }
