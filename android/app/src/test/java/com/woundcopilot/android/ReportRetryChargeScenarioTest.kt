@@ -388,7 +388,7 @@ class ReportRetryChargeScenarioTest {
     @Test fun doneAfterARefusedConversation_offersBothChoicesInTheSameVisit() {
         // the real AppState.finishConsultant / reportFromConsultant rules
         assertTrue(showsReportChoicesOnDone("consultant", hasMessages = true, editorBlank = true))
-        var mode = "consultant"; val before = mode
+        var mode: String? = "consultant"; val before = mode
         mode = "document"                                                                           // chooseQuickMode("document") before the request
         mode = modeAfterFailedConsultantReport(before, editorBlank = true, current = mode)          // the server refused: no report written
         assertEquals("consultant", mode)
