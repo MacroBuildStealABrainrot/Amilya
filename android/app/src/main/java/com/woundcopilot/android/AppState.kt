@@ -74,6 +74,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     var autoStartRecording by mutableStateOf(false)
     /** Message from the recorder (microphone taken by a call, visit recorded in parts) to show again with the finished report. */
     private var recordingNotice:String?=null
+    /** The visit a pending attachment warning belongs to: another visit's warning is never used for this one. */
+    private var recordingNoticeVisit:String?=null
     /** The warnings shown with the displayed draft, saved with it so they are still there when the visit is reopened. */
     private var draftNotice:String?=null
     var recordingConsent by mutableStateOf(false)
@@ -290,7 +292,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                     val file=File(capture.filePath)
                     val owner=vault.read("recording-owner-${file.name}")
                     // Keep a microphone-interruption or long-visit message visible after the report appears.
-                    recordingNotice=capture.notice;capture.notice?.let{notice=it}
+                    recordingNotice=capture.notice;recordingNoticeVisit=encounterId;capture.notice?.let{notice=it}
                     if(file.path!=cancelledRecordingPath && vault.read("wear-cancel-${file.name}")==null && owner=="${user?.str("id")}:$encounterId" && quickMode=="document" && !voiceCorrection && !voiceMessage && recordingConsent && capture.error==null){
                         upload(file,"audio/mp4","audio")
                     }else refreshRecordingJobs()
@@ -420,11 +422,14 @@ class AppState(application:Application):AndroidViewModel(application) {
         val identity=JSONObject(payload.toString());if(intent=="save")identity.remove("expected_revision")
         return storeKey("pending-$intent-"+hash(canonical(identity)))
     }
-    private val journal=RequestJournal(object:CodeStore{
+    private val vaultStore=object:CodeStore{
         override fun read(key:String)=vault.read(key)
         override fun write(key:String,value:String)=vault.write(key,value)
         override fun remove(key:String)=vault.remove(key)
-    },{UUID.randomUUID().toString()})
+    }
+    private val journal=RequestJournal(vaultStore,{UUID.randomUUID().toString()})
+    /** The warnings of each SAVED report, kept with that report so opening it from Saved versions shows its own warnings again. */
+    private val savedNotices get()=DocumentNotices(vaultStore){storeKey("doc-notice-$it")}
     /** Notes written by older builds were JSON: read them once so a request already in flight keeps its code. */
     private fun legacyRecord(raw:String):RequestRecord?=runCatching{val o=JSONObject(raw);RequestRecord(o.getString("key"),o.getJSONObject("payload").toString(),o.optJSONObject("response")?.toString())}.getOrNull()
     private suspend fun mutation(intent:String,path:String,payload:JSONObject,keepCodeOnServerError:Boolean=false,storageName:String?=null):JSONObject{
@@ -692,7 +697,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     /** Writes the selected report type from the whole consultation: questions, answers and attached photos and files. */
     fun reportFromConsultant(format:String,withConversation:Boolean=true):Unit=runTask("Creating report",purpose="report",retry={reportFromConsultant(format,withConversation)}){
         consultantReportPrompt=false;reportFromConsultation=withConversation
-        recordingNotice=unreadableAttachments()
+        recordingNotice=unreadableAttachments();recordingNoticeVisit=encounterId
         val modeBefore=quickMode
         updateTemplate(format);chooseQuickMode("document")
         try{draftQuick(true,format)}catch(e:Throwable){
@@ -813,7 +818,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         val leftOutKey=storeKey("left-out-$reportStorage")
         // An unreadable-attachment warning is saved with the request too, so recovering after the app was fully closed still names it.
         val attachKey=storeKey("attach-warn-$reportStorage")
-        if(ai && !demo)recordingNotice?.let{vault.write(attachKey,it)}
+        val ownAttachmentNotice=attachmentNoticeForVisit(recordingNoticeVisit,encounterId,recordingNotice)
+        if(ai && !demo)ownAttachmentNotice?.let{vault.write(attachKey,it)}
         if(ai && !demo && earlier==null && vault.read(storeKey("left-out-choice"))!=null){vault.write(leftOutKey,"1");vault.remove(storeKey("left-out-choice"))}
         fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage);vault.remove(leftOutKey);vault.remove(attachKey)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
@@ -846,7 +852,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
         editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response)
         // The omission warning goes ALONGSIDE the server's warnings (never over them), and all of them are saved with the draft.
-        notice=combineReportNotices(!payload.has("consultation") && vault.read(leftOutKey)!=null,notice,recordingNotice?:vault.read(attachKey));recordingNotice=null
+        notice=combineReportNotices(!payload.has("consultation") && vault.read(leftOutKey)!=null,notice,ownAttachmentNotice?:vault.read(attachKey));recordingNotice=null;recordingNoticeVisit=null
         draftNotice=notice;persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)reportDone();Performance.start("report_ui");screen="editor"
     }
     fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
@@ -943,7 +949,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         draftNotice?.let{notice=it}
     }
     fun newDocument(){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {
@@ -988,7 +994,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 "created_at" to now(),"fact_snapshot" to JSONArray(case?.items("facts")?.filter{it.str("confirmation_state")=="confirmed"}?:emptyList<JSONObject>()))
         }else mutation("save","/encounters/$encounterId/documents",p)
         mergeDocument(d)
-        if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision")}
+        if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");savedNotices.save(d.str("id"),draftNotice)}
         persistEditor();if(!demo)acknowledge("save",p)
         notice=if(demo)"Saved in the synthetic preview." else "Exact document saved to your workspace."
         refreshAcknowledged()

@@ -52,3 +52,13 @@ internal fun showsGenerateOnDocument(editorBlank: Boolean, sourceCount: Int, ear
 
 /** The warnings on screen belong to the report being shown: switching reports never carries the old banner along. */
 internal fun noticeForShownReport(savedWithThatReport: String?): String? = savedWithThatReport?.takeIf { it.isNotBlank() }
+
+/** The attachment warning belongs to the visit it was made for. A different visit gets none of it. */
+internal fun attachmentNoticeForVisit(noticeVisit: String?, visitNow: String?, notice: String?): String? =
+    if (noticeVisit != null && noticeVisit == visitNow) notice else null
+
+/** Keeps each saved report's warnings with that report (by report id). */
+internal class DocumentNotices(private val store: CodeStore, private val keyFor: (String) -> String) {
+    fun save(documentId: String, notice: String?) { if (notice.isNullOrBlank()) store.remove(keyFor(documentId)) else store.write(keyFor(documentId), notice) }
+    fun read(documentId: String): String? = store.read(keyFor(documentId))?.ifBlank { null }
+}

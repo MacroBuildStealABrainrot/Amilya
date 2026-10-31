@@ -445,4 +445,29 @@ class ReportRetryChargeScenarioTest {
         assertEquals("an older note with no saved warning shows none", null, noticeForShownReport(null))
         assertEquals(null, noticeForShownReport(""))
     }
+
+    @Test fun savedReports_A_B_A_eachShowsItsOwnWarnings_warning_noWarning_warning() {
+        val store = MapStore(); val notes = DocumentNotices(store) { "doc-notice-$it" }
+        notes.save("A", combineReportNotices(true, "Check the dose.", "heel.jpg could not be read."))
+        notes.save("B", combineReportNotices(false, null, null))
+        val firstA = noticeForShownReport(notes.read("A")); val b = noticeForShownReport(notes.read("B"))
+        val secondA = noticeForShownReport(notes.read("A"))
+        assertTrue(firstA!!.contains("heel.jpg") && firstA.contains(CONSULTATION_LEFT_OUT_NOTICE))
+        assertEquals(null, b)
+        assertEquals(firstA, secondA)
+        val reopened = DocumentNotices(MapStore().also { it.data.putAll(store.data) }) { "doc-notice-$it" }   // phone restarted
+        assertEquals(firstA, reopened.read("A")); assertEquals(null, reopened.read("B"))
+    }
+
+    @Test fun visitAFails_visitBWritten_visitBStaysClear_AKeepsItsWarning_recoveringAAddsNoCharge() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed"); val warn = "heel.jpg could not be read."
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "", attachmentWarning = warn).reply!!.status)   // visit A fails; warning in memory
+        // visit B, a typed report, while the app stays open: A's in-memory warning must not apply to B
+        assertEquals("visit B gets no warning from visit A", null, attachmentNoticeForVisit("visitA", "visitB", warn))
+        assertEquals("visit A still gets its own", warn, attachmentNoticeForVisit("visitA", "visitA", warn))
+        assertEquals(null, attachmentNoticeForVisit(null, "visitA", warn))
+        val back = phone.generateFromChat(server, Mode.OK, chat, "")             // back to A: recover
+        assertEquals(warn, back.notice); assertEquals(1, server.charges)
+    }
 }
