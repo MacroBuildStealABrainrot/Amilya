@@ -13,8 +13,9 @@ android {
         targetSdk = 36
         buildConfigField("boolean", "REPAIR_SERVER", "false")
         buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
-        versionCode = 48
-        versionName = "1.8.5-test15n"
+        buildConfigField("boolean", "ISOLATED_TEST", "false")
+        versionCode = 49
+        versionName = "1.8.5-test15p"
         manifestPlaceholders["appLabel"] = "WoundCoPilot"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
@@ -84,6 +85,22 @@ android {
             initWith(getByName("pilot"))
             applicationIdSuffix = ".rendertest"
             versionNameSuffix = "-render-test14"
+            buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
+            buildConfigField("boolean", "REPAIR_SERVER", "false")
+            buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
+            buildConfigField("String", "API_BASE_URL", "\"https://amilya-repair-test.onrender.com/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
+        // ISOLATED TEST APP (safety first). Talks ONLY to the isolated Render test server, which has its own empty database and
+        // refuses to start with clinical data, billing or the live database. The app checks the address of EVERY request and
+        // refuses to send anything until the server has proved it is that synthetic-only test server. It can never reach the
+        // live Cloud Run service. Its own package, so it installs beside every other build and shares no data with them.
+        create("isolatedTest") {
+            initWith(getByName("pilot"))
+            applicationIdSuffix = ".isolated"
+            versionNameSuffix = "-isolated"
+            manifestPlaceholders["appLabel"] = "Amilya Isolated Test"
+            buildConfigField("boolean", "ISOLATED_TEST", "true")
             buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
             buildConfigField("boolean", "REPAIR_SERVER", "false")
             buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")

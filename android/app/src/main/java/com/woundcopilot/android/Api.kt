@@ -183,8 +183,51 @@ internal const val REPAIR_API_ORIGIN="https://repair---woundcopilot-rhd7rrcqdq-u
 internal const val RENDER_TEST_API_ORIGIN="https://amilya-repair-test.onrender.com/api/v1"
 internal const val LOCAL_TEST_API_ORIGIN="http://127.0.0.1:18766/api/v1"
 
+internal const val ISOLATED_TEST_HOST="amilya-repair-test.onrender.com"
+
+/** Any address of the live Google Cloud Run service (including its tagged repair copy). The isolated test app never talks to these. */
+internal fun isLiveServiceUrl(url:String):Boolean{
+    val host=runCatching{java.net.URI(url).host?.lowercase()}.getOrNull()?:return false
+    return host.endsWith(".run.app") || host.contains("woundcopilot-1039151887397") || host.contains("woundcopilot-rhd7rrcqdq")
+}
+
+/**
+ * ISOLATED TEST APP, check 1 of 2 (address): every single request must go to the exact isolated test server
+ * (https, default port, exact host). Anything else, and above all any live-service address, is refused before
+ * a connection is opened.
+ */
+internal fun isolatedRequestAllowed(fullUrl:String):Boolean{
+    if(isLiveServiceUrl(fullUrl))return false
+    val uri=runCatching{java.net.URI(fullUrl)}.getOrNull()?:return false
+    return uri.scheme=="https" && uri.host==ISOLATED_TEST_HOST && uri.port==-1 && uri.userInfo==null && (uri.rawPath?:"").startsWith("/api/v1/")
+}
+
+/**
+ * ISOLATED TEST APP, check 2 of 2 (server identity): before anything is sent, the server must say about itself that it is
+ * the synthetic-only test server. Only the isolated Render test service sends a `synthetic_test` block, and only with
+ * `patient_data_allowed: false`; the live service does not. A missing or different answer means: send nothing.
+ */
+internal fun isIsolatedTestServer(config:JSONObject?):Boolean{
+    if(config==null)return false
+    val marker=config.optJSONObject("synthetic_test")
+    fun flag(o:JSONObject?,name:String):Boolean?=if(o!=null && o.has(name) && o.opt(name) is Boolean)o.getBoolean(name)else null
+    return isolatedServerAnswer(marker!=null,flag(marker,"patient_data_allowed"),flag(config,"clinical_data_enabled"),
+        if(config.has("isolated_test_server"))flag(config,"isolated_test_server")?:false else null)
+}
+
+/** The decision itself, on plain values (a missing value is null). Every unclear answer means "not the isolated test server". */
+internal fun isolatedServerAnswer(hasSyntheticMarker:Boolean,patientDataAllowed:Boolean?,clinicalDataEnabled:Boolean?,declaresIsolated:Boolean?):Boolean{
+    if(!hasSyntheticMarker || patientDataAllowed!=false || clinicalDataEnabled!=false)return false
+    // The newer test server also declares itself explicitly; when the answer is present it must be true.
+    return declaresIsolated==null || declaresIsolated
+}
+
+/** Paths the isolated test app may use BEFORE the server has proved it is the isolated test server: reading its public description only. */
+internal fun isIsolationProbe(method:String,path:String)=method=="GET" && (path=="/config" || path=="/health")
+
 /** Which server addresses a build may talk to. The sandbox build allows ONLY the fake test server on this PC. */
-internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean,repair:Boolean=false,renderTest:Boolean=false):Boolean{
+internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean,repair:Boolean=false,renderTest:Boolean=false,isolated:Boolean=false):Boolean{
+    if(isolated) return !sandbox && !repair && url==RENDER_TEST_API_ORIGIN && isolatedRequestAllowed(url+"/")
     if(renderTest) return !sandbox && !repair && url==RENDER_TEST_API_ORIGIN
     val local=url==LOCAL_TEST_API_ORIGIN || url=="http://localhost:18766/api/v1"
     return if(sandbox) local else if(repair) url==REPAIR_API_ORIGIN else url==PRODUCTION_API_ORIGIN || (debug && local)
@@ -194,7 +237,24 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
     @Volatile var diagnosticJob:String?=null
     @Volatile var diagnosticGeneration:String?=null
 
-    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX,BuildConfig.REPAIR_SERVER,BuildConfig.RENDER_TEST_SERVER)) { "Unsupported API origin." } }
+    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX,BuildConfig.REPAIR_SERVER,BuildConfig.RENDER_TEST_SERVER,BuildConfig.ISOLATED_TEST)) { "Unsupported API origin." } }
+
+    /** Isolated test app only: set once the server has proved it is the synthetic-only test server (see [isIsolatedTestServer]). */
+    @Volatile private var isolatedServerVerified=false
+    private val isolationLock=Any()
+
+    /** Isolated test app: refuse before connecting unless the address is the test server AND (for anything but reading its description) it has proved its identity. */
+    private fun enforceIsolation(path:String,method:String){
+        if(!BuildConfig.ISOLATED_TEST)return
+        if(!isolatedRequestAllowed(base+path))throw ApiException(421,"This test app only talks to the isolated test server. Nothing was sent.")
+        if(isIsolationProbe(method,path) || isolatedServerVerified)return
+        synchronized(isolationLock){
+            if(isolatedServerVerified)return
+            val config=runCatching{execute("/config","GET",null,"application/json",null,true) as? JSONObject}.getOrNull()
+            if(!isIsolatedTestServer(config))throw ApiException(421,"This test app could not confirm it is connected to the isolated test server, so nothing was sent.")
+            isolatedServerVerified=true
+        }
+    }
 
     private val sessionKey=if(base.startsWith("https://woundcopilot-"))"session" else "session-local-integration"
 
@@ -268,6 +328,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
     private fun execute(path:String,method:String,data:ByteArray?,type:String,key:String?, renewed:Boolean=false):Any {
 
         require(path.startsWith('/') && !path.startsWith("//")) { "Use a relative API path." }
+        enforceIsolation(path,method)
 
         if(!renewed){
             val nowMs=System.nanoTime()/1_000_000
@@ -293,6 +354,8 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
             c.setRequestProperty("Accept","application/json")
             c.setRequestProperty("X-WCP-Client","android")
+            // Lets any server that is NOT the isolated test server refuse this app's requests (server-side guard).
+            if(BuildConfig.ISOLATED_TEST)c.setRequestProperty("X-Amilya-Build","isolated-test")
 
             if(requestCookie.isNotBlank())c.setRequestProperty("Cookie",requestCookie+if(path.startsWith("/auth/") && refreshToken.isNotBlank())"; $refreshToken" else "")
             if(diagnosticRequestJob!=null && !path.startsWith("/diagnostics"))c.setRequestProperty("X-Diagnostic-Job",diagnosticRequestJob)

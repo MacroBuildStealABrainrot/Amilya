@@ -13,6 +13,7 @@ from server.db import Base,engine,SessionLocal
 from server import identity,audit,providers,transfer_models
 from server.performance import job_id as performance_job
 from server import diagnostics
+from server import isolation
 
 logger=logging.getLogger('woundcopilot')
 # Cloud Run ingests one JSON object per line as structured logs. This dedicated
@@ -48,7 +49,10 @@ async def boundary(request:Request,call_next):
     invalid_key=operation_key is not None and (not operation_key.strip() or len(operation_key)>128)
     operation_token=providers.request_operation.set(operation_key if not invalid_key and operation_key is not None else request_id)
     try:
-        if invalid_key:response=JSONResponse({'detail':'Idempotency-Key must contain 1 to 128 characters'},status_code=422)
+        # Safety boundary: a request from the isolated test app is refused here, before its body is read,
+        # unless this server is the isolated test server.
+        if isolation.refuses(request.headers):response=JSONResponse({'detail':'This server does not accept the isolated test app. Nothing was stored.'},status_code=421)
+        elif invalid_key:response=JSONResponse({'detail':'Idempotency-Key must contain 1 to 128 characters'},status_code=422)
         elif oversize:response=JSONResponse({'detail':'Upload exceeds the 30 MB request limit.'},status_code=413)
         else:response=await call_next(request)
     except asyncio.CancelledError:
@@ -111,6 +115,7 @@ def public_config():
     return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':bool(settings.allow_signup or owner_enrollment),
         'signup_scope':'public' if settings.allow_signup else 'owner_test' if owner_enrollment else 'closed',
         'clinical_data_enabled':settings.clinical_data_enabled,'privacy_review_required':not settings.clinical_data_enabled,
+        'isolated_test_server': isolation.is_isolated_test_server(),
         'synthetic_test': {'enabled': render_owner_test.available(), 'expires_at': settings.render_owner_test_until,
             'patient_data_allowed': False, 'provider_cap_usd': 1} if render_owner_test.required() else None,
         'capabilities':{'ai':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Clinical assistance is not configured. Manual documentation remains available.'),
