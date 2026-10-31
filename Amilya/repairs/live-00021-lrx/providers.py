@@ -266,6 +266,9 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
                 value = {key: val for key, val in value.items() if key != 'observed_on'}
                 if 'An observation date supplied by the photo provider was excluded.' not in warnings:
                     warnings.append('An observation date supplied by the photo provider was excluded.')
+            if isinstance(value, dict) and isinstance(value.get('observed_on'), str) and re.match(r'\d{4}-\d{2}-\d{2}[T ]', value['observed_on']):
+                # A date-and-time where only a date is stored: keep the date instead of failing the whole extraction.
+                value = {**value, 'observed_on': value['observed_on'][:10]}
             checked = validated_value(name, value)
             if task == 'image' and name == 'wound_tissue' and isinstance(checked, dict) and (checked.get('text') or '').strip():
                 # Charted in the sentence; extra numeric fields read as robotic duplicates.
@@ -833,6 +836,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     if defects:
         qa = {**qa, 'passed': False, 'discrepancies': list(dict.fromkeys(qa.get('discrepancies', []) + defects))[:20]}
     if qa.get('passed') is False:
+        # Count only: the reasons can quote clinical text and are never logged.
+        logger.warning('quick_report_check_failed stage=first task=%s discrepancies=%d', task, len(qa.get('discrepancies') or []))
         from .quick_report_repair import repair_quick_report_once
         return await repair_quick_report_once(context, task, options, draft, qa,
             user=user, encounter_id=encounter_id, routed=routed)
