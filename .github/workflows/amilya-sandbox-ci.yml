@@ -2,27 +2,27 @@
 #
 # SAFE BY DESIGN
 #  * Uses NO secrets, NO signing keys, NO AI keys and NO network service of yours. Nothing is deployed. Production, Cloud Run,
-#    clinical data and billing are never touched. The phone tests use the SANDBOX app, which can only reach a throw-away
-#    server started inside this job (fake data, AI off), through the emulator's adb link.
+#    clinical data and billing are never touched. No emulator is installed or run.
+#    Android instrumentation is compiled for later physical Samsung validation.
 #  * Put this in a PRIVATE repository. Run it from the Actions tab ("Run workflow") or by pushing.
 #
 # WHAT YOU GET (Actions run page > Artifacts):
 #  * amilya-apks: app-sandbox.apk, app-debug.apk, app-release-unsigned.apk, wear-sandbox.apk
 #  * amilya-build-evidence: Gradle unit-test reports, lint report, build-flag checks, backend test log (SQLite + PostgreSQL)
-#  * amilya-phone-test-evidence: instrumentation (emulator) test reports and logcat
+#  * Device execution is intentionally excluded at the owner's request.
 name: amilya-sandbox-ci
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, 'test/**' ]
+    branches: [ main, master, 'test/**', 'fix/server-diagnosis-*' ]
 
 permissions:
   contents: read
 
 concurrency:
   group: amilya-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   backend:
@@ -54,6 +54,9 @@ jobs:
           mkdir -p ../ci-out
           python -m pytest -v -p no:cacheprovider 2>&1 | tee ../ci-out/backend-pytest.log
           test ${PIPESTATUS[0]} -eq 0
+      - name: Show failing test names
+        if: failure()
+        run: grep -E '^(FAILED|ERROR) ' ci-out/backend-pytest.log | head -20 | cut -c1-300 | sed 's/^/::error::/' || true
       - name: Static safety checks
         run: python -I verification/python_static_checks.py | tee ci-out/python-static-checks.log
       - uses: actions/upload-artifact@v4
@@ -95,16 +98,25 @@ jobs:
       - name: Build all variants and run unit tests
         working-directory: android
         run: |
+          set -euo pipefail
+          # Fill only an isolated 1 MB RAM disk, never the runner's filesystem.
+          WCP_STORAGE_FULL_TEST_DIR="$(mktemp -d /tmp/amilya-full-XXXXXX)"
+          export WCP_STORAGE_FULL_TEST_DIR
+          cleanup() {
+            sudo umount "$WCP_STORAGE_FULL_TEST_DIR" 2>/dev/null || true
+            rmdir "$WCP_STORAGE_FULL_TEST_DIR" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sudo mount -t tmpfs -o size=1m,mode=0777 tmpfs "$WCP_STORAGE_FULL_TEST_DIR"
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            :app:testSandboxUnitTest :wear-contract:test \
-            :app:assembleSandbox :app:assemblePilot :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
+            :app:test :wear-contract:test \
+            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
-      - name: Lint (sandbox) - report only
+      - name: Lint (sandbox + pilot)
         working-directory: android
-        continue-on-error: true
-        run: ./gradlew --no-daemon :app:lintSandbox
+        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest
       - name: Check build flags inside the built apps
         run: bash ci/verify-build-flags.sh | tee build-flags.log
       - name: Collect evidence
@@ -120,7 +132,7 @@ jobs:
         if: always()
         with:
           name: amilya-apks
-          path: ci-out/apks/
+          path: "ci-out/apks/*.apk\nci-out/apks/SHA256SUMS.txt"
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
@@ -129,72 +141,129 @@ jobs:
           path: "ci-out/*.log\nci-out/reports/"
           retention-days: 30
 
-  phone-tests:
-    name: Sandbox app on an Android emulator (fake server, fake audio)
-    needs: android
+  repair-automation-tests:
+    name: Repair deployment safety tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        api-level: [ 35 ]
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Restore checksum-verified synthetic audio fixture
-        run: python3 ci/restore-large-fixture.py
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/setup-python@v5
+          persist-credentials: false
+      - name: Install synthetic-check test dependencies
+        run: python3 -m pip install httpx==0.28.1 Pillow==12.3.0
+      - name: Test zero-traffic deployment and rollback controls
+        run: python3 -m unittest discover -s ci/tests -v
+
+  repair-deploy:
+    name: Repair server deployment
+    needs: [backend, android, repair-automation-tests]
+    if: github.event_name == 'push' && github.repository == 'MacroBuildStealABrainrot/Amilya' && github.ref == 'refs/heads/fix/server-diagnosis-20261025'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment: amilya-repair
+    permissions:
+      contents: write
+      id-token: write
+    # Never cancel a job while it could be restoring the service template.
+    concurrency:
+      group: amilya-repair-cloud
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          python-version: '3.13'
-      - name: Use preinstalled Android SDK command-line tools
-        shell: bash
+          persist-credentials: false
+      - name: Reject superseded commit before cloud authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current="$(gh api repos/MacroBuildStealABrainrot/Amilya/branches/fix/server-diagnosis-20261025 --jq .commit.sha)"
+          test "$current" = "$GITHUB_SHA" || { echo "::error::Commit was superseded; no cloud deployment attempted."; exit 1; }
+      - name: Check one-time connection configuration
+        id: connection
+        env:
+          AMILYA_GCP_WIF_PROVIDER: ${{ vars.AMILYA_GCP_WIF_PROVIDER }}
+          AMILYA_GCP_DEPLOY_ACCOUNT: ${{ vars.AMILYA_GCP_DEPLOY_ACCOUNT }}
+          AMILYA_REPAIR_DEPLOY_ENABLED: ${{ vars.AMILYA_REPAIR_DEPLOY_ENABLED }}
+          AMILYA_SMOKE_WORKSPACE_ID: ${{ vars.AMILYA_SMOKE_WORKSPACE_ID }}
+          AMILYA_SMOKE_EMAIL: ${{ secrets.AMILYA_SMOKE_EMAIL }}
+          AMILYA_SMOKE_PASSWORD: ${{ secrets.AMILYA_SMOKE_PASSWORD }}
+        run: python3 ci/repair_connection.py
+      - name: Show the identity claims GitHub presents (names only, no token)
+        if: steps.connection.outputs.ready == 'true'
+        run: |
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=amilya-claim-check" | python3 -c 'import sys,json;print(json.load(sys.stdin)["value"])')
+          python3 - "$token" <<'PY'
+          import base64, json, sys
+          part = sys.argv[1].split('.')[1]
+          claims = json.loads(base64.urlsafe_b64decode(part + '=' * (-len(part) % 4)))
+          for key in ('sub', 'ref', 'workflow_ref', 'repository_id', 'repository_owner_id', 'event_name', 'environment'):
+              print(f'::notice::{key}={claims.get(key)}')
+          PY
+      - name: Authenticate with short-lived Google credentials
+        id: cloud_auth
+        if: steps.connection.outputs.ready == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.AMILYA_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.AMILYA_GCP_DEPLOY_ACCOUNT }}
+          project_id: woundcopilot-20260905
+          create_credentials_file: true
+      - name: Set up Google Cloud CLI
+        if: steps.connection.outputs.ready == 'true'
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          project_id: woundcopilot-20260905
+      - name: Keep a private copy of the unchanged live report files
+        # Read-only: copies files out of the pinned live image into a private pre-release so the
+        # report repair can start from the exact live code. Never blocks the deployment.
+        if: steps.connection.outputs.ready == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
-          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
-            echo "::error::Android sdkmanager is missing on this runner"
-            exit 1
-          fi
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          "$SDKMANAGER" --version
-          yes | "$SDKMANAGER" --licenses >/dev/null || test ${PIPESTATUS[1]} -eq 0
-      - name: Android platform 36 and build tools
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Backend packages for the throw-away test servers
+          parent="$(sed -n 's/^FROM //p' repairs/live-00021-lrx/Dockerfile)"
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          docker pull -q "$parent"
+          box="$(docker create "$parent")"
+          out="$RUNNER_TEMP/live-source"; mkdir -p "$out"
+          for f in quick_workflows.py main.py clinical.py core.py kosmo.py; do
+            docker cp "$box:/app/server/$f" "$out/$f" || true
+          done
+          docker cp "$box:/app/server/prompts" "$out/prompts"
+          docker rm "$box" >/dev/null
+          tar -czf "$RUNNER_TEMP/live-00021-lrx-server.tar.gz" -C "$out" .
+          sha256sum "$RUNNER_TEMP/live-00021-lrx-server.tar.gz"
+          gh release view live-00021-source >/dev/null 2>&1 || \
+            gh release create live-00021-source --prerelease --target "$GITHUB_SHA" \
+              --title "Private copy of live server files (00021-lrx)" --notes "Read-only copy from the pinned live image, for the narrow repair."
+          gh release upload live-00021-source "$RUNNER_TEMP/live-00021-lrx-server.tar.gz" --clobber
+      - name: Install synthetic-check dependencies
+        if: steps.connection.outputs.ready == 'true'
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-          python -m pip install -r backend/requirements.txt
-      - name: Enable KVM for the emulator
+          python3 -m pip install httpx==0.28.1 Pillow==12.3.0
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng
+          espeak-ng -w "$RUNNER_TEMP/amilya-synthetic.wav" "Synthetic software test only. Pain score is two out of ten. The dressing was changed."
+      - name: Build pinned repair image, test candidate, update repair tag
+        if: steps.connection.outputs.ready == 'true'
+        env:
+          AMILYA_SMOKE_EMAIL: ${{ secrets.AMILYA_SMOKE_EMAIL }}
+          AMILYA_SMOKE_PASSWORD: ${{ secrets.AMILYA_SMOKE_PASSWORD }}
+          AMILYA_SMOKE_WORKSPACE_ID: ${{ vars.AMILYA_SMOKE_WORKSPACE_ID }}
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
-      - name: Free unused hosted-runner SDKs for emulator storage
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL
-          sudo apt-get clean
-          df -h /
-      - name: Run phone tests on the emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: ${{ matrix.api-level }}
-          arch: x86_64
-          target: google_apis
-          # The emulator needs extra backing space beyond userdata; keep this within hosted-runner free disk.
-          disk-size: 2048M
-          heap-size: 512M
-          ram-size: 2048M
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -no-audio -no-metrics
-          script: bash ci/run-phone-tests.sh
-      - uses: actions/upload-artifact@v4
+          export AMILYA_SMOKE_AUDIO="$RUNNER_TEMP/amilya-synthetic.wav"
+          export AMILYA_REPAIR_CHECKS="${{ steps.connection.outputs.checks }}"
+          python3 ci/repair_deploy.py --state "$RUNNER_TEMP/amilya-repair-private/state.json"
+      - name: Recover template and previous repair tag if interrupted
+        if: always() && steps.cloud_auth.outcome == 'success'
+        run: python3 ci/repair_deploy.py --recover --state "$RUNNER_TEMP/amilya-repair-private/state.json"
+      - name: Save connection status only
         if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: amilya-phone-test-evidence-api${{ matrix.api-level }}
-          path: ci-out/
-          retention-days: 30
+          name: amilya-repair-connection
+          path: repair-connection-status.json
+          if-no-files-found: ignore
+          retention-days: 7
+

@@ -36,11 +36,22 @@ class QuickStart(StrictModel):
 class QuickReport(TemplateSelection):
     use_ai: bool = True
     preferred_length: Literal['concise', 'standard', 'detailed'] = 'concise'
+    # Ask Consultant conversation kept only on the phone; sent once to write a report, never stored.
+    consultation: list['ConversationTurn'] = Field(default_factory=list, max_length=40)
+
+    @model_validator(mode='after')
+    def bounded_consultation(self):
+        if sum(len(turn.content) for turn in self.consultation) > 40000:
+            raise ValueError('Consultation exceeds 40,000 characters')
+        return self
 
 
 class ConversationTurn(StrictModel):
     role: Literal['user', 'assistant']
     content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10000)]
+
+
+QuickReport.model_rebuild()
 
 
 class ConsultRequest(StrictModel):
@@ -94,7 +105,7 @@ def start_quick(payload: QuickStart, user: User = Depends(current_user), db: Ses
                 db.flush()
             elif patient.workspace_id != workspace_id:
                 raise HTTPException(409, 'Quick workspace identity conflict')
-            titles = {'document': 'New report', 'photo': 'Photo assessment', 'consultant': 'Wound Consultant'}
+            titles = {'document': 'New report', 'photo': 'Photo assessment', 'consultant': 'Ask Consultant'}
             encounter = Encounter(id=encounter_id, workspace_id=workspace_id, patient_id=patient_id,
                 wound_id=None, title=titles[payload.mode], status='open', revision=1, created_by=actor_id,
                 draft_data={'retention':'temporary','quick_mode': payload.mode, 'quick_request_id': str(payload.request_id)})
@@ -148,6 +159,18 @@ def source_context(db: Session, encounter: Encounter):
     return context
 
 
+def consultation_context(turns):
+    """Clinician messages are the clinician's own statements; consultant replies are AI suggestions, never findings."""
+    return {
+        'how_to_use': ('clinician_message entries were written or dictated by the clinician and may be documented as the '
+                       "clinician's own information. ai_consultant_suggestion entries are AI suggestions: never document them "
+                       'as findings, assessments or care performed. Include them only if useful, in a clearly separate section '
+                       'titled "Consultant suggestions (not confirmed)".'),
+        'turns': [{'speaker': 'clinician_message' if turn.role == 'user' else 'ai_consultant_suggestion', 'text': turn.content}
+                  for turn in turns],
+    }
+
+
 def source_only_report(context, template, custom_template=None):
     return documentation.source_report(context, template, clinical.fact_phrase)['text']
 
@@ -157,7 +180,9 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
     encounter = clinical.owned(db, Encounter, encounter_id, user)
     expected = encounter.revision
     context = source_context(db, encounter)
-    if not context['case_facts'] and not any(source['text'] for source in context['untrusted_sources']):
+    if payload.consultation:
+        context['consultation'] = consultation_context(payload.consultation)
+    if not context['case_facts'] and not any(source['text'] for source in context['untrusted_sources']) and not payload.consultation:
         return {**documentation.visible_result({'text': '', 'status': 'no_content'}), 'case_revision': expected, 'template': payload.template, 'fact_snapshot': [], 'source_ids': [], 'review_required': True, 'warnings': []}
     custom_template = payload.custom_template.model_dump() if payload.custom_template else None
     warnings = ['Draft — Clinician Review Required']
@@ -184,7 +209,8 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
         raise HTTPException(409, 'The source changed during drafting; generate again against the current information')
     clinical.timeline(db, user, encounter_id, 'document.quick_draft', encounter_id,
         {'case_revision': expected, 'template': payload.template, 'use_ai': payload.use_ai,
-         'fact_count': len(context['case_facts']), 'source_count': len(context['untrusted_sources'])})
+         'fact_count': len(context['case_facts']), 'source_count': len(context['untrusted_sources']),
+         'consultation_turns': len(payload.consultation)})
     clinical.finish(db)
     return {**documentation.visible_result(result), 'case_revision': expected, 'template': payload.template, 'custom_template': custom_template,
             'fact_snapshot': context['case_facts'], 'source_ids': [source['id'] for source in context['untrusted_sources']],
