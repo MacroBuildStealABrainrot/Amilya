@@ -790,7 +790,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         val reportFormat=payload.optString("template",format)
         var reportStorage=earlier?.first?:journalKey(intent,payload)
         if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
-        fun reportDone(){journal.forget(reportStorage);journal.clearPointer(pointer)}
+        fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
             if(e.status!=422 || !payload.has("consultation"))throw e
             // The server checked the conversation and refused it before doing any work, and it will refuse this exact request every

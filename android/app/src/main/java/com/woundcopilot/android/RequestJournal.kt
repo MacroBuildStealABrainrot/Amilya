@@ -65,7 +65,10 @@ internal class RequestJournal(private val store: CodeStore, private val newCode:
      * [stamp] is the sources version: if the sources changed, it is a different report and nothing is resumed.
      */
     fun point(pointer: String, stamp: String, storage: String) = store.write(pointer, "$stamp\n$storage")
-    fun clearPointer(pointer: String) = store.remove(pointer)
+    /** Forget the pointer only if it still points at [storage]: a draft made without AI must never erase the pointer to a paid AI report. */
+    fun clearPointerIfPointsTo(pointer: String, storage: String) {
+        if (store.read(pointer)?.split("\n", limit = 2)?.getOrNull(1) == storage) store.remove(pointer)
+    }
     fun pendingFor(pointer: String, stamp: String, legacy: (String) -> RequestRecord? = { null }): Pair<String, RequestRecord>? {
         val parts = store.read(pointer)?.split("\n", limit = 2) ?: return null
         if (parts.size != 2 || parts[0] != stamp) return null

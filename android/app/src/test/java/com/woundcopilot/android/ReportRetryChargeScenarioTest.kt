@@ -27,6 +27,7 @@ class ReportRetryChargeScenarioTest {
         val requests = mutableListOf<String>()      // every payload that reached the server, in order
         fun request(code: String, payload: String, mode: Mode): Reply {
             requests += payload
+            if ("\"use_ai\":false" in payload) return Reply(200, "MANUAL DRAFT")      // a draft made without AI: no AI call, no charge, no result stored
             if (mode == Mode.REFUSES_CHAT_422 && "\"consultation\"" in payload) return Reply(422)   // checked before any work: nothing created, nothing charged
             if (mode == Mode.REFUSED_403) return Reply(403)                         // refused before any work: nothing created, nothing charged
             if (mode == Mode.PROVIDER_DOWN && code !in results) {
@@ -69,7 +70,7 @@ class ReportRetryChargeScenarioTest {
             record.response?.let { return Reply(200, it) }
             codesUsed += record.code
             val reply = server.request(record.code, record.payload, mode)
-            if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointer(pointer) }
+            if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage) }
             else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
             return reply
         }
@@ -91,12 +92,22 @@ class ReportRetryChargeScenarioTest {
             record.response?.let { return Outcome(Reply(200, it), null) }
             codesUsed += record.code
             val reply = server.request(record.code, record.payload, mode)
-            if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointer(pointer) }
+            if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage) }
             else if (reply.status == 422 && "\"consultation\"" in record.payload) {
-                journal.forget(storage); journal.clearPointer(pointer); includeChat = false
+                journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage); includeChat = false
                 return Outcome(null, CONSULTATION_REFUSED_MESSAGE)                  // no automatic second attempt without the conversation
             } else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
             return Outcome(reply, null)
+        }
+
+        /** "Create draft without AI", in the order AppState.draftQuick does it: it never looks up or points at an AI report. */
+        fun manualDraft(server: FakeServer, sourcesVersion: String = "1"): Reply {
+            val payload = "{\"template\":\"nursing\",\"use_ai\":false}"
+            val storage = "pending-quick-report-$sourcesVersion-manual"
+            val record = journal.open(storage, payload)
+            val reply = server.request(record.code, record.payload, Mode.OK)
+            journal.forget(storage); journal.clearPointerIfPointsTo("pending-report", storage)
+            return reply
         }
 
         /** "Improve wording" / "Apply correction": one request per button, named after the report text. */
@@ -258,5 +269,19 @@ class ReportRetryChargeScenarioTest {
         assertTrue(server.requests[0].contains("right heel"))
         assertEquals(0, server.created); assertEquals(0, server.charges)
         assertTrue("the refused request is not resumed later", phone.journal.pendingFor("pending-report", "1") == null)
+    }
+
+    @Test fun aDraftWithoutAi_neverErasesTheLinkToAnAlreadyPaidAiReport_1_1_1() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "file without the heel").reply!!.status)   // paid; reply lost
+        phone.reopenApp(); phone.includeChat = false                                    // reopened: "include the conversation" is off
+        assertEquals("MANUAL DRAFT", phone.manualDraft(server).text)                    // Document -> Create draft without AI
+        assertEquals("the manual draft added no charge", 1, server.charges)
+        val back = phone.generateFromChat(server, Mode.OK, chat, "file without the heel")  // back for the original AI report
+        assertEquals(200, back.reply!!.status)
+        assertTrue("the original AI note comes back with its chat observation: ${back.reply.text}", back.reply.text!!.contains("right heel"))
+        assertEquals("one request code for the AI report", 1, phone.codesUsed.toSet().size)
+        check("manual draft in between", server)
     }
 }
