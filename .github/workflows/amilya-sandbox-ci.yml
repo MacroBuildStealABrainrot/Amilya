@@ -115,12 +115,12 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
             :app:test :wear-contract:test \
-            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
+            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleIsolatedTest :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
       - name: Lint (sandbox + pilot)
         working-directory: android
-        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest
+        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest :app:lintIsolatedTest
       - name: Check build flags inside the built apps
         run: bash ci/verify-build-flags.sh | tee build-flags.log
       - name: Collect evidence
@@ -138,6 +138,13 @@ jobs:
           mkdir -p ci-out/install
           cp android/app/build/outputs/apk/pilot/*.apk ci-out/install/Amilya-Test-15.apk || true
           cp android/app/build/outputs/apk/repair/*.apk ci-out/install/Amilya-Server-Test.apk || true
+          cp android/app/build/outputs/apk/isolatedTest/*.apk ci-out/install/Amilya-Isolated-Test.apk || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: INSTALL-THIS-Amilya-Isolated-Test
+          path: ci-out/install/Amilya-Isolated-Test.apk
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -21,6 +21,7 @@ check "$(ls $APKS/sandbox/*.apk | head -1)" com.woundcopilot.android.sandbox tru
 check "$(ls $APKS/pilot/*.apk | head -1)" com.woundcopilot.android.pilot2 false
 check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair2 false
 check "$(ls $APKS/renderTest/*.apk | head -1)" com.woundcopilot.android.rendertest false
+check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolated false
 APKSIGNER="${AAPT2%aapt2}apksigner"
 "$APKSIGNER" verify --verbose --print-certs "$(ls $APKS/renderTest/*.apk | head -1)"
 [ $fail -eq 0 ] && echo "ALL BUILD-FLAG CHECKS PASSED"
