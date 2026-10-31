@@ -55,6 +55,15 @@ jobs:
           mkdir -p ../ci-out
           python -m pytest -v -p no:cacheprovider 2>&1 | tee ../ci-out/backend-pytest.log
           test ${PIPESTATUS[0]} -eq 0
+      - name: Report backend test counts (readable without downloading logs)
+        if: always()
+        run: |
+          line="$(grep -E '^=+ .*(passed|failed|error)' ci-out/backend-pytest.log | tail -1 | tr -d '=' | sed 's/^ *//')"
+          echo "::notice title=Backend tests::${line:-no summary line found}"
+          for f in test_isolation_boundary test_consent_record test_report_retry_after_failure; do
+            n="$(grep -c "tests/$f.py::.* PASSED" ci-out/backend-pytest.log || true)"; x="$(grep -c "tests/$f.py::.* FAILED" ci-out/backend-pytest.log || true)"
+            [ "$n$x" != "00" ] && echo "::notice title=Backend $f::$n passed, $x failed" || true
+          done
       - name: Show failing test names
         if: failure()
         run: grep -E '^(FAILED|ERROR) ' ci-out/backend-pytest.log | head -20 | cut -c1-300 | sed 's/^/::error::/' || true
@@ -118,11 +127,30 @@ jobs:
             :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleDebug :app:assembleRelease :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
+      - name: Report Android unit test counts (readable without downloading logs)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET, collections
+          tot = collections.Counter(); per = collections.Counter()
+          for f in glob.glob('android/**/build/test-results/**/TEST-*.xml', recursive=True):
+              r = ET.parse(f).getroot(); variant = f.split('test-results/')[1].split('/')[0]
+              for k in ('tests', 'failures', 'errors', 'skipped'): tot[(variant, k)] += int(r.get(k, 0))
+              per[(variant, r.get('name').split('.')[-1], 'tests')] += int(r.get('tests', 0)); per[(variant, r.get('name').split('.')[-1], 'bad')] += int(r.get('failures', 0)) + int(r.get('errors', 0))
+          for v in sorted({v for v, _ in tot}):
+              print(f"::notice title=Android unit tests {v}::{tot[(v,'tests')]} run, {tot[(v,'failures')]} failures, {tot[(v,'errors')]} errors, {tot[(v,'skipped')]} skipped")
+          for (v, c, k), n in sorted(per.items()):
+              if k == 'tests' and v == 'testSandboxUnitTest' and c in ('IsolatedTestAppGuardTest','ReportAlertOrderTest','ReportRetryCodeTest','DiagnosticsStorageTest','VoiceConsentTest','ApiOriginGuardTest'):
+                  print(f"::notice title=Android {c}::{n} run, {per[(v,c,'bad')]} failed")
+          PY
       - name: Lint (sandbox + pilot)
         working-directory: android
         run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest
       - name: Check build flags inside the built apps
-        run: bash ci/verify-build-flags.sh | tee build-flags.log
+        run: |
+          bash ci/verify-build-flags.sh | tee build-flags.log
+          echo "::notice title=Build flags::$(tail -1 build-flags.log)"
+          for a in $(find android/app/build/outputs/apk -name '*.apk' | sort); do echo "::notice title=APK $(basename $(dirname $a))::$(basename $a) sha256 $(sha256sum $a | cut -c1-16)…"; done
       - name: Collect evidence
         if: always()
         run: |
