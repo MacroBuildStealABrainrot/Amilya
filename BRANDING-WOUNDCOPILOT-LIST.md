@@ -20,7 +20,7 @@ Nothing here was renamed yet. Internal code names (package names, storage keys) 
 | 12 | Name of saved recording and photo files (seen when sharing or in Files) | WoundCoPilot-<date>-<id>.m4a / .jpg | `DeviceTools.kt` 604 |
 | 13 | Label of a copied report (shown by some keyboards and clipboard managers) | WoundCoPilot report | `QuickReportScreen.kt` 203, `VoiceCommands.kt` 116 |
 | 14 | Text sent with "Send to computer" (report transfer link message) | WoundCoPilot report transfer | `QuickIntegrationScreens.kt` 111 |
-| 15 | Voice commands: optional lead-in phrase (no wake word) | Hey WoundCoPilot | `VoiceCommands.kt` 22, 60 |
+| 15 | Voice commands: optional lead-in phrase (no wake word) | Hey WoundCoPilot | `VoiceCommands.kt` 22, 70 |
 
 The watch app has no "WoundCoPilot" wording. Notification channel names ("Recording", "Report processing", "Waiting recordings") are neutral.
 
