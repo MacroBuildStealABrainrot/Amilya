@@ -118,6 +118,18 @@ REPORT_STAGE_TASKS = frozenset({'quick_draft', 'quick_qa', 'quick_repair', 'quic
 MAX_REPORT_STAGE_ATTEMPTS = 3  # total per report step and request key, INCLUDING the first attempt
 MAX_REPORT_STAGE_RETRIES = MAX_REPORT_STAGE_ATTEMPTS - 1
 MAX_MEDIA_RETRIES = 3  # transcription and photo: unchanged from earlier versions
+# The phone keeps its request code for every retry of a report. The server tells it, with this header, ONLY when the request
+# has really ended for good: no report was kept and nothing was charged, and this code can never finish later. Only then may the
+# phone start a new request with a new code. Without the header the phone must keep the code (a finished report is sent back
+# for the same code with no new AI call and no new charge).
+REPORT_STATE_HEADER = 'X-Amilya-Report-State'
+REPORT_ENDED_NO_CHARGE = 'ended-no-charge'
+PERMANENT_REPORT_FAILURES = frozenset({'provider_credits', 'provider_access', 'route_unavailable', 'request_incompatible', 'output_limit'})
+
+
+def report_request_ended(task, usage, resumed_attempt):
+    """True when a failed report step can never be retried under the same request code (attempts used up, or a permanent failure)."""
+    return task in REPORT_STAGE_TASKS and (resumed_attempt >= MAX_REPORT_STAGE_RETRIES or usage.get('failure_reason') in PERMANENT_REPORT_FAILURES)
 TASK_FILES = {'extract': '20_clinical_fact_extraction', 'document': '25_document_extraction',
               'image': '40_wound_image_assessment', 'review': '50_clinical_review',
               'holistic': '55_holistic_wound_review', 'escalation': '60_targeted_escalation',
@@ -574,8 +586,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                         message = ('We could not assess this photo after several attempts. Your photo is saved. Retake it, try later, or chart by hand.'
                                    if exhausted else
                                    'This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.')
+                        ended = {REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE} if report_request_ended(task, previous.usage, resumed_attempt) else {}
                         raise HTTPException(int(code), message,
-                            headers=photo_error_headers(previous.usage, exhausted))
+                            headers={**photo_error_headers(previous.usage, exhausted), **ended})
             raise HTTPException(409, 'This AI request is already processing or awaiting reconciliation. Refresh the case before retrying.')
     if document_operations.get() is not None:document_operations.get().append(operation)
     started = time.monotonic()
@@ -693,6 +706,8 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
     if error:
         if usage.get('failure_reason'):
             error.headers = {**photo_error_headers(usage, task == 'image' and resumed_attempt >= 3), **(error.headers or {})}
+        if report_request_ended(task, usage, resumed_attempt):
+            error.headers = {**(error.headers or {}), REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE}
         raise error
     return result
 

@@ -176,7 +176,7 @@ internal val AUTH_ENTRY_PATHS=setOf("/auth/login","/auth/signup","/auth/refresh"
 /** The server answers this before it does any work, so the same request can safely be sent again. */
 internal fun isCsrfRejection(status:Int,message:String)=status==403 && message.contains("request verification",ignoreCase=true)
 
-class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
+class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null,val reportState:String?=null):Exception(message)
 
 internal const val PRODUCTION_API_ORIGIN="https://woundcopilot-1039151887397.us-central1.run.app/api/v1"
 internal const val REPAIR_API_ORIGIN="https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1"
@@ -234,26 +234,6 @@ internal fun consentFormFields(method:String?,confirmedAt:String?,wording:String
     if(!confirmedAt.isNullOrBlank() && confirmedAt.length<=40 && Regex("[0-9T:.+\\-Z]+").matches(confirmedAt))out["consent_confirmed_at"]=confirmedAt
     if(!wording.isNullOrBlank() && Regex("[a-z0-9-]{1,40}").matches(wording))out["consent_wording"]=wording
     return out
-}
-
-/** After how many server error replies in a row the same AI report request code is given up (the server allows 3 paid attempts per code). */
-internal const val REPORT_CODE_MAX_SERVER_ERRORS=4
-
-/**
- * What to do with an AI report's request code after an error reply. Returns the new count of server errors to keep the
- * SAME code, or null to drop it (the next try then gets a new code).
- *  - No clear reply (connection lost, unreadable answer, still processing): keep, count unchanged. The server may have
- *    finished; the same code makes it send that report back with no new AI call and no new charge.
- *  - Server busy or failed (429, 500, 502, 503, 504): keep, so the retry cannot become a second paid report. A finished
- *    report is always sent back as a success for its code, so only after [REPORT_CODE_MAX_SERVER_ERRORS] error replies in a
- *    row for the same code (the server's 3 attempts are used up and none succeeded) is the code given up.
- *  - Refused before any work (400, 402, 403, 404, 409, 413, 415, 422): drop; nothing was done or charged.
- */
-internal fun reportCodeAfterError(status:Int,ambiguous:Boolean,serverErrorsSoFar:Int):Int?{
-    if(ambiguous)return serverErrorsSoFar
-    if(status in listOf(400,402,403,404,409,413,415,422))return null
-    if(status in listOf(429,500,502,503,504)){val next=serverErrorsSoFar+1;return if(next>=REPORT_CODE_MAX_SERVER_ERRORS)null else next}
-    return serverErrorsSoFar
 }
 
 /** Paths the isolated test app may use BEFORE the server has proved it is the isolated test server: reading its public description only. */
@@ -445,7 +425,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
                 }
 
                 val pending=status==409 && message.contains("already processing or awaiting reconciliation")
-                throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599})
+                throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599},reportState=c.getHeaderField("X-Amilya-Report-State"))
 
             }
 

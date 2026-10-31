@@ -418,27 +418,29 @@ class AppState(application:Application):AndroidViewModel(application) {
         val identity=JSONObject(payload.toString());if(intent=="save")identity.remove("expected_revision")
         return storeKey("pending-$intent-"+hash(canonical(identity)))
     }
+    private val journal=RequestJournal(object:CodeStore{
+        override fun read(key:String)=vault.read(key)
+        override fun write(key:String,value:String)=vault.write(key,value)
+        override fun remove(key:String)=vault.remove(key)
+    },{UUID.randomUUID().toString()})
+    /** Notes written by older builds were JSON: read them once so a request already in flight keeps its code. */
+    private fun legacyRecord(raw:String):RequestRecord?=runCatching{val o=JSONObject(raw);RequestRecord(o.getString("key"),o.getJSONObject("payload").toString(),o.optJSONObject("response")?.toString())}.getOrNull()
     private suspend fun mutation(intent:String,path:String,payload:JSONObject,keepCodeOnServerError:Boolean=false):JSONObject{
         val storage=journalKey(intent,payload)
-        val record=vault.read(storage)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: obj("key" to UUID.randomUUID().toString(),"payload" to JSONObject(payload.toString()))
-        vault.write(storage,record.toString())
-        record.optJSONObject("response")?.let{return JSONObject(it.toString())}
+        val record=journal.open(storage,payload.toString(),::legacyRecord)
+        record.response?.let{return JSONObject(it)}
         try{
-            val response=api.call(path,"POST",record.getJSONObject("payload"),record.str("key")) as JSONObject
-            record.put("response",response);vault.write(storage,record.toString());return response
+            val response=api.call(path,"POST",JSONObject(record.payload),record.code) as JSONObject
+            journal.saveAnswer(storage,record,response.toString());return response
         }catch(e:ApiException){
-            if(keepCodeOnServerError){
-                // AI report: keep the SAME request code for every retry, so a report the server already finished is sent
-                // back without a new AI call or charge. See reportCodeAfterError.
-                when(val failures=reportCodeAfterError(e.status,e.ambiguous,record.optInt("server_errors"))){
-                    null->vault.remove(storage)
-                    else->{record.put("server_errors",failures);vault.write(storage,record.toString())}
-                }
-            }else if(!e.ambiguous && e.status in listOf(400,402,403,404,409,413,415,422,429,502,503))vault.remove(storage)
+            // AI report: keep the SAME request code for every retry, also after the app is closed and reopened, so a report the
+            // server already finished is sent back without a new AI call or charge. See reportCodeKept.
+            if(keepCodeOnServerError)journal.afterReportError(storage,e.status,e.ambiguous,e.reportState)
+            else journal.afterOtherError(storage,e.status,e.ambiguous)
             throw e
         }
     }
-    private fun acknowledge(intent:String,payload:JSONObject){vault.remove(journalKey(intent,payload))}
+    private fun acknowledge(intent:String,payload:JSONObject){journal.forget(journalKey(intent,payload))}
     private fun mergeSource(r:JSONObject){case=mergeEvidenceResponse(case ?: throw IllegalStateException("No open encounter"),r)}
     fun addEvidence(payload:JSONObject)=runTask {
         ensureRemoteDocument()

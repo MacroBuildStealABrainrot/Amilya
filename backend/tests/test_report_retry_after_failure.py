@@ -115,3 +115,35 @@ def test_a_new_request_key_would_be_a_new_charge_which_is_why_the_phone_keeps_it
     finally:
         providers.request_operation.reset(token)
     assert charges(gateway)[0] > charged
+
+
+def failing_report(gateway):
+    gateway.http.responses = [lambda call: httpx.ReadTimeout('synthetic timeout')]
+    with pytest.raises(HTTPException) as error:
+        report(gateway)
+    return error.value
+
+
+def test_the_server_says_the_request_is_over_only_when_it_really_is(gateway):
+    # Attempts 1 and 2 may still be retried with the same request key: no "ended" answer.
+    for _ in range(providers.MAX_REPORT_STAGE_ATTEMPTS - 1):
+        error = failing_report(gateway)
+        assert providers.REPORT_STATE_HEADER not in (error.headers or {}), 'the phone must keep its request code'
+    # Attempt 3 is the last one allowed: this answer tells the phone the request is over, with nothing charged.
+    last = failing_report(gateway)
+    assert (last.headers or {}).get(providers.REPORT_STATE_HEADER) == providers.REPORT_ENDED_NO_CHARGE
+    assert charges(gateway)[0] == 0, 'a request that ended this way charged nothing'
+    calls = len(gateway.http.calls)
+    # Asking again with the same key only repeats the answer: no new AI call, still no charge, still marked over.
+    again = failing_report(gateway)
+    assert (again.headers or {}).get(providers.REPORT_STATE_HEADER) == providers.REPORT_ENDED_NO_CHARGE
+    assert len(gateway.http.calls) == calls and charges(gateway)[0] == 0
+
+
+def test_a_finished_report_is_never_marked_over_and_is_sent_back_for_the_same_key(gateway):
+    gateway.http.responses = list(GOOD)
+    first = report(gateway)
+    calls, charged = len(gateway.http.calls), charges(gateway)
+    for _ in range(5):
+        assert report(gateway)['text'] == first['text']
+    assert len(gateway.http.calls) == calls and charges(gateway) == charged
