@@ -888,7 +888,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         editor=d?.str("text") ?: "";editorTemplate=d?.str("template","nursing") ?: "nursing";editorCaseRevision=d?.optInt("case_revision",revision) ?: revision
         documentAlerts=d?.optJSONArray("ui_alerts")?.let{a->(0 until a.length()).map{a.optString(it)}}?:emptyList()
         // Older drafts did not store the count: re-check their wording so a safety warning is never shown as a plain one.
-        documentAlertSafetyCount=if(d?.has("ui_alert_safety_count")==true)d.optInt("ui_alert_safety_count")else orderedReportAlerts(documentAlerts.map{"" to it}).let{(all,n)->documentAlerts=all;n}
+        documentAlertSafetyCount=if(d?.has("ui_alert_safety_count")==true)d!!.optInt("ui_alert_safety_count")else orderedReportAlerts(documentAlerts.map{"" to it}).let{(all,n)->documentAlerts=all;n}
         savedId=d?.str("saved_id")?.ifBlank{null};amendId=d?.str("amends_id")?.ifBlank{null};amendReason=d?.str("reason") ?: "";customName=d?.str("custom_name")?:"";customInstructions=d?.str("custom_instructions")?:""
         if(savedId!=null && case?.items("documents")?.none{it.str("id")==savedId && matchesEditor(it)}!=false)savedId=null
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
