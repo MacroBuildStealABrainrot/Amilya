@@ -13,6 +13,11 @@ import androidx.compose.material3.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+/** Server answers that mean "this server has no diagnostics address": stop sending and collecting. */
+internal fun diagnosticsNotAccepted(status:Int)=status==404 || status==405
+/** Stored items that belong to technical events only. Nothing else (recordings, drafts, consent, sign-in) matches. */
+internal fun isDiagnosticStorageName(name:String)=name.startsWith("diagnostic-outbox-") || name.startsWith("diagnostic-job-") || name.startsWith("diagnostic-generation-")
+
 /** Technical-only outbox, encrypted using the existing vault; never owns source media. */
 object DeveloperDiagnostics {
     private data class Binding(val vault:Vault,val owner:String,val job:String,val recording:File?)
@@ -55,6 +60,8 @@ object DeveloperDiagnostics {
         emitBinding(Binding(vault,parts[0],id,file),"cleanup",Performance.now(),if(deleted)"success"else "failed")
     }}
     private fun emitBinding(b:Binding,stage:String,start:Long,status:String,requestId:String?=null,flowType:String?=null,wearError:String?=null,photo:File?=null){
+        // The server does not accept technical events: do not collect any more on this phone.
+        if(serverUnsupported)return
         val duration=((Performance.now()-start)/1_000_000.0).coerceAtLeast(0.0)
         val finish=Instant.now()
         val exists=b.recording?.let{it.isFile && it.length()>128}
@@ -72,9 +79,16 @@ object DeveloperDiagnostics {
             }
         }}
     }
-    /** A server without the diagnostics address (HTTP 404/405) is not asked again until the app restarts. */
+    /**
+     * WHERE THEY GO: only to this app's own server, POST /api/v1/diagnostics/events, stored in its diagnostic_events table
+     * and visible only to an administrator (Developer diagnostics screen). Nowhere else (no Sentry or other service).
+     * A server that answers 404/405 does not accept them. That answer is remembered on the phone for that server and this
+     * app version, so the phone stops sending AND stops collecting new events. A new app version checks once more.
+     */
     @Volatile private var serverUnsupported=false
+    private fun unsupportedKey(api:Api)="diagnostics-unsupported-"+api.base.hashCode().toUInt().toString(16)
     suspend fun flush(api:Api,vault:Vault,owner:String){
+        if(!serverUnsupported && vault.read(unsupportedKey(api))==BuildConfig.VERSION_CODE.toString())serverUnsupported=true
         if(serverUnsupported || !mutex.tryLock())return
         try{
             val key="diagnostic-outbox-$owner"
@@ -87,8 +101,19 @@ object DeveloperDiagnostics {
                 val rest=vault.read(key)?.let{JSONArray(it).objects().filter{it.str("id") !in ids}}?:emptyList()
                 if(rest.isEmpty())vault.remove(key)else vault.write(key,JSONArray(rest).toString())
             }}
-        }catch(e:Exception){if(e is CancellationException)throw e;if(e is ApiException && e.status in listOf(404,405))serverUnsupported=true}finally{mutex.unlock()}
+        }catch(e:Exception){if(e is CancellationException)throw e;if(e is ApiException && diagnosticsNotAccepted(e.status)){serverUnsupported=true;runCatching{vault.write(unsupportedKey(api),BuildConfig.VERSION_CODE.toString())}}}finally{mutex.unlock()}
     }
+    /** How many technical events are waiting on this phone (all accounts). */
+    fun storedCount(vault:Vault):Int=vault.names().filter{it.startsWith("diagnostic-outbox-")}.sumOf{name->runCatching{JSONArray(vault.read(name)?:"[]").length()}.getOrDefault(0)}
+    /** Erases every stored technical event and the visit links they use. Recordings, drafts and sign-in are not touched. */
+    fun clearStored(vault:Vault):Int{
+        val names=vault.names().filter(::isDiagnosticStorageName)
+        val count=storedCount(vault)
+        synchronized(this){names.forEach{runCatching{vault.remove(it)}}}
+        return count
+    }
+    /** Whether the server does not accept technical events at all (no such address). */
+    val sendingStopped get()=serverUnsupported
 }
 
 @Composable fun DeveloperDiagnosticsScreen(s:AppState){
@@ -162,5 +187,22 @@ object DeveloperDiagnostics {
                 }
             }
         }
+    }
+}
+
+
+/** Account screen: what technical events are kept on this phone, where they go, and a button to erase them. */
+@Composable fun StoredDiagnosticsSection(s:AppState){
+    var count by remember{mutableStateOf(runCatching{DeveloperDiagnostics.storedCount(s.vault)}.getOrDefault(0))}
+    var message by remember{mutableStateOf<String?>(null)}
+    Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
+        Text("Technical events on this phone",style=MaterialTheme.typography.titleSmall)
+        Text("Step names, times and success or failure only. No audio, text, photos or names. Kept up to 7 days. "+
+            (if(DeveloperDiagnostics.sendingStopped)"This server does not accept them, so the app no longer sends or collects them."
+             else "Sent only to this app's own server for troubleshooting.")+" Stored now: $count.",
+            style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton({val removed=runCatching{DeveloperDiagnostics.clearStored(s.vault)}.getOrDefault(-1);count=runCatching{DeveloperDiagnostics.storedCount(s.vault)}.getOrDefault(0)
+            message=if(removed<0)"They could not be cleared. Try again." else "Cleared $removed technical events."},enabled=count>0){Text("Clear technical events")}
+        message?.let{Text(it,style=MaterialTheme.typography.bodySmall)}
     }
 }

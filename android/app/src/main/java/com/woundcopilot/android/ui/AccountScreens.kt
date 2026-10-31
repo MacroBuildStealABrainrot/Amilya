@@ -218,6 +218,7 @@ fun AccountScreen(state: AppState) {
                 if (state.config.optBoolean("clinical_data_enabled")) "Use your workspace's approved data handling policies." else "This deployment is not enabled for identifiable clinical data. Use synthetic examples.",
             )
         }
+        if (!state.demo) com.woundcopilot.android.StoredDiagnosticsSection(state)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Help & policies")
         var automaticBiometrics by remember{mutableStateOf(state.vault.read("biometric-auto")!="false")}

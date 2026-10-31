@@ -961,7 +961,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         persistEditor();var revokeFailed=false
         if(!demo)try{api.call("/auth/logout","POST",JSONObject())}catch(e:Exception){if(e is CancellationException)throw e;revokeFailed=true}
         externalCapture.endSession();api.clear();vault.remove("cached-account");pinLock.clear();locked=false;clearClinical();demo=false;user=null;legalRequired=false;screen="welcome"
-        api.diagnosticJob=null;DeveloperDiagnostics.clear()
+        api.diagnosticJob=null;DeveloperDiagnostics.clear();runCatching{DeveloperDiagnostics.clearStored(vault)}
         if(revokeFailed)notice="Signed out on this device. The server session could not be revoked while disconnected."
     }
     override fun onCleared(){wearBridge.close();getApplication<Application>().unregisterReceiver(screenLockReceiver);persistEditor();super.onCleared()}
