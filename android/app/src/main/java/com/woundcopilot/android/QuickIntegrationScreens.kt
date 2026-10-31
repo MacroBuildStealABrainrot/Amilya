@@ -87,7 +87,8 @@ import java.time.format.DateTimeFormatter
         initialDraft=s.consultantDraft,draftResetKey=s.consultantReset,busy=s.loading,
         attachments=ConsultantAttachments(photoCount=sources.count{it.str("kind")=="photo"},fileCount=sources.count{it.str("kind")=="document"},recordingCount=sources.count{it.str("kind")=="audio"},otherCount=sources.count{it.str("kind") !in listOf("photo","document","audio")}),
         onDraftChange={s.updateConsultantDraft(it)},onSend={s.sendConsultant(it)},onAddPhoto={s.screen="photo"},onAddFiles={s.screen="upload"},onRecord={s.screen="record"},onDone={s.finishConsultant()},
-        onVoiceMessage={s.recordConsultantMessage()},onOpenReport=if(s.editor.isNotBlank()){{s.chooseQuickMode("document");s.screen="editor"}}else null)
+        onVoiceMessage={s.recordConsultantMessage()},onOpenReport=if(s.editor.isNotBlank()){{s.chooseQuickMode("document");s.screen="editor"}}else null,
+        onCreateReport={s.consultantReportPrompt=true})
     if(s.consultantReportPrompt){
         var format by rememberSaveable{mutableStateOf(s.editorTemplate)}
         val earlier=s.earlierReportWaiting();val fits=s.consultationFitsNow()
@@ -98,6 +99,7 @@ import java.time.format.DateTimeFormatter
                 if(earlier)Text(CONSULTATION_DIALOG_EARLIER)
                 else if(fits)Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
                 else Text(CONSULTATION_DIALOG_TOO_LONG,color=MaterialTheme.colorScheme.error)
+                if(s.editor.isNotBlank())Text("Creating a new draft may replace unsaved changes in your current report. Saved versions remain available.")
                 DocumentTypeSelector(format,true){format=it}
                 if(choices.size>1)TextButton({s.reportWithoutConversation(format)}){Text("New report without the conversation")}
                 Text("Closing without a report discards this conversation.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)

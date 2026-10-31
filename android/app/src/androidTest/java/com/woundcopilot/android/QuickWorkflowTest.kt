@@ -66,7 +66,7 @@ class QuickWorkflowTest {
         }
         compose.onNodeWithText("Draft — Clinician Review Required").assertExists()
         compose.onNodeWithText("Improve Report").performScrollTo().assertExists()
-        compose.onNodeWithText("Improve Assessment").assertExists()
+        compose.onNodeWithText("Anything missed?").assertExists()
     }
 
     @Test fun assessmentQuestionsNeverChangeTheReportOrSources() {

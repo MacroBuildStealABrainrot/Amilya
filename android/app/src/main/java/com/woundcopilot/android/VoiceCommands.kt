@@ -29,7 +29,7 @@ internal fun parseVoiceCommand(input:String,wakePhrase:String="Hey WoundCoPilot"
     val commands=mapOf("start a new report" to "new","new report" to "new","start another report" to "new","new visit" to "new",
         "generate report" to "generate","prepare report" to "generate","create report" to "generate","write report" to "generate","write the report" to "generate",
         "try again" to "retry","try preparing the report again" to "retry",
-        "improve report" to "improve_report","improve assessment" to "improve_assessment","copy report" to "copy","copy" to "copy",
+        "improve report" to "improve_report","anything missed" to "improve_assessment","improve assessment" to "improve_assessment","copy report" to "copy","copy" to "copy",
         "save report" to "save","save" to "save","save the report" to "save","export report" to "export",
         "send" to "send","send report" to "send","send the report" to "send","share report" to "send",
         "finish report" to "finish","done" to "done","i'm done" to "done","finish" to "done",
