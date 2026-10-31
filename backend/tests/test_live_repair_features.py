@@ -159,4 +159,4 @@ def test_live_extraction_keeps_the_date_when_a_time_is_attached(live, gateway):
     gateway.http.responses = [completion({'facts': [{'name': 'history', 'value': {'text': 'Dressing changed.', 'observed_on': '2026-10-30T18:00:00'},
                                                     'quote': 'dressing changed'}], 'warnings': []})]
     result = asyncio.run(live.extract_text(source, 'typed', user=gateway.user, encounter_id='synthetic-extract'))
-    assert [f['value'].get('observed_on') for f in result['facts']] == ['2026-10-30']
+    assert [str(f['value'].get('observed_on')) for f in result['facts']] == ['2026-10-30']
