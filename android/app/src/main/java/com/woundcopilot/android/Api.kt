@@ -222,6 +222,20 @@ internal fun isolatedServerAnswer(hasSyntheticMarker:Boolean,patientDataAllowed:
     return declaresIsolated==null || declaresIsolated
 }
 
+/** Consent is confirmed only by a tap: on the phone, or on the watch's Record visit button. */
+internal val CONSENT_METHODS=setOf("phone_tap","watch_tap")
+/** Version of the consent wording shown to the clinician (CaptureScreen consent dialog). */
+internal const val CONSENT_WORDING="tap-client-agreed-v1"
+
+/** Form fields that tell the server how consent was confirmed. Empty when nothing valid was recorded (the server then stores "not_recorded"). */
+internal fun consentFormFields(method:String?,confirmedAt:String?,wording:String?):Map<String,String>{
+    if(method !in CONSENT_METHODS)return emptyMap()
+    val out=linkedMapOf("consent_method" to method!!)
+    if(!confirmedAt.isNullOrBlank() && confirmedAt.length<=40 && Regex("[0-9T:.+\\-Z]+").matches(confirmedAt))out["consent_confirmed_at"]=confirmedAt
+    if(!wording.isNullOrBlank() && Regex("[a-z0-9-]{1,40}").matches(wording))out["consent_wording"]=wording
+    return out
+}
+
 /** Paths the isolated test app may use BEFORE the server has proved it is the isolated test server: reading its public description only. */
 internal fun isIsolationProbe(method:String,path:String)=method=="GET" && (path=="/config" || path=="/health")
 
@@ -287,6 +301,14 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
 
 
+    /** Adds how the clinician confirmed consent (tap, time, wording) to every recording upload of that visit. */
+    private fun withConsentRecord(path:String,fields:Map<String,String>):Map<String,String>{
+        if(fields["consent"]!="true")return fields
+        val encounter=Regex("^/encounters/([^/]+)/").find(path)?.groupValues?.get(1)?:return fields
+        val record=runCatching{vault.read("consent-record-$encounter")?.let{JSONObject(it)}}.getOrNull()?:return fields
+        return fields+consentFormFields(record.optString("method"),record.optString("confirmed_at"),record.optString("wording"))
+    }
+
     suspend fun multipart(path:String,file:File,mime:String,fields:Map<String,String>,key:String):JSONObject = withContext(Dispatchers.IO) {
 
         require(file.length() in 1..(25L*1024*1024)) { "The file must be nonempty and no larger than 25 MB." }
@@ -297,7 +319,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
         val name=file.name.replace(Regex("[^a-zA-Z0-9._-]"),"_")
 
-        val form=fields.entries.joinToString(""){(field,value)->
+        val form=withConsentRecord(path,fields).entries.joinToString(""){(field,value)->
 
             require(Regex("[a-zA-Z0-9_]+").matches(field)) { "Invalid upload field." }
 
@@ -317,7 +339,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
         require(!mime.contains('\r') && !mime.contains('\n')) { "Invalid file content type." }
         val boundary="Wcp"+java.util.UUID.randomUUID().toString()
         val safeName=name.replace(Regex("[^a-zA-Z0-9._-]"),"_")
-        val form=fields.entries.joinToString(""){(field,value)->
+        val form=withConsentRecord(path,fields).entries.joinToString(""){(field,value)->
             require(Regex("[a-zA-Z0-9_]+").matches(field)) { "Invalid upload field." }
             "--$boundary\r\nContent-Disposition: form-data; name=\"$field\"\r\n\r\n$value\r\n"
         }

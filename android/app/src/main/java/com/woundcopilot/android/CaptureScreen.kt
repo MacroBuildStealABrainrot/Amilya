@@ -98,7 +98,7 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
     LaunchedEffect(s.autoStartRecording){
         if(audio && s.autoStartRecording){s.autoStartRecording=false;if(consent)beginWithPermission()else consentPrompt=true}
     }
-    if(consentPrompt)AlertDialog(onDismissRequest={consentPrompt=false},title={Text("Consent to record")},text={Text("Do you have consent to record? You will not be asked again during this visit.")},confirmButton={TextButton({consent=true;s.recordingConsent=true;consentPrompt=false;beginWithPermission()}){Text("Yes, record")}},dismissButton={TextButton({consentPrompt=false}){Text("Cancel")}})
+    if(consentPrompt)AlertDialog(onDismissRequest={consentPrompt=false},title={Text("Client consent to record")},text={Text("Ask the client. Tap only if the client agreed to this visit being recorded. A spoken yes cannot confirm consent. You will not be asked again during this visit.")},confirmButton={TextButton({consent=true;s.confirmRecordingConsent("phone_tap");consentPrompt=false;beginWithPermission()}){Text("Client agreed. Record")}},dismissButton={TextButton({consentPrompt=false}){Text("Cancel")}})
 
     LaunchedEffect(ownerKey, audio) {
         if (audio && path.isNotBlank() && File(path).parentFile?.name == "recordings") {

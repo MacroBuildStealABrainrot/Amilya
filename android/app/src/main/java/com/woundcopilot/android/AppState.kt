@@ -75,6 +75,16 @@ class AppState(application:Application):AndroidViewModel(application) {
     /** Message from the recorder (microphone taken by a call, visit recorded in parts) to show again with the finished report. */
     private var recordingNotice:String?=null
     var recordingConsent by mutableStateOf(false)
+    /**
+     * The clinician confirmed the client's consent to record by a TAP (phone dialog, or the watch's Record visit button).
+     * A spoken answer never counts, because the app cannot tell the nurse's voice from nearby speech. The details are kept
+     * per visit so every recording of the visit (including a recovered one) is sent with how and when consent was confirmed.
+     */
+    fun confirmRecordingConsent(method:String){
+        require(method in CONSENT_METHODS)
+        recordingConsent=true
+        if(encounterId.isNotBlank())runCatching{vault.write("consent-record-$encounterId",obj("method" to method,"confirmed_at" to now(),"wording" to CONSENT_WORDING).toString())}
+    }
     fun prepareRecordingContext(owner:String){
         bindDiagnostics()
         if(quickMode=="document" && !voiceCorrection && !voiceMessage)case?.let{vault.write("recording-context-$owner",obj("owner" to user?.str("id"),"case" to it,"template" to editorTemplate).toString())}

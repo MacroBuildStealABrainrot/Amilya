@@ -59,6 +59,25 @@ def iso(value):
     return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value).isoformat()
 
 
+CONSENT_METHODS = {'phone_tap', 'watch_tap'}
+
+
+def consent_record(method: str | None, confirmed_at: str | None, wording: str | None) -> dict:
+    """How the clinician confirmed the client's consent to record, as sent by the app.
+
+    Older apps send only consent=true; that is stored honestly as 'not_recorded'. A spoken answer is never accepted
+    as a method: the app requires a tap by the clinician holding the phone or wearing the watch.
+    """
+    if method not in CONSENT_METHODS:
+        return {'method': 'not_recorded'}
+    record = {'method': method}
+    if isinstance(confirmed_at, str) and 0 < len(confirmed_at) <= 40 and re.fullmatch(r'[0-9T:.+\-Z]+', confirmed_at):
+        record['confirmed_at_device'] = confirmed_at
+    if isinstance(wording, str) and re.fullmatch(r'[a-z0-9-]{1,40}', wording):
+        record['wording'] = wording
+    return record
+
+
 def owned(db: Session, model, identifier: str, user: User):
     row = db.get(model, identifier)
     if row is None or row.workspace_id != user.workspace_id:
@@ -599,6 +618,8 @@ def checked_media(data: bytes, mime: str, kind: str):
 async def upload_evidence(encounter_id: str, request: Request, file: UploadFile = File(...), kind: str = Form(...),
                           consent: bool = Form(False), duration_seconds: float | None = Form(None),
                           wound_id: str | None = Form(None), photo_review: str | None = Form(None),
+                          consent_method: str | None = Form(None), consent_confirmed_at: str | None = Form(None),
+                          consent_wording: str | None = Form(None),
                           user: User = Depends(current_user), db: Session = Depends(get_db)):
     from . import diagnostics
     diagnostics.bind(user)
@@ -680,6 +701,7 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
                         kind=kind, text=text, created_by=user.id, request_key=key, request_hash=payload_hash,
                         metadata_json={'filename': filename, 'mime': mime, 'bytes': len(data), 'media_hash': media_hash,
                                        'raw_media_retained': False, 'consent': consent, 'duration_seconds': duration_seconds,
+                                       **({'consent_record': consent_record(consent_method, consent_confirmed_at, consent_wording)} if kind == 'audio' else {}),
                                        'segments': segments, 'source_text_hash': content_hash(text) if text is not None else None,
                                        **({'original_transcript': result['original_text']} if kind == 'audio' and isinstance(result.get('original_text'), str) else {}),
                                        **({'photo_quality': automatic_quality} if automatic_quality is not None else {}),

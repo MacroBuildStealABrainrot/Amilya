@@ -16,7 +16,7 @@ router=APIRouter(tags=['audio checkpoints'])
 
 @router.post('/encounters/{encounter_id}/audio-parts',dependencies=[Depends(require_csrf)])
 async def upload_part(encounter_id:str,file:UploadFile=File(...),job_id:UUID=Form(...),index:int=Form(...),count:int=Form(...),
-    consent:bool=Form(False),overlap_ms:int=Form(0),user:User=Depends(current_user),db:Session=Depends(get_db)):
+    consent:bool=Form(False),overlap_ms:int=Form(0),consent_method:str|None=Form(None),consent_confirmed_at:str|None=Form(None),consent_wording:str|None=Form(None),user:User=Depends(current_user),db:Session=Depends(get_db)):
     encounter=clinical.owned(db,Encounter,encounter_id,user)
     if not consent:raise HTTPException(403,'Recording consent is required.')
     if not 1<=count<=32 or not 0<=index<count:raise HTTPException(422,'Invalid audio segment.')
@@ -42,7 +42,7 @@ async def upload_part(encounter_id:str,file:UploadFile=File(...),job_id:UUID=For
     clinical.lock_case(db,encounter,expected)
     row=Evidence(id=uid(),workspace_id=user.workspace_id,encounter_id=encounter_id,kind='audio_part',text=result.get('text',''),
         created_by=user.id,request_key=key,request_hash=digest,warnings=result.get('warnings',[]),
-        metadata_json={'job_id':str(job_id),'index':index,'count':count,'seconds':seconds,'segments':result.get('segments',[]),'raw_media_retained':False,
+        metadata_json={'job_id':str(job_id),'index':index,'count':count,'seconds':seconds,'consent_record':clinical.consent_record(consent_method,consent_confirmed_at,consent_wording),'segments':result.get('segments',[]),'raw_media_retained':False,
         **({'overlap_seconds':overlap_ms/1000} if overlap_ms else {}),
         **({'original_transcript':result['original_text']} if isinstance(result.get('original_text'),str) else {})})
     db.add(row);clinical.finish(db)
