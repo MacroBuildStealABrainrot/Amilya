@@ -88,11 +88,15 @@ class ReportRetryChargeScenarioTest {
             val ownName = "pending-quick-report-$sourcesVersion" + if (used.isNotEmpty()) "-consult-abc" else ""
             val storage = earlier?.first ?: ownName
             journal.point(pointer, sourcesVersion, storage)
+            val leftOutKey = "left-out-$storage"
+            if (earlier == null && store.read("left-out-choice") != null) { store.write(leftOutKey, "1"); store.remove("left-out-choice") }   // saved on the phone, like AppState
             val record = journal.open(storage, payload)
-            record.response?.let { return Outcome(Reply(200, it), null) }
+            // the notice is decided from what was REALLY sent and from the saved flag, never supplied by a test
+            fun noticeNow() = if ("\"consultation\"" !in record.payload && store.read(leftOutKey) != null) CONSULTATION_LEFT_OUT_NOTICE else null
+            record.response?.let { val n = noticeNow(); store.remove(leftOutKey); return Outcome(Reply(200, it), null, n) }
             codesUsed += record.code
             val reply = server.request(record.code, record.payload, mode)
-            if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage) }
+            if (reply.status == 200) { val n = noticeNow(); journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage); store.remove(leftOutKey); return Outcome(reply, null, n) }
             else if (reply.status == 422 && "\"consultation\"" in record.payload) {
                 return Outcome(null, CONSULTATION_REFUSED_MESSAGE)                  // note AND pointer are KEPT; no automatic attempt without the conversation
             } else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
@@ -101,14 +105,11 @@ class ReportRetryChargeScenarioTest {
 
         /** The nurse's own choice "New report from photos and files only": ONCE the earlier request is put aside (AppState.reportWithoutConversation). */
         fun newReportWithoutConversation(server: FakeServer, mode: Mode, chat: List<String>, attachedFileText: String): Outcome {
-            journal.abandonPointer("pending-report"); includeChat = false
-            return again(server, mode, chat, attachedFileText, notice = CONSULTATION_LEFT_OUT_NOTICE)
+            journal.abandonPointer("pending-report"); includeChat = false; store.write("left-out-choice", "1")
+            return again(server, mode, chat, attachedFileText)
         }
         /** Try again after a failure of that same choice: repeats the report WITHOUT putting anything aside again (AppState.reportFromConsultant's retry). */
-        fun again(server: FakeServer, mode: Mode, chat: List<String>, attachedFileText: String, notice: String? = null): Outcome {
-            val out = generateFromChat(server, mode, chat, attachedFileText)
-            return Outcome(out.reply, out.message, notice)
-        }
+        fun again(server: FakeServer, mode: Mode, chat: List<String>, attachedFileText: String): Outcome = generateFromChat(server, mode, chat, attachedFileText)
 
         /** "Create draft without AI", in the order AppState.draftQuick does it: it never looks up or points at an AI report. */
         fun manualDraft(server: FakeServer, sourcesVersion: String = "1"): Reply {
@@ -338,12 +339,61 @@ class ReportRetryChargeScenarioTest {
         phone.reopenApp()
         val fresh = phone.newReportWithoutConversation(server, Mode.REPLY_LOST, chat, "file without the heel")   // the new request's own reply is lost too
         assertEquals(504, fresh.reply!!.status)
-        val retry = phone.again(server, Mode.OK, chat, "file without the heel", notice = CONSULTATION_LEFT_OUT_NOTICE)   // Try again: same NEW request, nothing put aside again
+        val retry = phone.again(server, Mode.OK, chat, "file without the heel")   // Try again: same NEW request, nothing put aside again
         assertEquals(200, retry.reply!!.status)
         assertTrue("the new note really leaves the chat out: ${retry.reply.text}", !retry.reply.text!!.contains("right heel"))
         assertEquals(CONSULTATION_LEFT_OUT_NOTICE, retry.notice)
         assertTrue("the second request carried no conversation", !server.requests[1].contains("right heel") && !server.requests[2].contains("right heel"))
         assertEquals("two requests in all: the earlier one and the new one (a deliberate second purchase)", 2, phone.codesUsed.toSet().size)
         assertEquals("the retry of the new request did not buy a third note", 2, server.charges)
+    }
+
+    @Test fun aDraftWithoutAi_neverErasesTheLinkToAnAlreadyPaidAiReport_1_1_1() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "file without the heel").reply!!.status)   // paid; reply lost
+        phone.reopenApp(); phone.includeChat = false                                    // reopened: "include the conversation" is off
+        assertEquals("MANUAL DRAFT", phone.manualDraft(server).text)                    // Document -> Create draft without AI
+        assertEquals("the manual draft added no charge", 1, server.charges)
+        val back = phone.generateFromChat(server, Mode.OK, chat, "file without the heel")  // back for the original AI report
+        assertEquals(200, back.reply!!.status)
+        assertTrue("the original AI note comes back with its chat observation: ${back.reply.text}", back.reply.text!!.contains("right heel"))
+        assertEquals("one request code for the AI report", 1, phone.codesUsed.toSet().size)
+        check("manual draft in between", server)
+    }
+
+    @Test fun newReportWithoutTheChat_replyLost_appClosed_reopened_noticeStillShown_withoutTheTestSupplyingIt() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")
+        phone.generateFromChat(server, Mode.REPLY_LOST, chat, "file without the heel")              // earlier note, paid, reply lost
+        phone.reopenApp()
+        assertEquals(504, phone.newReportWithoutConversation(server, Mode.REPLY_LOST, chat, "file without the heel").reply!!.status)
+        phone.reopenApp()                                                                          // app closed before the note came back
+        val again = phone.again(server, Mode.OK, chat, "file without the heel")
+        assertEquals(200, again.reply!!.status)
+        assertTrue("the note leaves out the heel: ${again.reply.text}", !again.reply.text!!.contains("right heel"))
+        assertEquals("the warning comes from the saved flag", CONSULTATION_LEFT_OUT_NOTICE, again.notice)
+        assertEquals("earlier note + new note only", 2, server.charges)
+    }
+
+    @Test fun recoveredEarlierNote_neverShowsTheLeftOutNotice_evenAfterAnAbandonedChoice() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")
+        phone.generateFromChat(server, Mode.REPLY_LOST, chat, "file without the heel")
+        phone.reopenApp()
+        val back = phone.generateFromChat(server, Mode.OK, chat, "file without the heel")
+        assertTrue(back.reply!!.text!!.contains("right heel")); assertEquals(null, back.notice)
+    }
+
+    @Test fun doneAfterARefusedConversation_offersBothChoicesInTheSameVisit() {
+        // the real AppState.finishConsultant / reportFromConsultant rules
+        assertTrue(showsReportChoicesOnDone("consultant", hasMessages = true, editorBlank = true))
+        var mode = "consultant"; val before = mode
+        mode = "document"                                                                           // chooseQuickMode("document") before the request
+        mode = modeAfterFailedConsultantReport(before, editorBlank = true, current = mode)          // the server refused: no report written
+        assertEquals("consultant", mode)
+        assertTrue("tapping Done again shows the dialog", showsReportChoicesOnDone(mode, true, true))
+        assertEquals("a report that DID arrive stays on Document", "document", modeAfterFailedConsultantReport("consultant", editorBlank = false, current = "document"))
+        assertEquals(listOf(ConsultationChoice.RECOVER_EARLIER, ConsultationChoice.NEW_WITHOUT_CONVERSATION), consultationChoices(true, true))
     }
 }

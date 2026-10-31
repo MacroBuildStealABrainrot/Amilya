@@ -683,16 +683,20 @@ class AppState(application:Application):AndroidViewModel(application) {
     /** Done on Ask Consultant: offer a report first when there is a conversation to keep. */
     fun finishConsultant(){
         if(loading)return
-        if(quickMode=="consultant" && consultantMessages.isNotEmpty() && editor.isBlank()){consultantReportPrompt=true;return}
+        if(showsReportChoicesOnDone(quickMode,consultantMessages.isNotEmpty(),editor.isBlank())){consultantReportPrompt=true;return}
         doneQuick()
     }
     fun closeConsultantWithoutReport(){consultantReportPrompt=false;doneQuick()}
     /** Writes the selected report type from the whole consultation: questions, answers and attached photos and files. */
     fun reportFromConsultant(format:String,withConversation:Boolean=true):Unit=runTask("Creating report",purpose="report",retry={reportFromConsultant(format,withConversation)}){
         consultantReportPrompt=false;reportFromConsultation=withConversation
-        recordingNotice=listOfNotNull(unreadableAttachments(),if(withConversation)null else CONSULTATION_LEFT_OUT_NOTICE).joinToString("\n").ifBlank{null}
+        recordingNotice=unreadableAttachments()
+        val modeBefore=quickMode
         updateTemplate(format);chooseQuickMode("document")
-        draftQuick(true,format)
+        try{draftQuick(true,format)}catch(e:Throwable){
+            // A failed report must not strand the nurse on the Document screen: Done on Ask Consultant must offer the choices again.
+            quickMode=modeAfterFailedConsultantReport(modeBefore,editor.isBlank(),quickMode);throw e
+        }
     }
     /**
      * The nurse's own choice to leave the conversation out: ONCE, an earlier unfinished (maybe paid) report is put aside, so the report that
@@ -701,6 +705,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun reportWithoutConversation(format:String){
         if(loading)return
         journal.abandonPointer(storeKey("pending-report"))
+        vault.write(storeKey("left-out-choice"),"1")   // remembered on the phone: the notice must survive closing the app before the note returns
         reportFromConsultant(format,withConversation=false)
     }
     /** True when an earlier AI report of this visit was sent and may already be written and paid for. */
@@ -803,7 +808,9 @@ class AppState(application:Application):AndroidViewModel(application) {
         val reportFormat=payload.optString("template",format)
         var reportStorage=earlier?.first?:journalKey(intent,payload)
         if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
-        fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage)}
+        val leftOutKey=storeKey("left-out-$reportStorage")
+        if(ai && !demo && earlier==null && vault.read(storeKey("left-out-choice"))!=null){vault.write(leftOutKey,"1");vault.remove(storeKey("left-out-choice"))}
+        fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage);vault.remove(leftOutKey)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
             if(e.status!=422 || !payload.has("consultation"))throw e
             // The server refused the conversation. Never write the report without it on our own: stop and say so.
@@ -832,7 +839,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         vault.write("preferred-format-${user?.str("id")?:"sample"}",reportFormat)
         Performance.end("report_request");val persistStarted=Performance.now()
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
-        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)reportDone();Performance.start("report_ui");screen="editor"
+        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);if(!payload.has("consultation") && vault.read(leftOutKey)!=null)notice=CONSULTATION_LEFT_OUT_NOTICE;recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)reportDone();Performance.start("report_ui");screen="editor"
     }
     fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
     private fun reformatOrRetry(ai:Boolean,format:String)=runTask("Preparing your report"){draftQuick(ai,format)}

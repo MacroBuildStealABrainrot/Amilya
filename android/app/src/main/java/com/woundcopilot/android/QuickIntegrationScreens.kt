@@ -99,7 +99,7 @@ import java.time.format.DateTimeFormatter
                 else if(fits)Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
                 else Text(CONSULTATION_DIALOG_TOO_LONG,color=MaterialTheme.colorScheme.error)
                 DocumentTypeSelector(format,true){format=it}
-                if(choices.size>1)TextButton({s.reportWithoutConversation(format)}){Text("New report from photos and files only")}
+                if(choices.size>1)TextButton({s.reportWithoutConversation(format)}){Text("New report without the conversation")}
                 Text("Closing without a report discards this conversation.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
             confirmButton={TextButton({if(choices.first()==ConsultationChoice.CREATE_WITHOUT_CONVERSATION)s.reportWithoutConversation(format) else s.reportFromConsultant(format)}){Text(when(choices.first()){
