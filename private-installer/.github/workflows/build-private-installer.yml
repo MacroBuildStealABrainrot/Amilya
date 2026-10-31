@@ -4,9 +4,8 @@ name: build-private-installer
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Public source branch or commit to build"
-        default: "fix/private-installer-prep"
+      commit:
+        description: "Full 40-letter commit code (from the reviewed, merged version). A branch name is not accepted."
         required: true
 permissions:
   contents: read
@@ -22,16 +21,22 @@ jobs:
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           [ "$(gh api repos/${{ github.repository }} --jq .private)" = "true" ] || { echo "::error::This repository is PUBLIC. Nothing was built."; exit 1; }
+      - name: Check the commit code and that the signing secret exists
+        env: { COMMIT: "${{ inputs.commit }}", BUNDLE: "${{ secrets.AMILYA_SIGNING_BUNDLE }}" }
+        run: |
+          echo "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "::error::Enter the full 40-letter commit code, not a branch name."; exit 1; }
+          [ -n "$BUNDLE" ] || { echo "::error::The secret AMILYA_SIGNING_BUNDLE is missing. Run make-signing-key and copy its file into that secret."; exit 1; }
       - uses: actions/checkout@v4
-        with: { path: keys }
-      - name: Check a signing key exists
-        run: test -f keys/signing/amilya-private-test.jks || { echo "::error::No signing key yet. Run make-signing-key first."; exit 1; }
-      - uses: actions/checkout@v4
-        with: { repository: "${{ env.PUBLIC_REPO }}", ref: "${{ inputs.ref }}", path: src }
+        with: { repository: "${{ env.PUBLIC_REPO }}", ref: "${{ inputs.commit }}", path: src, fetch-depth: 0 }
+      - name: Only build a commit that was REVIEWED and MERGED into test/isolated-safety
+        run: |
+          git -C src fetch -q origin test/isolated-safety
+          git -C src merge-base --is-ancestor "${{ inputs.commit }}" origin/test/isolated-safety || { echo "::error::This commit is not in test/isolated-safety (not reviewed and merged). Not signing it."; exit 1; }
+          [ "$(git -C src rev-parse HEAD)" = "${{ inputs.commit }}" ] || { echo "::error::Checked-out code does not match the commit."; exit 1; }
       - name: Require that the PUBLIC build and tests passed for this exact version
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          SHA="$(git -C src rev-parse HEAD)"; echo "SOURCE_SHA=$SHA" >> "$GITHUB_ENV"
+          SHA="${{ inputs.commit }}"; echo "SOURCE_SHA=$SHA" >> "$GITHUB_ENV"
           OK="$(gh api "repos/$PUBLIC_REPO/actions/runs?head_sha=$SHA&status=completed" --jq '[.workflow_runs[]|select(.name=="amilya-sandbox-ci" and .conclusion=="success")]|length')"
           [ "$OK" -ge 1 ] || { echo "::error::The public build and tests have not passed for $SHA. Not building an installer."; exit 1; }
           echo "::notice title=Source::$SHA passed the public build and tests"
@@ -45,12 +50,20 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || test ${PIPESTATUS[1]} -eq 0
           "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
+      - name: Unpack the signing secret (outside the code folder, never uploaded)
+        env: { BUNDLE: "${{ secrets.AMILYA_SIGNING_BUNDLE }}" }
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$BUNDLE" | sed -n 3p | base64 -d > "$RUNNER_TEMP/amilya-private-test.jks"
+          echo "WCP_SIGN_KEYSTORE=$RUNNER_TEMP/amilya-private-test.jks" >> "$GITHUB_ENV"
+          echo "WCP_SIGN_STORE_PASSWORD=$(printf '%s\n' "$BUNDLE" | sed -n 1p)" >> "$GITHUB_ENV"
+          echo "WCP_SIGN_KEY_PASSWORD=$(printf '%s\n' "$BUNDLE" | sed -n 1p)" >> "$GITHUB_ENV"
+          echo "WCP_SIGN_KEY_ALIAS=amilyaprivate" >> "$GITHUB_ENV"
+          echo "EXPECTED_FP=$(printf '%s\n' "$BUNDLE" | sed -n 2p)" >> "$GITHUB_ENV"
       - name: Build and sign the isolated test app
         working-directory: src/android
         run: |
           set -euo pipefail
-          set -a; . "$GITHUB_WORKSPACE/keys/signing/signing.env"; set +a
-          export WCP_SIGN_KEYSTORE="$GITHUB_WORKSPACE/keys/signing/amilya-private-test.jks"
           chmod +x gradlew
           ./gradlew --no-daemon :app:assembleIsolatedTest
       - name: Check the installer
@@ -63,14 +76,15 @@ jobs:
           "$BT"aapt2 dump badging "$APK" | grep -E "versionName|application-label:" | head -3
           "$BT"apksigner verify --verbose --print-certs "$APK" | tee certs.txt
           FP="$(grep 'SHA-256 digest' certs.txt | head -1 | sed 's/.*: //' | tr a-f A-F | sed 's/../&:/g;s/:$//')"
-          EXPECTED="$(tr -d ':' < keys/signing/FINGERPRINT.txt | tr a-f A-F)"
+          EXPECTED="$(echo "$EXPECTED_FP" | tr -d ':' | tr a-f A-F)"
           [ "$(echo "$FP" | tr -d ':')" = "$EXPECTED" ] || { echo "::error::The installer is not signed with the new private key"; exit 1; }
           [ "$FP" != "$OLD_RETIRED_KEY_SHA256" ] || { echo "::error::Signed with the RETIRED public key"; exit 1; }
           echo "::notice title=Signed with the NEW private key::$FP"
-          # The test-server address is inside the app. The live address must not be the one the app is built to use.
-          mkdir -p dex && unzip -q -o "$APK" 'classes*.dex' -d dex
-          cat dex/classes*.dex | strings | grep -q "amilya-repair-test.onrender.com/api/v1" || { echo "::error::test server address missing"; exit 1; }
-          echo "::notice title=Test server::built to use https://amilya-repair-test.onrender.com/api/v1 (the isolated test server)"
+          # What the app is COMPILED to use, read from its generated settings file (not a search through the app).
+          BC="$(find src/android/app/build/generated -path '*isolatedTest*' -name BuildConfig.java | head -1)"
+          grep -q 'API_BASE_URL = "https://amilya-repair-test.onrender.com/api/v1"' "$BC" || { echo "::error::not built for the isolated test server"; exit 1; }
+          grep -q 'ISOLATED_TEST = true' "$BC" || { echo "::error::ISOLATED_TEST is not true"; exit 1; }
+          echo "::notice title=Test server::compiled to use ONLY https://amilya-repair-test.onrender.com/api/v1 . Whether it really connects is proved only when you sign in on the Samsung."
           mkdir -p out && cp "$APK" "out/Amilya-Private-Test-1.8.5-test15r.apk"
           sha256sum out/*.apk | tee out/SHA256.txt
           echo "::notice title=Installer SHA-256::$(cut -c1-16 out/SHA256.txt)… from source $SOURCE_SHA"

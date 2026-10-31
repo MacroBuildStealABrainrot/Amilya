@@ -175,6 +175,7 @@ jobs:
           cp -r android/wear-contract/build/reports ci-out/reports/wear-contract 2>/dev/null || true
           cp gradle-build.log build-flags.log ci-out/ 2>/dev/null || true
       - name: Public builds contain NO installer (fails the build if one would be uploaded)
+        id: noinstaller
         if: always()
         run: |
           if find ci-out -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.keystore' -o -name '*.jks' \) | grep -q .; then
@@ -182,7 +183,8 @@ jobs:
           fi
           echo "::notice title=No installer uploaded::Public builds upload only logs and test reports. Installers are made in the private build repository."
       - uses: actions/upload-artifact@v4
-        if: always()
+        # Test logs are kept even when a test failed, but NEVER when the no-installer check failed: a failed check blocks the upload.
+        if: always() && steps.noinstaller.outcome == 'success'
         with:
           name: amilya-build-evidence
           path: "ci-out/*.log\nci-out/reports/"
