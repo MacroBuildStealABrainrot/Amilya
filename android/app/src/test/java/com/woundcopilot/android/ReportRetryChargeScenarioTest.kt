@@ -17,14 +17,17 @@ import org.junit.Test
  * Three numbers are counted at the end: results created, AI calls that wrote a result, charges recorded. The safe result is 1, 1, 1.
  */
 class ReportRetryChargeScenarioTest {
-    private enum class Mode { OK, REPLY_LOST, REFUSED_403, PROVIDER_DOWN }
+    private enum class Mode { OK, REPLY_LOST, REFUSED_403, PROVIDER_DOWN, REFUSES_CHAT_422 }
     private class Reply(val status: Int, val text: String? = null, val reportState: String? = null)
 
     private class FakeServer {
         val results = mutableMapOf<String, String>()
         var created = 0; var aiCalls = 0; var charges = 0
         val failedAttempts = mutableMapOf<String, Int>()
+        val requests = mutableListOf<String>()      // every payload that reached the server, in order
         fun request(code: String, payload: String, mode: Mode): Reply {
+            requests += payload
+            if (mode == Mode.REFUSES_CHAT_422 && "\"consultation\"" in payload) return Reply(422)   // checked before any work: nothing created, nothing charged
             if (mode == Mode.REFUSED_403) return Reply(403)                         // refused before any work: nothing created, nothing charged
             if (mode == Mode.PROVIDER_DOWN && code !in results) {
                 val n = (failedAttempts[code] ?: 0) + 1; failedAttempts[code] = n
@@ -32,7 +35,7 @@ class ReportRetryChargeScenarioTest {
             }
             if (code !in results) {
                 // The text is written from what the request contains, so a request without the conversation misses it.
-                results[code] = "FAKE RESULT" + (if ("OBSERVATION-ONLY-IN-CHAT" in payload) " + OBSERVATION-ONLY-IN-CHAT" else "")
+                results[code] = "FAKE RESULT" + (if ("OBSERVATION-ONLY-IN-CHAT" in payload) " + OBSERVATION-ONLY-IN-CHAT" else "") + (if ("right heel" in payload) " + right heel" else "")
                 created++; aiCalls++; charges++
             }
             return if (mode == Mode.REPLY_LOST) Reply(504) else Reply(200, results.getValue(code))   // 504: the work was done, only a middle-man's error reaches the phone
@@ -69,6 +72,31 @@ class ReportRetryChargeScenarioTest {
             if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointer(pointer) }
             else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
             return reply
+        }
+
+
+        // ---- Ask Consultant conversation: sent whole or not at all (same order as AppState.draftQuick) ----
+        var includeChat = true                      // AppState.reportFromConsultation
+        class Outcome(val reply: Reply?, val message: String?)
+        fun generateFromChat(server: FakeServer, mode: Mode, chat: List<String>, attachedFileText: String, sourcesVersion: String = "1"): Outcome {
+            val pointer = "pending-report"
+            val earlier = journal.pendingFor(pointer, sourcesVersion)
+            val used = if (includeChat && earlier == null) chat.filter { it.isNotBlank() } else emptyList()
+            if (used.isNotEmpty() && !consultationFits(used)) { includeChat = false; return Outcome(null, CONSULTATION_TOO_LONG_MESSAGE) }   // stop: nothing is sent
+            val payload = "{\"template\":\"nursing\",\"sources\":\"$attachedFileText\"" + (if (used.isNotEmpty()) ",\"consultation\":\"${used.joinToString(" | ")}\"" else "") + "}"
+            val ownName = "pending-quick-report-$sourcesVersion" + if (used.isNotEmpty()) "-consult-abc" else ""
+            val storage = earlier?.first ?: ownName
+            journal.point(pointer, sourcesVersion, storage)
+            val record = journal.open(storage, payload)
+            record.response?.let { return Outcome(Reply(200, it), null) }
+            codesUsed += record.code
+            val reply = server.request(record.code, record.payload, mode)
+            if (reply.status == 200) { journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointer(pointer) }
+            else if (reply.status == 422 && "\"consultation\"" in record.payload) {
+                journal.forget(storage); journal.clearPointer(pointer); includeChat = false
+                return Outcome(null, CONSULTATION_REFUSED_MESSAGE)                  // no automatic second attempt without the conversation
+            } else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
+            return Outcome(reply, null)
         }
 
         /** "Improve wording" / "Apply correction": one request per button, named after the report text. */
@@ -193,5 +221,42 @@ class ReportRetryChargeScenarioTest {
         val store = MapStore(); val j = RequestJournal(store) { "c" }
         j.open("k", "{}"); j.afterError("k", "/encounters/E1/quick-report", true, 409, false, null)
         assertEquals("c", RequestJournal(store) { "other" }.open("k", "{}").code)
+    }
+
+    private fun longChat() = listOf("right heel: dressing changed, 2 cm wound") + List(39) { "x".repeat(1100) }     // 40 messages, over 40,000 letters
+
+    @Test fun conversationTooLong_nothingIsSent_chatIsKept_noReportWithoutIt() {
+        val server = FakeServer(); val phone = Phone(MapStore()); val chat = longChat()
+        val out = phone.generateFromChat(server, Mode.OK, chat, "wound edges clean, no mention of any heel")
+        assertEquals(CONSULTATION_TOO_LONG_MESSAGE, out.message)
+        assertEquals("zero automatic attempts to write a report without the conversation", 0, server.requests.size)
+        assertEquals("the conversation is preserved", 40, chat.size); assertTrue(chat[0].contains("right heel"))
+        assertEquals(0, server.created); assertEquals(0, server.charges)
+        // Only the nurse's own next choice (Document -> Generate report) writes a report without it, and then the screen says what happened.
+        assertEquals(200, phone.generateFromChat(server, Mode.OK, chat, "wound edges clean, no mention of any heel").reply!!.status)
+        assertEquals(1, server.requests.size); assertTrue(!server.requests[0].contains("consultation"))
+    }
+
+    @Test fun lostReply_thenTheConversationGrowsTooLong_theSameRequestIsResumed_noSecondCharge() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val short = listOf("right heel: dressing changed")
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, short, "file without the heel").reply!!.status)   // finished and charged, reply lost
+        phone.reopenApp(); phone.includeChat = true
+        val out = phone.generateFromChat(server, Mode.OK, short + List(39) { "x".repeat(1100) }, "file without the heel")        // chat is now too long
+        assertEquals(200, out.reply!!.status)
+        assertTrue("the paid report still has the heel observation: ${out.reply.text}", out.reply.text!!.contains("right heel"))
+        assertTrue("every request that reached the server contained the conversation", server.requests.all { it.contains("right heel") })
+        assertEquals(1, phone.codesUsed.toSet().size)
+        check("lost reply, then chat too long", server)
+    }
+
+    @Test fun serverRefusesTheConversation422_noAutomaticAttemptWithoutIt_nothingCharged() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val out = phone.generateFromChat(server, Mode.REFUSES_CHAT_422, listOf("right heel: dressing changed"), "file without the heel")
+        assertEquals(CONSULTATION_REFUSED_MESSAGE, out.message)
+        assertEquals("exactly one request, none without the conversation", 1, server.requests.size)
+        assertTrue(server.requests[0].contains("right heel"))
+        assertEquals(0, server.created); assertEquals(0, server.charges)
+        assertTrue("the refused request is not resumed later", phone.journal.pendingFor("pending-report", "1") == null)
     }
 }

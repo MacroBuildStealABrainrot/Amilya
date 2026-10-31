@@ -73,3 +73,20 @@ class RequestJournalTest {
         j.open("b", "{}"); j.afterError("b", "/encounters/E1/evidence", false, 503, true, null); assertTrue("b" in store.data)
     }
 }
+
+/** The conversation limits match the server's and nothing is ever cut or dropped quietly. */
+class ConsultationLimitsTest {
+    @Test fun exactlyTheServersLimitsFit() {
+        assertTrue(consultationFits(List(40) { "x".repeat(1000) }))                      // 40 messages, 40,000 letters
+        assertTrue(consultationFits(listOf("y".repeat(10000))))
+    }
+    @Test fun overTheLimitsDoNotFit() {
+        assertFalse(consultationFits(List(41) { "x" }))                                  // 41 messages
+        assertFalse(consultationFits(listOf("y".repeat(10001))))                         // one message too long
+        assertFalse(consultationFits(List(40) { "x".repeat(1001) }))                     // 40,040 letters in all
+        assertFalse(consultationFits(List(40) { "x".repeat(1100) }))                     // the case the reviewer measured: 44,000
+    }
+    @Test fun spacesAroundAMessageDoNotCount_theServerTrimsThem() {
+        assertTrue(consultationFits(List(40) { "  " + "x".repeat(1000) + "  " }))
+    }
+}

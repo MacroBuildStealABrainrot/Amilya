@@ -769,14 +769,19 @@ class AppState(application:Application):AndroidViewModel(application) {
         val start=localRevision;val sourceRevision=revision
         val payload=obj("template" to format,"use_ai" to ai,"preferred_length" to reportLength)
         if(format=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
-        val consultation=if(reportFromConsultation)consultantMessages.filter{it.str("content").isNotBlank()}.takeLast(40)
-            .map{obj("role" to (if(it.str("role")=="user")"user" else "assistant"),"content" to it.str("content").take(10000))} else emptyList()
-        if(consultation.isNotEmpty())payload.put("consultation",JSONArray(consultation))
-        var intent="quick-report-$sourceRevision"+if(consultation.isEmpty())"" else "-consult-"+hash(canonical(JSONArray(consultation))).take(16)
         // An unfinished (maybe already paid) AI report of this visit is resumed exactly as it was sent, with its own request code,
         // even if the settings are different now (for example after reopening the app, when "include the conversation" starts off).
         val pointer=storeKey("pending-report")
         val earlier=if(ai && !demo)journal.pendingFor(pointer,sourceRevision.toString(),::legacyRecord) else null
+        // The conversation is sent whole or not at all: it is never shortened, never cut to its newest messages, and never silently left out.
+        val chat=if(reportFromConsultation && earlier==null)consultantMessages.filter{it.str("content").isNotBlank()} else emptyList()
+        if(chat.isNotEmpty() && !consultationFits(chat.map{it.str("content")})){
+            reportFromConsultation=false   // the next Generate report is then the nurse's own choice to go without it
+            throw IllegalArgumentException(CONSULTATION_TOO_LONG_MESSAGE)
+        }
+        val consultation=chat.map{obj("role" to (if(it.str("role")=="user")"user" else "assistant"),"content" to it.str("content"))}
+        if(consultation.isNotEmpty())payload.put("consultation",JSONArray(consultation))
+        var intent="quick-report-$sourceRevision"+if(consultation.isEmpty())"" else "-consult-"+hash(canonical(JSONArray(consultation))).take(16)
         if(earlier!=null){
             val sent=JSONObject(earlier.second.payload)
             for(k in payload.keys().asSequence().toList())payload.remove(k)
@@ -788,11 +793,10 @@ class AppState(application:Application):AndroidViewModel(application) {
         fun reportDone(){journal.forget(reportStorage);journal.clearPointer(pointer)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
             if(e.status!=422 || !payload.has("consultation"))throw e
-            // An older server cannot read the conversation yet: still write the report from the attachments, and say so.
-            recordingNotice=listOfNotNull(recordingNotice,"This server cannot include the conversation yet, so the report uses only your attached photos and files.").joinToString("\n")
-            payload.remove("consultation");intent="quick-report-$sourceRevision"
-            reportStorage=journalKey(intent,payload);if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
-            mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)
+            // The server checked the conversation and refused it before doing any work, and it will refuse this exact request every
+            // time (so no earlier try can have finished). Never write the report without the conversation on our own: stop and say so.
+            reportDone();reportFromConsultation=false
+            throw IllegalArgumentException(CONSULTATION_REFUSED_MESSAGE)
         }
         val response=if(demo)sampleDocument(case!!,reportFormat)
             else try{
