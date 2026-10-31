@@ -1,0 +1,33 @@
+# RUN ONCE. Makes the new signing key for the private Amilya test installer and saves it inside THIS PRIVATE repository.
+# The key is never shown in a log, never put in the public code, and never sent to anyone.
+name: make-signing-key
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  make-key:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse to run unless this repository is PRIVATE
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          [ "$(gh api repos/${{ github.repository }} --jq .private)" = "true" ] || { echo "::error::This repository is PUBLIC. Make it private first. Nothing was created."; exit 1; }
+      - name: Stop if a key already exists (a key is made only once)
+        run: |
+          if [ -f signing/amilya-private-test.jks ]; then echo "::error::A signing key already exists. Nothing changed."; exit 1; fi
+      - name: Make the key and save it in this private repository
+        run: |
+          set -euo pipefail
+          mkdir -p signing
+          PW="$(openssl rand -hex 24)"
+          keytool -genkeypair -keystore signing/amilya-private-test.jks -storetype PKCS12 -alias amilyaprivate \
+            -keyalg RSA -keysize 4096 -validity 9125 -storepass "$PW" -keypass "$PW" \
+            -dname "CN=Amilya Private Test, O=Amilya test only" >/dev/null 2>&1
+          printf 'WCP_SIGN_STORE_PASSWORD=%s\nWCP_SIGN_KEY_PASSWORD=%s\nWCP_SIGN_KEY_ALIAS=amilyaprivate\n' "$PW" "$PW" > signing/signing.env
+          FP="$(keytool -list -v -keystore signing/amilya-private-test.jks -storepass "$PW" 2>/dev/null | grep 'SHA256:' | head -1 | sed 's/.*SHA256: //')"
+          echo "$FP" > signing/FINGERPRINT.txt
+          echo "::notice title=New key made::Fingerprint (safe to share): $FP"
+          git config user.name "amilya-private-build"; git config user.email "noreply@users.noreply.github.com"
+          git add signing; git commit -qm "Add the private test signing key (private repository only)"; git push -q

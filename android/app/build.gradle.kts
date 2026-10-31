@@ -14,8 +14,8 @@ android {
         buildConfigField("boolean", "REPAIR_SERVER", "false")
         buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
         buildConfigField("boolean", "ISOLATED_TEST", "false")
-        versionCode = 50
-        versionName = "1.8.5-test15q"
+        versionCode = 51
+        versionName = "1.8.5-test15r"
         manifestPlaceholders["appLabel"] = "WoundCoPilot"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
@@ -26,12 +26,17 @@ android {
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; buildConfig = true }
-    // TEST-ONLY signing key for the Pilot app, so every new Pilot build can update the last one in place
-    // (CI used to make a new random key each run). Never used for the release app.
-    val pilotKeystore = rootProject.file("../ci/pilot-test.keystore")
+    // NO signing key is kept in this public code. The old test key was published here by mistake and is retired.
+    // Public builds are signed with the automatic debug key and are never offered for download (see the CI workflow).
+    // The private installer is signed ONLY inside the private build repository, which passes the key in through these
+    // environment variables. Without them the app is simply not signed with it.
+    val privateKeystore = System.getenv("WCP_SIGN_KEYSTORE")?.let { file(it) }
     signingConfigs {
-        if (pilotKeystore.exists()) create("pilotTest") {
-            storeFile = pilotKeystore; storePassword = "pilottest"; keyAlias = "pilottest"; keyPassword = "pilottest"
+        if (privateKeystore != null && privateKeystore.exists()) create("privateInstaller") {
+            storeFile = privateKeystore
+            storePassword = System.getenv("WCP_SIGN_STORE_PASSWORD")
+            keyAlias = System.getenv("WCP_SIGN_KEY_ALIAS")
+            keyPassword = System.getenv("WCP_SIGN_KEY_PASSWORD")
         }
     }
     buildTypes {
@@ -61,7 +66,6 @@ android {
             applicationIdSuffix = ".pilot2"
             versionNameSuffix = "-pilot"
             manifestPlaceholders["appLabel"] = "Amilya Test 15"
-            if (pilotKeystore.exists()) signingConfig = signingConfigs.getByName("pilotTest")
             buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
             buildConfigField("boolean", "SANDBOX", "false")
             buildConfigField("boolean", "CRASH_SAFE_RECORDING", "false")
@@ -97,9 +101,11 @@ android {
         // live Cloud Run service. Its own package, so it installs beside every other build and shares no data with them.
         create("isolatedTest") {
             initWith(getByName("pilot"))
-            applicationIdSuffix = ".isolated"
-            versionNameSuffix = "-isolated"
-            manifestPlaceholders["appLabel"] = "Amilya Isolated Test"
+            // ".isolated2": a NEW package, so it installs BESIDE the older isolated app (signed with the retired key) and never touches its data.
+            applicationIdSuffix = ".isolated2"
+            versionNameSuffix = "-isolated2"
+            manifestPlaceholders["appLabel"] = "Amilya Private Test"
+            if (signingConfigs.findByName("privateInstaller") != null) signingConfig = signingConfigs.getByName("privateInstaller")
             buildConfigField("boolean", "ISOLATED_TEST", "true")
             buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
             buildConfigField("boolean", "REPAIR_SERVER", "false")
