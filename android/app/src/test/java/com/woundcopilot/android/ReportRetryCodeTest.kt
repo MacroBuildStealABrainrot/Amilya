@@ -6,22 +6,22 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** An AI report retry keeps the SAME request code until the server says the request is over, so a finished report is never paid for twice. */
+/** An AI request retry keeps the SAME request code until the server says the request is over, so a finished report is never paid for twice. */
 class ReportRetryCodeTest {
-    @Test fun anythingUncertainKeepsTheCode() {
-        for (status in listOf(404, 409, 429, 500, 502, 503, 504)) assertTrue("$status", reportCodeKept(status, ambiguous = false, reportState = null))
-        for (status in listOf(0, 409, 502, 504)) assertTrue("unreadable $status", reportCodeKept(status, ambiguous = true, reportState = null))
-    }
-    @Test fun manyErrorsInARowNeverGiveTheCodeUp() {
-        repeat(100) { assertTrue(reportCodeKept(504, ambiguous = false, reportState = null)) }
+    @Test fun everyErrorKeepsTheCode_aRefusedLaterTryTellsNothingAboutTheEarlierOne() {
+        // Only the server's own "ended-no-charge" answer is a reason to give the code up.
+        assertTrue(reportCodeKept(null))
+        assertTrue(reportCodeKept("something-else"))
     }
     @Test fun onlyTheServersEndedNoChargeAnswerGivesTheCodeUp() {
-        assertFalse(reportCodeKept(502, ambiguous = false, reportState = REPORT_ENDED_NO_CHARGE))
-        assertFalse(reportCodeKept(504, ambiguous = false, reportState = REPORT_ENDED_NO_CHARGE))
-        assertTrue(reportCodeKept(502, ambiguous = false, reportState = "something-else"))
+        assertFalse(reportCodeKept(REPORT_ENDED_NO_CHARGE))
     }
-    @Test fun aRequestRefusedBeforeAnyWorkDropsTheCode() {
-        for (status in listOf(400, 402, 403, 413, 415, 422)) assertFalse("$status", reportCodeKept(status, ambiguous = false, reportState = null))
+    @Test fun everyButtonThatCanCallTheAiKeepsItsCode() {
+        for (path in listOf("/encounters/E1/quick-report", "/encounters/E1/refine-report", "/encounters/E1/improve-report",
+            "/encounters/E1/improve-assessment", "/encounters/E1/consult", "/encounters/E1/draft")) assertTrue(path, chargedAiPath(path))
+    }
+    @Test fun requestsThatCannotBeChargedKeepTheirEarlierRule() {
+        for (path in listOf("/encounters/E1/evidence", "/encounters/E1/documents", "/quick/start")) assertFalse(path, chargedAiPath(path))
     }
 }
 
@@ -57,9 +57,9 @@ class RequestJournalTest {
     }
     @Test fun anErrorThatKeepsTheCodeLeavesTheNote_andOnlyTheEndedAnswerRemovesIt() {
         val store = MapStore(); val j = journal(store); j.open("k", "{}")
-        j.afterReportError("k", 504, false, null); assertTrue("k" in store.data)
-        j.afterReportError("k", 409, false, null); assertTrue("k" in store.data)
-        j.afterReportError("k", 502, false, REPORT_ENDED_NO_CHARGE); assertFalse("k" in store.data)
+        val path = "/encounters/E1/quick-report"
+        for (status in listOf(504, 409, 403, 402, 422, 404, 502)) { j.afterError("k", path, true, status, false, null); assertTrue("$status", "k" in store.data) }
+        j.afterError("k", path, true, 502, false, REPORT_ENDED_NO_CHARGE); assertFalse("k" in store.data)
     }
     @Test fun aNoteFromAnOlderBuildKeepsItsCode() {
         val store = MapStore(); store.data["k"] = "{\"key\":\"old-code\"}"
@@ -69,7 +69,7 @@ class RequestJournalTest {
     }
     @Test fun otherRequestsKeepTheirEarlierRule() {
         val store = MapStore(); val j = journal(store)
-        j.open("a", "{}"); j.afterOtherError("a", 503, false); assertFalse("a" in store.data)
-        j.open("b", "{}"); j.afterOtherError("b", 503, true); assertTrue("b" in store.data)
+        j.open("a", "{}"); j.afterError("a", "/encounters/E1/evidence", false, 503, false, null); assertFalse("a" in store.data)
+        j.open("b", "{}"); j.afterError("b", "/encounters/E1/evidence", false, 503, true, null); assertTrue("b" in store.data)
     }
 }

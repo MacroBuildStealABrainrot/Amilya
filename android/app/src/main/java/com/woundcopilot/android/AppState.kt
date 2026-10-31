@@ -425,8 +425,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     },{UUID.randomUUID().toString()})
     /** Notes written by older builds were JSON: read them once so a request already in flight keeps its code. */
     private fun legacyRecord(raw:String):RequestRecord?=runCatching{val o=JSONObject(raw);RequestRecord(o.getString("key"),o.getJSONObject("payload").toString(),o.optJSONObject("response")?.toString())}.getOrNull()
-    private suspend fun mutation(intent:String,path:String,payload:JSONObject,keepCodeOnServerError:Boolean=false):JSONObject{
-        val storage=journalKey(intent,payload)
+    private suspend fun mutation(intent:String,path:String,payload:JSONObject,keepCodeOnServerError:Boolean=false,storageName:String?=null):JSONObject{
+        val storage=storageName?:journalKey(intent,payload)
         val record=journal.open(storage,payload.toString(),::legacyRecord)
         record.response?.let{return JSONObject(it)}
         try{
@@ -435,8 +435,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         }catch(e:ApiException){
             // AI report: keep the SAME request code for every retry, also after the app is closed and reopened, so a report the
             // server already finished is sent back without a new AI call or charge. See reportCodeKept.
-            if(keepCodeOnServerError)journal.afterReportError(storage,e.status,e.ambiguous,e.reportState)
-            else journal.afterOtherError(storage,e.status,e.ambiguous)
+            journal.afterError(storage,path,keepCodeOnServerError,e.status,e.ambiguous,e.reportState)
             throw e
         }
     }
@@ -774,14 +773,28 @@ class AppState(application:Application):AndroidViewModel(application) {
             .map{obj("role" to (if(it.str("role")=="user")"user" else "assistant"),"content" to it.str("content").take(10000))} else emptyList()
         if(consultation.isNotEmpty())payload.put("consultation",JSONArray(consultation))
         var intent="quick-report-$sourceRevision"+if(consultation.isEmpty())"" else "-consult-"+hash(canonical(JSONArray(consultation))).take(16)
-        suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true)}catch(e:ApiException){
-            if(consultation.isEmpty() || e.status!=422 || !payload.has("consultation"))throw e
+        // An unfinished (maybe already paid) AI report of this visit is resumed exactly as it was sent, with its own request code,
+        // even if the settings are different now (for example after reopening the app, when "include the conversation" starts off).
+        val pointer=storeKey("pending-report")
+        val earlier=if(ai && !demo)journal.pendingFor(pointer,sourceRevision.toString(),::legacyRecord) else null
+        if(earlier!=null){
+            val sent=JSONObject(earlier.second.payload)
+            for(k in payload.keys().asSequence().toList())payload.remove(k)
+            for(k in sent.keys())payload.put(k,sent.get(k))
+        }
+        val reportFormat=payload.optString("template",format)
+        var reportStorage=earlier?.first?:journalKey(intent,payload)
+        if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
+        fun reportDone(){journal.forget(reportStorage);journal.clearPointer(pointer)}
+        suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
+            if(e.status!=422 || !payload.has("consultation"))throw e
             // An older server cannot read the conversation yet: still write the report from the attachments, and say so.
             recordingNotice=listOfNotNull(recordingNotice,"This server cannot include the conversation yet, so the report uses only your attached photos and files.").joinToString("\n")
             payload.remove("consultation");intent="quick-report-$sourceRevision"
-            mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true)
+            reportStorage=journalKey(intent,payload);if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
+            mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)
         }
-        val response=if(demo)sampleDocument(case!!,format)
+        val response=if(demo)sampleDocument(case!!,reportFormat)
             else try{
                 // One quiet automatic retry: a report the checker rejected or a busy service often succeeds the second time.
                 try{request()}catch(first:ApiException){
@@ -797,12 +810,12 @@ class AppState(application:Application):AndroidViewModel(application) {
                     else "The report couldn't be finished this time. Your recording and sources are saved. Tap Try again.")
             }
         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed during generation. Your edits were preserved."}
-        if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return}
-        snapshotDraft();restoring=true;editorTemplate=format;restoring=false
-        vault.write("preferred-format-${user?.str("id")?:"sample"}",format)
+        if(!acceptDocumentResult(response)){if(!demo)reportDone();return}
+        snapshotDraft();restoring=true;editorTemplate=reportFormat;restoring=false
+        vault.write("preferred-format-${user?.str("id")?:"sample"}",reportFormat)
         Performance.end("report_request");val persistStarted=Performance.now()
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
-        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)acknowledge(intent,payload);Performance.start("report_ui");screen="editor"
+        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)reportDone();Performance.start("report_ui");screen="editor"
     }
     fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
     private fun reformatOrRetry(ai:Boolean,format:String)=runTask("Preparing your report"){draftQuick(ai,format)}
