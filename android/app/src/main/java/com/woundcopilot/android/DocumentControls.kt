@@ -48,9 +48,12 @@ internal fun orderedReportAlerts(alerts:List<Pair<String,String>>):Pair<List<Str
     return (safety+other).map{it.second} to safety.size
 }
 
-@Composable fun DocumentReviewTools(s:AppState){
-    // Safety first (owner's request 2026-10-31): EVERY warning is shown. Warnings about a medication, dose, side or
-    // measurement come first, in a clear colour, and can never be pushed out by another warning. The rest follow.
+/**
+ * Report warnings, shown ABOVE the report text so a long report cannot push them out of sight.
+ * Safety first (owner's request 2026-10-31): EVERY warning is shown; none is folded away or limited to the first.
+ */
+@Composable fun DocumentAlerts(s:AppState){
+    // Warnings about a medication, dose, side or measurement come first, in a clear colour; the rest follow.
     if(s.documentAlerts.isNotEmpty())Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
         val safety=s.documentAlertSafetyCount.coerceIn(0,s.documentAlerts.size)
         if(safety>0)Text("Check before saving or sending:",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.titleSmall)
@@ -59,6 +62,9 @@ internal fun orderedReportAlerts(alerts:List<Pair<String,String>>):Pair<List<Str
             else Text("• $message",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
         }
     }
+}
+
+@Composable fun DocumentReviewTools(s:AppState){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
         TextButton(onClick={s.improveReport()},enabled=!s.loading && s.editor.isNotBlank() && s.editorCaseRevision==s.revision,modifier=Modifier.weight(1f)){Text("Improve Report")}
         TextButton(onClick={s.improveAssessment()},enabled=!s.loading,modifier=Modifier.weight(1f)){Text("Improve Assessment")}

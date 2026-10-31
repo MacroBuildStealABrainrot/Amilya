@@ -17,6 +17,22 @@ class ReportAlertOrderTest {
         assertEquals("Metformin dose unclear: 500 or 850 mg.", all[1])
         assertEquals("Speaker attribution for one sentence is unclear.", all[2])
     }
+    @Test fun allFourSafetyWarningsAndTheGeneralNotesAreAllShownSafetyFirst() {
+        val input = listOf(
+            "review" to "Speaker attribution for one sentence is unclear.",
+            "medication" to "Medication name may be misheard: Keflex or Cipro.",
+            "review" to "Caregiver remark could belong to the client.",
+            "dose" to "Dose unclear: 500 mg or 50 mg.",
+            "wound" to "Side unclear: left or right heel.",
+            "measurement" to "Length heard as 3.5 cm; could be 5.3 cm.")
+        val (all, safety) = orderedReportAlerts(input)
+        assertEquals("every warning is kept", 6, all.size)
+        assertEquals("four safety warnings", 4, safety)
+        assertEquals(listOf("Medication name may be misheard: Keflex or Cipro.", "Dose unclear: 500 mg or 50 mg.",
+            "Side unclear: left or right heel.", "Length heard as 3.5 cm; could be 5.3 cm."), all.take(4))
+        assertEquals(listOf("Speaker attribution for one sentence is unclear.", "Caregiver remark could belong to the client."), all.drop(4))
+        assertTrue(all.containsAll(input.map { it.second }))
+    }
     @Test fun eachSafetyKindIsRecognised() {
         assertTrue(SafetyAlert.MEDICATION in safetyKinds("", "Medication name may be misheard."))
         assertTrue(SafetyAlert.DOSE in safetyKinds("", "Insulin 10 units or 15 units?"))

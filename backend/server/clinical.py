@@ -60,6 +60,9 @@ def iso(value):
 
 
 CONSENT_METHODS = {'phone_tap', 'watch_tap'}
+CONSENT_MEANING = ('The signed-in clinician tapped to confirm that the client agreed to recording. '
+                   'This is the clinician\'s confirmation, not the client\'s own signature or recorded consent.')
+CONSENT_NOT_RECORDED = 'No tap confirmation was recorded by the app (older app version). This is not evidence of consent.'
 
 
 def consent_record(method: str | None, confirmed_at: str | None, wording: str | None) -> dict:
@@ -69,8 +72,10 @@ def consent_record(method: str | None, confirmed_at: str | None, wording: str | 
     as a method: the app requires a tap by the clinician holding the phone or wearing the watch.
     """
     if method not in CONSENT_METHODS:
-        return {'method': 'not_recorded'}
-    record = {'method': method}
+        return {'method': 'not_recorded', 'meaning': CONSENT_NOT_RECORDED}
+    # WHOSE action: the signed-in clinician's tap (the recording's created_by is that account). It is NOT the client's
+    # own signature or recorded statement, and must never be presented as one.
+    record = {'method': method, 'confirmed_by': 'signed_in_clinician', 'meaning': CONSENT_MEANING}
     if isinstance(confirmed_at, str) and 0 < len(confirmed_at) <= 40 and re.fullmatch(r'[0-9T:.+\-Z]+', confirmed_at):
         record['confirmed_at_device'] = confirmed_at
     if isinstance(wording, str) and re.fullmatch(r'[a-z0-9-]{1,40}', wording):

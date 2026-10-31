@@ -81,6 +81,7 @@ fun QuickReportScreen(s: AppState) {
                 SelectionContainer { Text(s.editor, Modifier.fillMaxWidth().padding(22.dp), style = MaterialTheme.typography.bodyLarge) }
             }
         } else {
+            DocumentAlerts(s)
             if (s.amendId != null) OutlinedTextField(
                 value = s.amendReason, onValueChange = s::updateAmendmentReason,
                 label = { Text("Reason for amendment") }, enabled = !s.loading,

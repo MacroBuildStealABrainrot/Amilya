@@ -143,6 +143,7 @@ fun issueText(value:Any?):String {if(value !is JSONObject)return prettyValue(val
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){WcpButton("Source-based draft",{if(s.editor.isBlank())s.generate(false)else replaceConfirm=false},Modifier.weight(1f),enabled=!s.loading,secondary=true);WcpButton("Generate report",{if(s.editor.isBlank())s.generate(true)else replaceConfirm=true},Modifier.weight(1f),enabled=!s.loading)}
         if(s.amendId!=null)Field("Reason for amendment",s.amendReason){s.amendReason=it;s.persistEditor()}
     }
+    if(!signed)DocumentAlerts(s)
     if(signed)Surface(color=MaterialTheme.colorScheme.surface,shape=RoundedCornerShape(12.dp)){Text(s.editor,Modifier.fillMaxWidth().padding(24.dp),style=MaterialTheme.typography.bodyLarge)}else OutlinedTextField(s.editor,{s.edit(it)},modifier=Modifier.fillMaxWidth().heightIn(min=360.dp),label={Text("Clinical document")},textStyle=MaterialTheme.typography.bodyLarge)
     Text(if(signed)"Signed · Version ${doc?.optInt("version")}" else if(s.savedId!=null)"Saved to workspace · Version ${doc?.optInt("version")}" else "Draft — Clinician Review Required",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     if(!signed)DocumentReviewTools(s)
