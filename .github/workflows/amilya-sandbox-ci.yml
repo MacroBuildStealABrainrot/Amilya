@@ -16,7 +16,7 @@ name: amilya-sandbox-ci
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, 'test/**', 'fix/**', 'combined/**' ]
+    branches: [ main, master, 'test/**', 'fix/**', 'combined/**', 'chatgpt/**' ]
 
 permissions:
   contents: read
@@ -26,6 +26,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  chatgpt-base-check:
+    # Branches named chatgpt/... are for ChatGPT's reviewed changes. They must be built on top of the reviewed safety branch,
+    # and they only run checks: no installable app and no app bundle is ever uploaded from them.
+    name: chatgpt/ branch is built on the reviewed safety branch
+    if: startsWith(github.ref, 'refs/heads/chatgpt/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require the reviewed safety commit (8815e1b) in this branch's history
+        run: |
+          git merge-base --is-ancestor 8815e1b "$GITHUB_SHA" || { echo "::error::This chatgpt/ branch was not created from test/isolated-safety (commit 8815e1b is missing)."; exit 1; }
+          echo "::notice title=chatgpt/ build::Checks only. No installable app or app bundle is uploaded from this branch."
+
   backend:
     name: Backend tests (SQLite + PostgreSQL)
     runs-on: ubuntu-24.04
@@ -161,26 +178,26 @@ jobs:
           cp gradle-build.log build-flags.log ci-out/ 2>/dev/null || true
           (cd ci-out/apks && sha256sum *.apk > SHA256SUMS.txt) || true
       - name: Prepare the one app to install
-        if: always()
+        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
         run: |
           mkdir -p ci-out/install
           cp android/app/build/outputs/apk/pilot/*.apk ci-out/install/Amilya-Test-15.apk || true
           cp android/app/build/outputs/apk/repair/*.apk ci-out/install/Amilya-Server-Test.apk || true
           cp android/app/build/outputs/apk/isolatedTest/*.apk ci-out/install/Amilya-Isolated-Test.apk || true
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
         with:
           name: INSTALL-THIS-Amilya-Isolated-Test
           path: ci-out/install/Amilya-Isolated-Test.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
         with:
           name: INSTALL-THIS-Amilya-Test-15
           path: ci-out/install/Amilya-Test-15.apk
           retention-days: 30
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
         with:
           name: amilya-apks
           path: "ci-out/apks/*.apk\nci-out/apks/SHA256SUMS.txt"
