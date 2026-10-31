@@ -62,3 +62,17 @@ internal class DocumentNotices(private val store: CodeStore, private val keyFor:
     fun save(documentId: String, notice: String?) { if (notice.isNullOrBlank()) store.remove(keyFor(documentId)) else store.write(keyFor(documentId), notice) }
     fun read(documentId: String): String? = store.read(keyFor(documentId))?.ifBlank { null }
 }
+
+/** Keeps each saved report's safety alerts (for example an unclear dose) with that report, with how many of them are safety alerts. */
+internal class DocumentAlertNotes(private val store: CodeStore, private val keyFor: (String) -> String) {
+    private val sep = "\u001f"
+    fun save(documentId: String, alerts: List<String>, safetyCount: Int) {
+        if (alerts.isEmpty()) store.remove(keyFor(documentId)) else store.write(keyFor(documentId), (listOf(safetyCount.toString()) + alerts).joinToString(sep))
+    }
+    fun read(documentId: String): Pair<List<String>, Int>? {
+        val parts = store.read(keyFor(documentId))?.split(sep) ?: return null
+        val count = parts.firstOrNull()?.toIntOrNull() ?: return null
+        val alerts = parts.drop(1).filter { it.isNotBlank() }
+        return if (alerts.isEmpty()) null else alerts to count.coerceIn(0, alerts.size)
+    }
+}

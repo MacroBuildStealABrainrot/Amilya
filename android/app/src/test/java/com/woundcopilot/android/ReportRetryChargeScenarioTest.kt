@@ -459,15 +459,30 @@ class ReportRetryChargeScenarioTest {
         assertEquals(firstA, reopened.read("A")); assertEquals(null, reopened.read("B"))
     }
 
-    @Test fun visitAFails_visitBWritten_visitBStaysClear_AKeepsItsWarning_recoveringAAddsNoCharge() {
-        val server = FakeServer(); val phone = Phone(MapStore())
-        val chat = listOf("right heel: dressing changed"); val warn = "heel.jpg could not be read."
-        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "", attachmentWarning = warn).reply!!.status)   // visit A fails; warning in memory
-        // visit B, a typed report, while the app stays open: A's in-memory warning must not apply to B
-        assertEquals("visit B gets no warning from visit A", null, attachmentNoticeForVisit("visitA", "visitB", warn))
-        assertEquals("visit A still gets its own", warn, attachmentNoticeForVisit("visitA", "visitA", warn))
-        assertEquals(null, attachmentNoticeForVisit(null, "visitA", warn))
-        val back = phone.generateFromChat(server, Mode.OK, chat, "")             // back to A: recover
-        assertEquals(warn, back.notice); assertEquals(1, server.charges)
+    @Test fun savedReports_keepTheirSafetyAlerts_A_B_A_andAfterARestart() {
+        val store = MapStore(); val alerts = DocumentAlertNotes(store) { "doc-alerts-$it" }
+        alerts.save("A", listOf("Dose unclear: 5 or 50 mg?", "Check the side."), 1)
+        alerts.save("B", emptyList(), 0)
+        assertEquals(listOf("Dose unclear: 5 or 50 mg?", "Check the side.") to 1, alerts.read("A"))
+        assertEquals(null, alerts.read("B"))
+        assertEquals(listOf("Dose unclear: 5 or 50 mg?", "Check the side.") to 1, alerts.read("A"))
+        val reopened = DocumentAlertNotes(MapStore().also { it.data.putAll(store.data) }) { "doc-alerts-$it" }
+        assertEquals(1, reopened.read("A")!!.second); assertEquals(null, reopened.read("B"))
+    }
+
+    @Test fun visitAFails_visitBReportReallyWritten_BStaysClear_AKeepsItsWarning_recoveringAAddsZeroCharges() {
+        val server = FakeServer(); val visitA = Phone(MapStore()); val visitB = Phone(MapStore())   // each visit keeps its own notes
+        val chatA = listOf("right heel: dressing changed"); val warn = "heel.jpg could not be read."
+        assertEquals(504, visitA.generateFromChat(server, Mode.REPLY_LOST, chatA, "", attachmentWarning = warn).reply!!.status)
+        assertEquals("A paid once", 1, server.charges)
+        val b = visitB.generateFromChat(server, Mode.OK, listOf("left arm: wound clean"), "")       // B's report is really written
+        assertEquals(200, b.reply!!.status); assertEquals("B shows no warning from A", null, b.notice)
+        assertEquals("B paid once", 2, server.charges)
+        assertEquals("another visit never gets A's warning", null, attachmentNoticeForVisit("visitA", "visitB", warn))
+        visitA.reopenApp()
+        val back = visitA.generateFromChat(server, Mode.OK, chatA, "")                                 // recover A
+        assertEquals(200, back.reply!!.status); assertTrue(back.reply.text!!.contains("right heel"))
+        assertEquals("A keeps its warning", warn, back.notice)
+        assertEquals("recovering A added zero charges", 2, server.charges)
     }
 }

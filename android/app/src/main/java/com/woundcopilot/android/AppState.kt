@@ -429,6 +429,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     private val journal=RequestJournal(vaultStore,{UUID.randomUUID().toString()})
     /** The warnings of each SAVED report, kept with that report so opening it from Saved versions shows its own warnings again. */
+    private val savedAlerts get()=DocumentAlertNotes(vaultStore){storeKey("doc-alerts-$it")}
     private val savedNotices get()=DocumentNotices(vaultStore){storeKey("doc-notice-$it")}
     /** Notes written by older builds were JSON: read them once so a request already in flight keeps its code. */
     private fun legacyRecord(raw:String):RequestRecord?=runCatching{val o=JSONObject(raw);RequestRecord(o.getString("key"),o.getJSONObject("payload").toString(),o.optJSONObject("response")?.toString())}.getOrNull()
@@ -949,7 +950,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         draftNotice?.let{notice=it}
     }
     fun newDocument(){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);val alertsOfThisReport=savedAlerts.read(d.str("id"));documentAlerts=alertsOfThisReport?.first?:emptyList();documentAlertSafetyCount=alertsOfThisReport?.second?:0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {
@@ -994,7 +995,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 "created_at" to now(),"fact_snapshot" to JSONArray(case?.items("facts")?.filter{it.str("confirmation_state")=="confirmed"}?:emptyList<JSONObject>()))
         }else mutation("save","/encounters/$encounterId/documents",p)
         mergeDocument(d)
-        if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");savedNotices.save(d.str("id"),draftNotice)}
+        if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");savedNotices.save(d.str("id"),draftNotice);savedAlerts.save(d.str("id"),documentAlerts,documentAlertSafetyCount)}
         persistEditor();if(!demo)acknowledge("save",p)
         notice=if(demo)"Saved in the synthetic preview." else "Exact document saved to your workspace."
         refreshAcknowledged()
