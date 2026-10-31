@@ -239,7 +239,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun snapshotDraft(){persistEditor();if(editor.isNotBlank() && savedId==null){vault.write(storeKey("draft-recovery"),draftJson().toString());hasRecoverableDraft=true}}
     fun restorePreviousDraft(){
         val d=vault.read(storeKey("draft-recovery"))?.let{runCatching{JSONObject(it)}.getOrNull()} ?: return
-        val old=draftJson();vault.write(storeKey("draft"),d.toString());restoreDraft();vault.write(storeKey("draft-recovery"),old.toString());hasRecoverableDraft=true;screen="editor"
+        val old=draftJson();vault.write(storeKey("draft"),d.toString());restoreDraft();notice=noticeForShownReport(draftNotice);vault.write(storeKey("draft-recovery"),old.toString());hasRecoverableDraft=true;screen="editor"
     }
     private fun matchesEditor(d:JSONObject)=d.str("text")==editor && d.str("template")==editorTemplate && d.str("amends_id")==amendId.orEmpty() &&
         d.str("reason")==amendReason && (editorTemplate!="custom" || d.optJSONObject("custom_template")?.let{it.str("name")==customName.trim()&&it.str("instructions")==customInstructions.trim()}==true)
@@ -811,8 +811,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         var reportStorage=earlier?.first?:journalKey(intent,payload)
         if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
         val leftOutKey=storeKey("left-out-$reportStorage")
+        // An unreadable-attachment warning is saved with the request too, so recovering after the app was fully closed still names it.
+        val attachKey=storeKey("attach-warn-$reportStorage")
+        if(ai && !demo)recordingNotice?.let{vault.write(attachKey,it)}
         if(ai && !demo && earlier==null && vault.read(storeKey("left-out-choice"))!=null){vault.write(leftOutKey,"1");vault.remove(storeKey("left-out-choice"))}
-        fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage);vault.remove(leftOutKey)}
+        fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage);vault.remove(leftOutKey);vault.remove(attachKey)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
             if(e.status!=422 || !payload.has("consultation"))throw e
             // The server refused the conversation. Never write the report without it on our own: stop and say so.
@@ -843,7 +846,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
         editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response)
         // The omission warning goes ALONGSIDE the server's warnings (never over them), and all of them are saved with the draft.
-        notice=combineReportNotices(!payload.has("consultation") && vault.read(leftOutKey)!=null,notice,recordingNotice);recordingNotice=null
+        notice=combineReportNotices(!payload.has("consultation") && vault.read(leftOutKey)!=null,notice,recordingNotice?:vault.read(attachKey));recordingNotice=null
         draftNotice=notice;persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)reportDone();Performance.start("report_ui");screen="editor"
     }
     fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
@@ -939,8 +942,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
         draftNotice?.let{notice=it}
     }
-    fun newDocument(){if(loading)return;snapshotDraft();draftNotice=null;documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=null;documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun newDocument(){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {

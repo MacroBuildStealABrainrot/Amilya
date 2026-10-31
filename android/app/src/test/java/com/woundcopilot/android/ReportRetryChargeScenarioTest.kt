@@ -79,7 +79,7 @@ class ReportRetryChargeScenarioTest {
         // ---- Ask Consultant conversation: sent whole or not at all (same order as AppState.draftQuick) ----
         var includeChat = true                      // AppState.reportFromConsultation
         class Outcome(val reply: Reply?, val message: String?, val notice: String? = null)
-        fun generateFromChat(server: FakeServer, mode: Mode, chat: List<String>, attachedFileText: String, sourcesVersion: String = "1"): Outcome {
+        fun generateFromChat(server: FakeServer, mode: Mode, chat: List<String>, attachedFileText: String, sourcesVersion: String = "1", attachmentWarning: String? = null): Outcome {
             val pointer = "pending-report"
             val earlier = journal.pendingFor(pointer, sourcesVersion)
             val used = if (includeChat && earlier == null) chat.filter { it.isNotBlank() } else emptyList()
@@ -90,13 +90,15 @@ class ReportRetryChargeScenarioTest {
             journal.point(pointer, sourcesVersion, storage)
             val leftOutKey = "left-out-$storage"
             if (earlier == null && store.read("left-out-choice") != null) { store.write(leftOutKey, "1"); store.remove("left-out-choice") }   // saved on the phone, like AppState
+            val attachKey = "attach-warn-$storage"
+            if (attachmentWarning != null) store.write(attachKey, attachmentWarning)
             val record = journal.open(storage, payload)
             // the notice is decided from what was REALLY sent and from the saved flag, never supplied by a test
-            fun noticeNow() = if ("\"consultation\"" !in record.payload && store.read(leftOutKey) != null) CONSULTATION_LEFT_OUT_NOTICE else null
-            record.response?.let { val n = noticeNow(); store.remove(leftOutKey); return Outcome(Reply(200, it), null, n) }
+            fun noticeNow() = combineReportNotices("\"consultation\"" !in record.payload && store.read(leftOutKey) != null, null, attachmentWarning ?: store.read(attachKey))
+            record.response?.let { val n = noticeNow(); store.remove(leftOutKey); store.remove(attachKey); return Outcome(Reply(200, it), null, n) }
             codesUsed += record.code
             val reply = server.request(record.code, record.payload, mode)
-            if (reply.status == 200) { val n = noticeNow(); journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage); store.remove(leftOutKey); return Outcome(reply, null, n) }
+            if (reply.status == 200) { val n = noticeNow(); journal.saveAnswer(storage, record, reply.text!!); journal.forget(storage); journal.clearPointerIfPointsTo(pointer, storage); store.remove(leftOutKey); store.remove(attachKey); return Outcome(reply, null, n) }
             else if (reply.status == 422 && "\"consultation\"" in record.payload) {
                 return Outcome(null, CONSULTATION_REFUSED_MESSAGE)                  // note AND pointer are KEPT; no automatic attempt without the conversation
             } else journal.afterError(storage, "/encounters/E1/quick-report", true, reply.status, false, reply.reportState)
@@ -423,5 +425,24 @@ class ReportRetryChargeScenarioTest {
         assertEquals("Check the dose.", combineReportNotices(false, "Check the dose.", null))
         assertEquals(null, combineReportNotices(false, null, null))
         assertTrue(!combineReportNotices(false, "Check the dose.", null)!!.contains("leave it out"))
+    }
+
+    @Test fun unreadablePhotoWarning_survivesFullRestart_andNamesThePhoto_noExtraCharge() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")
+        val warn = "heel.jpg could not be read."
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "", attachmentWarning = warn).reply!!.status)
+        phone.reopenApp(); phone.includeChat = false                      // fully closed: the in-memory warning is gone
+        val back = phone.generateFromChat(server, Mode.OK, chat, "")      // recovered through Document, nothing supplied
+        assertEquals(200, back.reply!!.status)
+        assertEquals("the saved warning names the photo", warn, back.notice)
+        assertEquals(1, server.charges)
+    }
+
+    @Test fun switchingReports_neverCarriesTheOldBanner() {
+        val banner = combineReportNotices(true, "Check the dose.", null)
+        assertEquals(banner, noticeForShownReport(banner))
+        assertEquals("an older note with no saved warning shows none", null, noticeForShownReport(null))
+        assertEquals(null, noticeForShownReport(""))
     }
 }

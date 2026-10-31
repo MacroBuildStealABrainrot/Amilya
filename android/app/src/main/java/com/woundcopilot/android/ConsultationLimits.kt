@@ -49,3 +49,6 @@ internal fun combineReportNotices(leftOutConversation: Boolean, serverWarnings: 
 /** The Document screen offers Generate report with sources, and ALSO when an earlier (maybe paid) report is waiting, even with no files. */
 internal fun showsGenerateOnDocument(editorBlank: Boolean, sourceCount: Int, earlierReportWaiting: Boolean) =
     editorBlank && (sourceCount > 0 || earlierReportWaiting)
+
+/** The warnings on screen belong to the report being shown: switching reports never carries the old banner along. */
+internal fun noticeForShownReport(savedWithThatReport: String?): String? = savedWithThatReport?.takeIf { it.isNotBlank() }
