@@ -40,3 +40,12 @@ internal fun showsReportChoicesOnDone(quickMode: String?, hasMessages: Boolean, 
 
 /** After a report from the conversation fails with nothing written, go back to the screen the nurse was on. */
 internal fun modeAfterFailedConsultantReport(before: String?, editorBlank: Boolean, current: String?) = if (editorBlank) before else current
+
+/** All warnings for a displayed report: the omission warning first, then the server's warnings, then any attachment warning. */
+internal fun combineReportNotices(leftOutConversation: Boolean, serverWarnings: String?, attachmentWarning: String?): String? =
+    listOfNotNull(if (leftOutConversation) CONSULTATION_LEFT_OUT_NOTICE else null, serverWarnings, attachmentWarning)
+        .filter { it.isNotBlank() }.joinToString("\n").ifBlank { null }
+
+/** The Document screen offers Generate report with sources, and ALSO when an earlier (maybe paid) report is waiting, even with no files. */
+internal fun showsGenerateOnDocument(editorBlank: Boolean, sourceCount: Int, earlierReportWaiting: Boolean) =
+    editorBlank && (sourceCount > 0 || earlierReportWaiting)

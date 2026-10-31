@@ -396,4 +396,32 @@ class ReportRetryChargeScenarioTest {
         assertEquals("a report that DID arrive stays on Document", "document", modeAfterFailedConsultantReport("consultant", editorBlank = false, current = "document"))
         assertEquals(listOf(ConsultationChoice.RECOVER_EARLIER, ConsultationChoice.NEW_WITHOUT_CONVERSATION), consultationChoices(true, true))
     }
+
+    @Test fun chatOnlyInTheVisit_replyLost_refusedTry_appReopened_noFile_theNurseCanStillRecoverRightHeel_oneCharge() {
+        val server = FakeServer(); val phone = Phone(MapStore())
+        val chat = listOf("right heel: dressing changed")                    // "right heel" is ONLY in the chat; the visit has no file at all
+        assertEquals(504, phone.generateFromChat(server, Mode.REPLY_LOST, chat, "").reply!!.status)       // finished and paid; reply lost
+        assertEquals(403, phone.generateFromChat(server, Mode.REFUSED_403, chat, "").reply!!.status)      // the next try is refused
+        phone.reopenApp(); phone.includeChat = false                          // closed and reopened the visit
+        assertTrue("with no file, the Document screen still offers the recovery button", showsGenerateOnDocument(true, 0, earlierReportWaiting = true))
+        assertTrue("and does not offer a plain Generate report with nothing to generate from", !showsGenerateOnDocument(true, 0, earlierReportWaiting = false))
+        val back = phone.generateFromChat(server, Mode.OK, chat, "")         // taps Recover earlier report
+        assertEquals(200, back.reply!!.status)
+        assertTrue("right heel is back: ${back.reply.text}", back.reply.text!!.contains("right heel"))
+        assertEquals("one request number", 1, phone.codesUsed.toSet().size)
+        check("chat-only recovery after reopening", server)
+    }
+
+    @Test fun omissionWarning_sitsAlongsideOtherWarnings_andSurvivesClosingAndReopeningTheDraft() {
+        val shown = combineReportNotices(true, "Check the dose.", "One photo could not be read.")
+        assertEquals(listOf(CONSULTATION_LEFT_OUT_NOTICE, "Check the dose.", "One photo could not be read."), shown!!.split("\n"))
+        // the draft saves these warnings with it and gives them back unchanged when the visit is reopened
+        val store = MapStore(); store.write("draft-notice", shown)
+        val reopened = MapStore().also { it.data.putAll(store.data) }
+        assertEquals(shown, reopened.read("draft-notice"))
+        // the original report that included the chat carries no omission warning, and nothing else is lost
+        assertEquals("Check the dose.", combineReportNotices(false, "Check the dose.", null))
+        assertEquals(null, combineReportNotices(false, null, null))
+        assertTrue(!combineReportNotices(false, "Check the dose.", null)!!.contains("leave it out"))
+    }
 }
