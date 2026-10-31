@@ -154,9 +154,9 @@ def test_live_standard_notes_are_written_by_sonnet_and_checked_by_haiku(live, ga
     assert payload['reasoning']['effort'] == effort
 
 
-def test_live_extraction_keeps_the_date_when_a_time_is_attached(live, gateway):
+def test_live_extraction_keeps_the_date_when_a_time_is_attached(live):
     source = 'Synthetic: dressing changed this evening.'
-    gateway.http.responses = [completion({'facts': [{'name': 'history', 'value': {'text': 'Dressing changed.', 'observed_on': '2026-10-30T18:00:00'},
-                                                    'quote': 'dressing changed'}], 'warnings': []})]
-    result = asyncio.run(live.extract_text(source, 'typed', user=gateway.user, encounter_id='synthetic-extract'))
+    data = {'facts': [{'name': 'history', 'value': {'text': 'Dressing changed.', 'observed_on': '2026-10-30T18:00:00'},
+                       'quote': 'dressing changed'}], 'warnings': []}
+    result = live.validate_result(data, 'extract', source)
     assert [str(f['value'].get('observed_on')) for f in result['facts']] == ['2026-10-30']
