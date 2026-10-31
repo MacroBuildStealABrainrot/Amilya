@@ -418,7 +418,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         val identity=JSONObject(payload.toString());if(intent=="save")identity.remove("expected_revision")
         return storeKey("pending-$intent-"+hash(canonical(identity)))
     }
-    private suspend fun mutation(intent:String,path:String,payload:JSONObject):JSONObject{
+    private suspend fun mutation(intent:String,path:String,payload:JSONObject,keepCodeOnServerError:Boolean=false):JSONObject{
         val storage=journalKey(intent,payload)
         val record=vault.read(storage)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: obj("key" to UUID.randomUUID().toString(),"payload" to JSONObject(payload.toString()))
         vault.write(storage,record.toString())
@@ -426,7 +426,17 @@ class AppState(application:Application):AndroidViewModel(application) {
         try{
             val response=api.call(path,"POST",record.getJSONObject("payload"),record.str("key")) as JSONObject
             record.put("response",response);vault.write(storage,record.toString());return response
-        }catch(e:ApiException){if(!e.ambiguous && e.status in listOf(400,402,403,404,409,413,415,422,429,502,503))vault.remove(storage);throw e}
+        }catch(e:ApiException){
+            if(keepCodeOnServerError){
+                // AI report: keep the SAME request code for every retry, so a report the server already finished is sent
+                // back without a new AI call or charge. See reportCodeAfterError.
+                when(val failures=reportCodeAfterError(e.status,e.ambiguous,record.optInt("server_errors"))){
+                    null->vault.remove(storage)
+                    else->{record.put("server_errors",failures);vault.write(storage,record.toString())}
+                }
+            }else if(!e.ambiguous && e.status in listOf(400,402,403,404,409,413,415,422,429,502,503))vault.remove(storage)
+            throw e
+        }
     }
     private fun acknowledge(intent:String,payload:JSONObject){vault.remove(journalKey(intent,payload))}
     private fun mergeSource(r:JSONObject){case=mergeEvidenceResponse(case ?: throw IllegalStateException("No open encounter"),r)}
@@ -762,12 +772,12 @@ class AppState(application:Application):AndroidViewModel(application) {
             .map{obj("role" to (if(it.str("role")=="user")"user" else "assistant"),"content" to it.str("content").take(10000))} else emptyList()
         if(consultation.isNotEmpty())payload.put("consultation",JSONArray(consultation))
         var intent="quick-report-$sourceRevision"+if(consultation.isEmpty())"" else "-consult-"+hash(canonical(JSONArray(consultation))).take(16)
-        suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload)}catch(e:ApiException){
+        suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true)}catch(e:ApiException){
             if(consultation.isEmpty() || e.status!=422 || !payload.has("consultation"))throw e
             // An older server cannot read the conversation yet: still write the report from the attachments, and say so.
             recordingNotice=listOfNotNull(recordingNotice,"This server cannot include the conversation yet, so the report uses only your attached photos and files.").joinToString("\n")
             payload.remove("consultation");intent="quick-report-$sourceRevision"
-            mutation(intent,"/encounters/$encounterId/quick-report",payload)
+            mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true)
         }
         val response=if(demo)sampleDocument(case!!,format)
             else try{

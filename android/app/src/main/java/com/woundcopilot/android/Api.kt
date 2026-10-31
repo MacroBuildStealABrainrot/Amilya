@@ -236,6 +236,26 @@ internal fun consentFormFields(method:String?,confirmedAt:String?,wording:String
     return out
 }
 
+/** After how many server error replies in a row the same AI report request code is given up (the server allows 3 paid attempts per code). */
+internal const val REPORT_CODE_MAX_SERVER_ERRORS=4
+
+/**
+ * What to do with an AI report's request code after an error reply. Returns the new count of server errors to keep the
+ * SAME code, or null to drop it (the next try then gets a new code).
+ *  - No clear reply (connection lost, unreadable answer, still processing): keep, count unchanged. The server may have
+ *    finished; the same code makes it send that report back with no new AI call and no new charge.
+ *  - Server busy or failed (429, 500, 502, 503, 504): keep, so the retry cannot become a second paid report. A finished
+ *    report is always sent back as a success for its code, so only after [REPORT_CODE_MAX_SERVER_ERRORS] error replies in a
+ *    row for the same code (the server's 3 attempts are used up and none succeeded) is the code given up.
+ *  - Refused before any work (400, 402, 403, 404, 409, 413, 415, 422): drop; nothing was done or charged.
+ */
+internal fun reportCodeAfterError(status:Int,ambiguous:Boolean,serverErrorsSoFar:Int):Int?{
+    if(ambiguous)return serverErrorsSoFar
+    if(status in listOf(400,402,403,404,409,413,415,422))return null
+    if(status in listOf(429,500,502,503,504)){val next=serverErrorsSoFar+1;return if(next>=REPORT_CODE_MAX_SERVER_ERRORS)null else next}
+    return serverErrorsSoFar
+}
+
 /** Paths the isolated test app may use BEFORE the server has proved it is the isolated test server: reading its public description only. */
 internal fun isIsolationProbe(method:String,path:String)=method=="GET" && (path=="/config" || path=="/health")
 

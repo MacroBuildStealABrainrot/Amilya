@@ -68,3 +68,50 @@ def test_successful_report_is_replayed_not_regenerated(gateway):
     calls = len(gateway.http.calls)
     second = report(gateway)
     assert second['text'] == first['text'] and len(gateway.http.calls) == calls
+
+
+def charges(gateway):
+    from server.billing_models import CreditLedger
+    with gateway.sessions() as db:
+        operations = list(db.scalars(select(UsageOperation)))
+        return sum(op.charged_micros or 0 for op in operations), len(list(db.scalars(select(CreditLedger))))
+
+
+def test_a_lost_reply_retried_with_the_same_request_key_makes_no_new_ai_call_and_no_second_charge(gateway):
+    # The server finished and charged, but the phone never saw the reply (or saw a gateway 502/503 instead).
+    gateway.http.responses = list(GOOD)
+    first = report(gateway)
+    calls, (charged, ledger_rows) = len(gateway.http.calls), charges(gateway)
+    assert charged > 0
+    # The phone keeps the same request key and retries (automatic retry, then the nurse's Try again).
+    for _ in range(3):
+        again = report(gateway)
+        assert again['text'] == first['text']
+    assert len(gateway.http.calls) == calls, 'no new AI request'
+    assert charges(gateway) == (charged, ledger_rows), 'no second charge'
+
+
+def test_a_failed_attempt_then_a_success_with_the_same_key_is_charged_once(gateway):
+    gateway.http.responses = [lambda call: (502, {'error': {'message': 'synthetic upstream failure'}})]
+    with pytest.raises(HTTPException):
+        report(gateway)
+    assert charges(gateway)[0] == 0, 'a failed attempt is never charged'
+    gateway.http.responses = list(GOOD)
+    report(gateway)
+    charged = charges(gateway)[0]
+    assert charged > 0
+    report(gateway)
+    assert charges(gateway)[0] == charged
+
+
+def test_a_new_request_key_would_be_a_new_charge_which_is_why_the_phone_keeps_its_key(gateway):
+    gateway.http.responses = list(GOOD)
+    report(gateway)
+    charged = charges(gateway)[0]
+    token = providers.request_operation.set('a-different-request-key')
+    try:
+        gateway.http.responses = list(GOOD)
+        report(gateway)
+    finally:
+        providers.request_operation.reset(token)
+    assert charges(gateway)[0] > charged
