@@ -69,7 +69,7 @@ import java.time.format.DateTimeFormatter
             TextButton({s.screen="upload"},enabled=!s.loading){InstrumentIcon("add",Modifier.size(18.dp));Text("  Add Files")}
         }
         if(s.editor.isNotBlank())WcpButton("Return to report",{s.screen="editor"},Modifier.fillMaxWidth(),enabled=!s.loading)
-        else if(sources.isNotEmpty())WcpButton("Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
+        else if(showsGenerateOnDocument(true,sources.size,s.earlierReportWaiting()))WcpButton(if(sources.isEmpty())"Recover earlier report" else "Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
             sources.forEach{EvidenceItem(s,it)}
             if(s.editor.isBlank())TextButton({s.quickReport(false)},enabled=!s.loading){Text("Create draft without AI")}
@@ -90,14 +90,20 @@ import java.time.format.DateTimeFormatter
         onVoiceMessage={s.recordConsultantMessage()},onOpenReport=if(s.editor.isNotBlank()){{s.chooseQuickMode("document");s.screen="editor"}}else null)
     if(s.consultantReportPrompt){
         var format by rememberSaveable{mutableStateOf(s.editorTemplate)}
+        val earlier=s.earlierReportWaiting();val fits=s.consultationFitsNow()
+        val choices=consultationChoices(earlier,fits)
         AlertDialog(onDismissRequest={s.consultantReportPrompt=false},
             title={Text("Create a report from this consultation?")},
             text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
-                Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
+                if(earlier)Text(CONSULTATION_DIALOG_EARLIER)
+                else if(fits)Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
+                else Text(CONSULTATION_DIALOG_TOO_LONG,color=MaterialTheme.colorScheme.error)
                 DocumentTypeSelector(format,true){format=it}
+                if(choices.size>1)TextButton({s.reportWithoutConversation(format)}){Text("New report without the conversation")}
                 Text("Closing without a report discards this conversation.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }},
-            confirmButton={TextButton({s.reportFromConsultant(format)}){Text("Create report")}},
+            confirmButton={TextButton({if(choices.first()==ConsultationChoice.CREATE_WITHOUT_CONVERSATION)s.reportWithoutConversation(format) else s.reportFromConsultant(format)}){Text(when(choices.first()){
+                ConsultationChoice.RECOVER_EARLIER->"Recover earlier report";ConsultationChoice.CREATE_WITHOUT_CONVERSATION->"Create report without the conversation";else->"Create report"})}},
             dismissButton={Row{TextButton({s.consultantReportPrompt=false}){Text("Keep talking")};TextButton({s.closeConsultantWithoutReport()}){Text("Close")}}})
     }
 }
