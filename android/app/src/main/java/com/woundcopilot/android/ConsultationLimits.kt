@@ -36,7 +36,7 @@ internal fun consultationFits(contents: List<String>): Boolean {
 }
 
 /** Done on Ask Consultant offers the report choices while there is a conversation and no report yet. */
-internal fun showsReportChoicesOnDone(quickMode: String, hasMessages: Boolean, editorBlank: Boolean) = quickMode == "consultant" && hasMessages && editorBlank
+internal fun showsReportChoicesOnDone(quickMode: String?, hasMessages: Boolean, editorBlank: Boolean) = quickMode == "consultant" && hasMessages && editorBlank
 
 /** After a report from the conversation fails with nothing written, go back to the screen the nurse was on. */
-internal fun modeAfterFailedConsultantReport(before: String, editorBlank: Boolean, current: String) = if (editorBlank) before else current
+internal fun modeAfterFailedConsultantReport(before: String?, editorBlank: Boolean, current: String?) = if (editorBlank) before else current
