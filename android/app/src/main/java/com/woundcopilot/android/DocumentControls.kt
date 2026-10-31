@@ -22,10 +22,43 @@ fun documentTypeTitle(value:String)=quickFormats[if(value=="referral")"physician
     }
 }
 
+/** Kinds of report warning that can change patient care. These are never hidden and always come first. */
+internal enum class SafetyAlert{MEDICATION,DOSE,SIDE,MEASUREMENT}
+
+private val doseWords=Regex("\\b(dose|dosage|dosing|mg|mcg|µg|ug|units?|iu|ml|mL|tablets?|tabs?|puffs?|drops?|bid|tid|qid|qd|prn|q\\d+h|daily|twice|three times|frequency|strength|concentration)\\b",RegexOption.IGNORE_CASE)
+private val medicationWords=Regex("\\b(medication|medicine|medications|drug|drugs|prescription|prescribed|antibiotic|antibiotics|insulin|anticoagulant|warfarin|heparin|opioid|analgesic|ointment|cream|product|dressing product|allerg\\w*)\\b",RegexOption.IGNORE_CASE)
+private val sideWords=Regex("\\b(left|right|side|laterality|bilateral|lt|rt|l\\.|r\\.|medial|lateral|which (leg|foot|arm|hand|wound|toe|heel))\\b",RegexOption.IGNORE_CASE)
+private val measurementWords=Regex("\\b(measure\\w*|size|length|width|depth|cm|mm|centimet\\w*|millimet\\w*|area|diameter|tunnel\\w*|undermin\\w*|temperature|temp|blood pressure|bp|pulse|heart rate|oxygen|o2|saturation|glucose|sugar|weight|kg|lb|number|value|reading|\\d+(\\.\\d+)?)\\b",RegexOption.IGNORE_CASE)
+
+/** Which care-changing kinds a warning is about (from its field name and its wording). Empty = a general note. */
+internal fun safetyKinds(field:String,message:String):Set<SafetyAlert>{
+    val text="$field $message"
+    return buildSet{
+        if(medicationWords.containsMatchIn(text))add(SafetyAlert.MEDICATION)
+        if(doseWords.containsMatchIn(text))add(SafetyAlert.DOSE)
+        if(sideWords.containsMatchIn(text))add(SafetyAlert.SIDE)
+        if(measurementWords.containsMatchIn(text))add(SafetyAlert.MEASUREMENT)
+    }
+}
+
+/** Every warning from the server, safety warnings first (in their original order), then the rest. Nothing is dropped except blank lines and exact repeats. */
+internal fun orderedReportAlerts(alerts:List<Pair<String,String>>):Pair<List<String>,Int>{
+    val clean=alerts.map{(f,m)->f.trim() to m.trim()}.filter{it.second.isNotEmpty()}.distinctBy{it.second}
+    val (safety,other)=clean.partition{safetyKinds(it.first,it.second).isNotEmpty()}
+    return (safety+other).map{it.second} to safety.size
+}
+
 @Composable fun DocumentReviewTools(s:AppState){
-    // Owner's request (2026-10-30): no red review notes under the report. Only a safety check
-    // (side, drug, dose or a number that may be misheard) is shown, as one small grey line.
-    s.documentAlerts.firstOrNull()?.let{message->Text(message,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)}
+    // Safety first (owner's request 2026-10-31): EVERY warning is shown. Warnings about a medication, dose, side or
+    // measurement come first, in a clear colour, and can never be pushed out by another warning. The rest follow.
+    if(s.documentAlerts.isNotEmpty())Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
+        val safety=s.documentAlertSafetyCount.coerceIn(0,s.documentAlerts.size)
+        if(safety>0)Text("Check before saving or sending:",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.titleSmall)
+        s.documentAlerts.forEachIndexed{index,message->
+            if(index<safety)Text("• $message",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodyMedium)
+            else Text("• $message",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+        }
+    }
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
         TextButton(onClick={s.improveReport()},enabled=!s.loading && s.editor.isNotBlank() && s.editorCaseRevision==s.revision,modifier=Modifier.weight(1f)){Text("Improve Report")}
         TextButton(onClick={s.improveAssessment()},enabled=!s.loading,modifier=Modifier.weight(1f)){Text("Improve Assessment")}

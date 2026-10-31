@@ -182,6 +182,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     var billing by mutableStateOf(JSONObject()); private set
     var audit by mutableStateOf<List<JSONObject>>(emptyList()); private set
     var documentAlerts by mutableStateOf<List<String>>(emptyList()); private set
+    /** How many of [documentAlerts] (at the start of the list) are medication, dose, side or measurement warnings. */
+    var documentAlertSafetyCount by mutableIntStateOf(0); private set
     var assessmentReview by mutableStateOf<JSONObject?>(null)
     var assessmentRevision by mutableIntStateOf(0); private set
     var assessmentEncounter by mutableStateOf(""); private set
@@ -213,7 +215,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun now()=Instant.now().toString()
     private fun clearClinical(){
         processingRecording=null;recordingConsent=false;autoStartRecording=false
-        documentAlerts=emptyList();assessmentReview=null;assessmentEncounter=""
+        documentAlerts=emptyList();documentAlertSafetyCount=0;assessmentReview=null;assessmentEncounter=""
         voiceMessage=false;dismissError()
         draftGeneration++;draftJob?.cancel();editorOwner=null;restoring=true
         quickMode=null;consultantMessages=emptyList();consultantDraft="";voiceCorrection=false;voiceInstruction="";transfer=null;case=null;patients=emptyList();encounters=emptyList();billing=JSONObject();audit=emptyList();answer=null
@@ -803,7 +805,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         snapshotDraft();editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;persistEditor();if(!demo)acknowledge(intent,payload);voiceCorrection=false;voiceInstruction="";warnings(response);screen="editor"
     }
     private fun acceptDocumentResult(result:JSONObject):Boolean {
-        documentAlerts=result.items("ui_alerts").map{it.str("message")}.filter{it.isNotBlank()}
+        orderedReportAlerts(result.items("ui_alerts").map{it.str("field") to it.str("message")}).let{(all,safety)->documentAlerts=all;documentAlertSafetyCount=safety}
         if(result.str("status","ready")!="ready" || result.str("text").isBlank()){
             notice=result.str("ui_message").ifBlank{"Not enough visit information to generate this document."}
             return false
@@ -866,21 +868,23 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun ask(question:String)=runTask("Kosmo is reviewing your question") {answer=if(demo)obj("answer" to "This sample is local. In a connected encounter, Kosmo uses this case's evidence to answer your question. No model was called in this preview.","case_revision" to revision)else api.call("/encounters/$encounterId/assistant","POST",obj("question" to question)) as JSONObject}
     fun edit(text:String){editor=text;savedId=null;localRevision++;draftJob?.cancel();val key=editorOwner ?: return;val generation=++draftGeneration;val data=draftJson().toString();draftJob=viewModelScope.launch{delay(150);try{withContext(Dispatchers.IO){synchronized(vault){if(generation==draftGeneration)vault.write(key,data)}}}catch(e:Exception){if(e is CancellationException)throw e;notice="Local draft recovery could not be saved."}}}
     fun persistEditor(){val key=editorOwner ?: return;if(key!=storeKey("draft"))return;draftGeneration++;draftJob?.cancel();try{vault.write(key,draftJson().toString())}catch(_:Exception){notice="The local draft could not be saved on this device."}}
-    private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts))
+    private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts),"ui_alert_safety_count" to documentAlertSafetyCount)
     private fun restoreDraft(){
-        assessmentReview=null;documentAlerts=emptyList()
+        assessmentReview=null;documentAlerts=emptyList();documentAlertSafetyCount=0
         draftGeneration++;draftJob?.cancel();restoring=true;editorOwner=storeKey("draft")
         val d=vault.read(editorOwner!!)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: if(case?.optJSONObject("encounter")?.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank())case?.items("documents")?.maxByOrNull{it.optInt("version")}?.let{
             obj("text" to it.str("text"),"template" to it.str("template"),"saved_id" to it.str("id"),"case_revision" to it.optInt("case_revision"),"amends_id" to it.str("amends_id"),"reason" to it.str("reason"),"custom_name" to it.optJSONObject("custom_template")?.str("name"),"custom_instructions" to it.optJSONObject("custom_template")?.str("instructions"))
         }else null
         editor=d?.str("text") ?: "";editorTemplate=d?.str("template","nursing") ?: "nursing";editorCaseRevision=d?.optInt("case_revision",revision) ?: revision
         documentAlerts=d?.optJSONArray("ui_alerts")?.let{a->(0 until a.length()).map{a.optString(it)}}?:emptyList()
+        // Older drafts did not store the count: re-check their wording so a safety warning is never shown as a plain one.
+        documentAlertSafetyCount=if(d?.has("ui_alert_safety_count")==true)d.optInt("ui_alert_safety_count")else orderedReportAlerts(documentAlerts.map{"" to it}).let{(all,n)->documentAlerts=all;n}
         savedId=d?.str("saved_id")?.ifBlank{null};amendId=d?.str("amends_id")?.ifBlank{null};amendReason=d?.str("reason") ?: "";customName=d?.str("custom_name")?:"";customInstructions=d?.str("custom_instructions")?:""
         if(savedId!=null && case?.items("documents")?.none{it.str("id")==savedId && matchesEditor(it)}!=false)savedId=null
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
     }
-    fun newDocument(){if(loading)return;snapshotDraft();documentAlerts=emptyList();restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();documentAlerts=emptyList();restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun newDocument(){if(loading)return;snapshotDraft();documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {
