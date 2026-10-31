@@ -72,8 +72,10 @@ object DeveloperDiagnostics {
             }
         }}
     }
+    /** A server without the diagnostics address (HTTP 404/405) is not asked again until the app restarts. */
+    @Volatile private var serverUnsupported=false
     suspend fun flush(api:Api,vault:Vault,owner:String){
-        if(!mutex.tryLock())return
+        if(serverUnsupported || !mutex.tryLock())return
         try{
             val key="diagnostic-outbox-$owner"
             val rows=withContext(Dispatchers.IO){synchronized(this){vault.read(key)?.let{JSONArray(it).objects().filter{runCatching{Instant.parse(it.str("finished_at")).isAfter(Instant.now().minusSeconds(7*86400))}.getOrDefault(false)}.take(100)}?:emptyList()}}
@@ -85,7 +87,7 @@ object DeveloperDiagnostics {
                 val rest=vault.read(key)?.let{JSONArray(it).objects().filter{it.str("id") !in ids}}?:emptyList()
                 if(rest.isEmpty())vault.remove(key)else vault.write(key,JSONArray(rest).toString())
             }}
-        }catch(e:Exception){if(e is CancellationException)throw e}finally{mutex.unlock()}
+        }catch(e:Exception){if(e is CancellationException)throw e;if(e is ApiException && e.status in listOf(404,405))serverUnsupported=true}finally{mutex.unlock()}
     }
 }
 
