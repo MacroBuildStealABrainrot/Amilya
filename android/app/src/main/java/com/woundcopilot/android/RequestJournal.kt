@@ -69,6 +69,8 @@ internal class RequestJournal(private val store: CodeStore, private val newCode:
     fun clearPointerIfPointsTo(pointer: String, storage: String) {
         if (store.read(pointer)?.split("\n", limit = 2)?.getOrNull(1) == storage) store.remove(pointer)
     }
+    /** The nurse CHOSE to start a new report instead of recovering the earlier one: stop pointing at it. (The note itself is kept.) */
+    fun abandonPointer(pointer: String) = store.remove(pointer)
     fun pendingFor(pointer: String, stamp: String, legacy: (String) -> RequestRecord? = { null }): Pair<String, RequestRecord>? {
         val parts = store.read(pointer)?.split("\n", limit = 2) ?: return null
         if (parts.size != 2 || parts[0] != stamp) return null

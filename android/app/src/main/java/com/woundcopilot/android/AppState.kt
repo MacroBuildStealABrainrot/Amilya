@@ -694,6 +694,17 @@ class AppState(application:Application):AndroidViewModel(application) {
         updateTemplate(format);chooseQuickMode("document")
         draftQuick(true,format)
     }
+    /**
+     * The nurse's own choice to leave the conversation out: ONCE, an earlier unfinished (maybe paid) report is put aside, so the report that
+     * appears is the one the notice describes. Try again after a failure then repeats [reportFromConsultant] and keeps the NEW request's code.
+     */
+    fun reportWithoutConversation(format:String){
+        if(loading)return
+        journal.abandonPointer(storeKey("pending-report"))
+        reportFromConsultant(format,withConversation=false)
+    }
+    /** True when an earlier AI report of this visit was sent and may already be written and paid for. */
+    fun earlierReportWaiting():Boolean=!demo && journal.pendingFor(storeKey("pending-report"),revision.toString(),::legacyRecord)!=null
     /** True when the whole Ask Consultant conversation can go into a report (see [consultationFits]). */
     fun consultationFitsNow()=consultationFits(consultantMessages.map{it.str("content")}.filter{it.isNotBlank()})
     /** Names every attached photo or file that could not be read, so it is never silently left out. */
@@ -796,9 +807,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
             if(e.status!=422 || !payload.has("consultation"))throw e
             // The server refused the conversation. Never write the report without it on our own: stop and say so.
-            // Keep the note (and its request code): this try says nothing about an earlier try that may have finished and been charged.
-            // Only the pointer is cleared, so the nurse's own choice to go without the conversation is not forced back onto this request.
-            journal.clearPointerIfPointsTo(pointer,reportStorage);reportFromConsultation=false
+            // Keep the note AND the pointer: this try says nothing about an earlier try that may have finished and been charged, and every later
+            // Generate report must recover that request, never quietly start a new, charged one. Leaving it behind is the nurse's own choice.
             throw IllegalArgumentException(CONSULTATION_REFUSED_MESSAGE)
         }
         val response=if(demo)sampleDocument(case!!,reportFormat)
