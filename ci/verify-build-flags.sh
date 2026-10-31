@@ -21,7 +21,16 @@ check "$(ls $APKS/sandbox/*.apk | head -1)" com.woundcopilot.android.sandbox tru
 check "$(ls $APKS/pilot/*.apk | head -1)" com.woundcopilot.android.pilot2 false
 check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair2 false
 check "$(ls $APKS/renderTest/*.apk | head -1)" com.woundcopilot.android.rendertest false
-check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolated false
+check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolated2 false
+# The isolated test app must be COMPILED to use only the isolated test server (read from the generated settings file).
+BC="$(find android/app/build/generated -path '*isolatedTest*' -name BuildConfig.java | head -1)"
+[ -n "$BC" ] || { echo "FAIL: isolatedTest BuildConfig not found"; fail=1; }
+if [ -n "$BC" ]; then
+  grep -q 'API_BASE_URL = "https://amilya-repair-test.onrender.com/api/v1"' "$BC" || { echo "FAIL: isolated app is not built for the isolated test server address"; fail=1; }
+  grep -q 'ISOLATED_TEST = true' "$BC" || { echo "FAIL: ISOLATED_TEST must be true"; fail=1; }
+  grep -q 'SANDBOX = false' "$BC" && grep -q 'REPAIR_SERVER = false' "$BC" || { echo "FAIL: unexpected server flags"; fail=1; }
+  echo "isolated app compiled address: $(grep -o 'API_BASE_URL = "[^"]*"' "$BC")"
+fi
 APKSIGNER="${AAPT2%aapt2}apksigner"
 "$APKSIGNER" verify --verbose --print-certs "$(ls $APKS/renderTest/*.apk | head -1)"
 [ $fail -eq 0 ] && echo "ALL BUILD-FLAG CHECKS PASSED"

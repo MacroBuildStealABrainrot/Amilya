@@ -8,7 +8,7 @@
 #  * Put this in a PRIVATE repository. Run it from the Actions tab ("Run workflow") or by pushing.
 #
 # WHAT YOU GET (Actions run page > Artifacts):
-#  * amilya-apks: app-sandbox.apk, app-debug.apk, app-release-unsigned.apk, wear-sandbox.apk
+#  * NO installers. Public builds upload only logs and test reports. The installer is made in the separate PRIVATE build repository.
 #  * amilya-build-evidence: Gradle unit-test reports, lint report, build-flag checks, backend test log (SQLite + PostgreSQL)
 #  * Device execution is intentionally excluded at the owner's request.
 name: amilya-sandbox-ci
@@ -137,7 +137,6 @@ jobs:
           }
           trap cleanup EXIT
           sudo mount -t tmpfs -o size=1m,mode=0777 tmpfs "$WCP_STORAGE_FULL_TEST_DIR"
-          base64 -d ../ci/pilot-test.keystore.b64 > ../ci/pilot-test.keystore
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
             :app:test :wear-contract:test \
@@ -172,38 +171,20 @@ jobs:
         if: always()
         run: |
           mkdir -p ci-out/apks ci-out/reports
-          find android -path '*/build/outputs/apk/*' -name '*.apk' -exec cp {} ci-out/apks/ \; || true
           cp -r android/app/build/reports ci-out/reports/app 2>/dev/null || true
           cp -r android/wear-contract/build/reports ci-out/reports/wear-contract 2>/dev/null || true
           cp gradle-build.log build-flags.log ci-out/ 2>/dev/null || true
-          (cd ci-out/apks && sha256sum *.apk > SHA256SUMS.txt) || true
-      - name: Prepare the one app to install
-        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
-        run: |
-          mkdir -p ci-out/install
-          cp android/app/build/outputs/apk/pilot/*.apk ci-out/install/Amilya-Test-15.apk || true
-          cp android/app/build/outputs/apk/repair/*.apk ci-out/install/Amilya-Server-Test.apk || true
-          cp android/app/build/outputs/apk/isolatedTest/*.apk ci-out/install/Amilya-Isolated-Test.apk || true
-      - uses: actions/upload-artifact@v4
-        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
-        with:
-          name: INSTALL-THIS-Amilya-Isolated-Test
-          path: ci-out/install/Amilya-Isolated-Test.apk
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
-        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
-        with:
-          name: INSTALL-THIS-Amilya-Test-15
-          path: ci-out/install/Amilya-Test-15.apk
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
-        if: always() && !startsWith(github.ref, 'refs/heads/chatgpt/')
-        with:
-          name: amilya-apks
-          path: "ci-out/apks/*.apk\nci-out/apks/SHA256SUMS.txt"
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
+      - name: Public builds contain NO installer (fails the build if one would be uploaded)
+        id: noinstaller
         if: always()
+        run: |
+          if find ci-out -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.keystore' -o -name '*.jks' \) | grep -q .; then
+            echo "::error::An installer or key file is in the files to upload. Public builds must not upload installers."; find ci-out -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.keystore' -o -name '*.jks' \); exit 1
+          fi
+          echo "::notice title=No installer uploaded::Public builds upload only logs and test reports. Installers are made in the private build repository."
+      - uses: actions/upload-artifact@v4
+        # Test logs are kept even when a test failed, but NEVER when the no-installer check failed: a failed check blocks the upload.
+        if: always() && steps.noinstaller.outcome == 'success'
         with:
           name: amilya-build-evidence
           path: "ci-out/*.log\nci-out/reports/"
