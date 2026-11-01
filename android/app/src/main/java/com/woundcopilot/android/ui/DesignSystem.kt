@@ -317,19 +317,21 @@ fun EmptyState(title: String, body: String, action: String? = null, onAction: ()
 @Composable
 fun ErrorBanner(message: String, onDismiss: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Surface(
-        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-        color = colors.errorContainer,
-        contentColor = colors.onErrorContainer,
-        shape = MaterialTheme.shapes.medium,
-    ) {
-        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 4.dp)) {
-            Text(message, style = MaterialTheme.typography.bodyMedium)
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
-                colors = ButtonDefaults.textButtonColors(contentColor = colors.onErrorContainer),
-            ) { Text("Dismiss") }
+    com.woundcopilot.android.FadingFeedback(message) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+            color = colors.errorContainer,
+            contentColor = colors.onErrorContainer,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 4.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyMedium)
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = colors.onErrorContainer),
+                ) { Text("Dismiss") }
+            }
         }
     }
 }
