@@ -72,4 +72,4 @@ def test_cancelled_second_step_keeps_the_first_result_but_retry_is_409(gateway):
         assert again.value.status_code == 409, f'retry {attempt}: {again.value.status_code} {again.value.detail}'
     after = counts(gateway)
     assert after['ai_calls'] == 2 and after['results_saved'] == 1, f'counts: {after!r}'
-    assert after['charged_micros'] == before['charged_micros'], f"no second charge: before={before!r} after={after!r}"
+    assert after['charged_micros'] == before['charged_micros'], f"CHARGE after={after['charged_micros']} before={before['charged_micros']} ops={after['ops']!r}"
