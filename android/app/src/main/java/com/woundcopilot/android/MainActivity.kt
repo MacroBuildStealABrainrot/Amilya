@@ -136,8 +136,8 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         else if(s.quickMode==null&&inCase&&!showSidebar&&page in listOf("encounter","findings","documents","sources","review","history"))InstrumentDock(listOf(DockDestination("encounter","Capture","capture"),DockDestination("findings","Review","review",s.case?.items("facts")?.count{it.str("confirmation_state")=="unconfirmed"}?:0),DockDestination("documents","Documents","document")),phase(page),::navigate)
     }){padding->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()){
-            s.error?.let{RequestFeedback(it,retryAtMillis=s.retryAtMillis,onRetry=if(s.retryAvailable){{s.retryFailed()}}else null,onDismiss={s.dismissError()})}
-            s.notice?.let{Surface(color=c.surfaceVariant){Row(Modifier.fillMaxWidth().padding(start=16.dp),verticalAlignment=Alignment.CenterVertically){Text(it,Modifier.weight(1f).padding(vertical=10.dp),style=MaterialTheme.typography.bodySmall);TouchIcon("close","Dismiss notification",{s.notice=null})}}}
+            s.error?.let{RequestFeedback(it,retryAtMillis=s.retryAtMillis,onRetry=if(s.retryAvailable){{s.retryFailed()}}else null,onDismiss={s.dismissError()},sequence=s.errorMessageSequence)}
+            s.notice?.let{FadingFeedback(it,sequence=s.noticeMessageSequence){Surface(color=c.surfaceVariant){Row(Modifier.fillMaxWidth().padding(start=16.dp),verticalAlignment=Alignment.CenterVertically){Text(it,Modifier.weight(1f).padding(vertical=10.dp),style=MaterialTheme.typography.bodySmall);TouchIcon("close","Dismiss notification",{s.notice=null})}}}}
             if(s.legalRequired&&!s.demo&&s.user!=null)LegalGate(s)
             else Box(Modifier.fillMaxWidth().weight(1f)){
                 Row(Modifier.fillMaxSize()){

@@ -69,16 +69,18 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
 }
 
 /** Operational failures use a compact, neutral surface. Clinical alerts keep their own treatment. */
-@Composable fun RequestFeedback(message:String,retryAtMillis:Long=0,onRetry:(()->Unit)?=null,onDismiss:()->Unit){
+@Composable fun RequestFeedback(message:String,retryAtMillis:Long=0,onRetry:(()->Unit)?=null,onDismiss:()->Unit,sequence:Long=0){
     var ready by remember(retryAtMillis){mutableStateOf(System.currentTimeMillis()>=retryAtMillis)}
     LaunchedEffect(retryAtMillis){if(!ready){delay((retryAtMillis-System.currentTimeMillis()).coerceAtLeast(0));ready=true}}
     val c=MaterialTheme.colorScheme
-    Surface(color=c.surfaceContainerLow,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp).semantics{liveRegion=LiveRegionMode.Polite}){
-        Column(Modifier.padding(horizontal=16.dp,vertical=10.dp)){
-            Text(message,style=MaterialTheme.typography.bodyMedium,color=c.onSurface)
-            Row(Modifier.align(Alignment.End)){
-                TextButton(onClick=onDismiss){Text("Dismiss")}
-                onRetry?.let{TextButton(onClick=it,enabled=ready){Text(if(ready)"Try Again"else"Please wait…")}}
+    FadingFeedback(message, sequence, hasAction=onRetry!=null) {
+        Surface(color=c.surfaceContainerLow,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp).semantics{liveRegion=LiveRegionMode.Polite}){
+            Column(Modifier.padding(horizontal=16.dp,vertical=10.dp)){
+                Text(message,style=MaterialTheme.typography.bodyMedium,color=c.onSurface)
+                Row(Modifier.align(Alignment.End)){
+                    TextButton(onClick=onDismiss){Text("Dismiss")}
+                    onRetry?.let{TextButton(onClick=it,enabled=ready){Text(if(ready)"Try Again"else"Please wait…")}}
+                }
             }
         }
     }

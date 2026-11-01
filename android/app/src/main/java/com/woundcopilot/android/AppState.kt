@@ -170,14 +170,22 @@ class AppState(application:Application):AndroidViewModel(application) {
     var voiceMessage by mutableStateOf(false); private set
     var reportLength by mutableStateOf("concise")
     var taskLabel by mutableStateOf("Working"); private set
-    var error by mutableStateOf<String?>(null)
+    private var errorFeedback by mutableStateOf(FeedbackMessage())
+    var error: String?
+        get() = errorFeedback.text
+        set(value) { errorFeedback = errorFeedback.replace(value) }
+    val errorMessageSequence get() = errorFeedback.sequence
     var retryAvailable by mutableStateOf(false); private set
     var retryAtMillis by mutableLongStateOf(0); private set
     private var failedAction:(()->Unit)?=null
     private var taskRecovery:(()->Unit)?=null
     private var taskPurpose:String?=null
     private var consecutiveFailures=0
-    var notice by mutableStateOf<String?>(null)
+    private var noticeFeedback by mutableStateOf(FeedbackMessage())
+    var notice: String?
+        get() = noticeFeedback.text
+        set(value) { noticeFeedback = noticeFeedback.replace(value) }
+    val noticeMessageSequence get() = noticeFeedback.sequence
     var screen by mutableStateOf("welcome")
     var dark by mutableStateOf(vault.read("theme") != "light")
     var patients by mutableStateOf<List<JSONObject>>(emptyList()); private set
