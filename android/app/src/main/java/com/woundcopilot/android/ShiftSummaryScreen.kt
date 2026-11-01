@@ -43,7 +43,7 @@ fun ShiftSummaryScreen(s: AppState) {
         Text("Only visits already saved or loaded on this phone are available. This works offline and uses no AI. Reports are copied exactly as saved.")
         Text("Finished means Review and sign is complete. Saved drafts are listed separately. The latest saved version is used.")
         if (plan == null) {
-            Text("The saved visit list could not be checked. Nothing was copied. Check the phone’s free space and restart the app. Check your visits before using the summary.", color = MaterialTheme.colorScheme.error)
+            Text("The saved visits or their dates could not be checked. Nothing was copied. Check your visits and the phone’s free space, then restart the app before using the summary.", color = MaterialTheme.colorScheme.error)
         } else {
             // These are part of the document, not fading notifications.
             Text("No finished report", style = MaterialTheme.typography.titleMedium)

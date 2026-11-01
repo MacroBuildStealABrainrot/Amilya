@@ -122,4 +122,11 @@ class ShiftSummaryTest {
         try { plan(visit("A"), visit("A")); fail("Must stop") }
         catch (e: IllegalArgumentException) { assertFalse(e.message.orEmpty().contains("Test visit")) }
     }
+
+    @Test fun missingDatesAreNeverGuessedToBeTodayAndStartWinsOverLastEdit() {
+        val yesterday = Instant.parse("2026-10-31T14:00:00Z")
+        assertEquals(yesterday, shiftVisitStart(yesterday.toString(), null, "2026-11-01T15:00:00Z"))
+        assertEquals(yesterday, shiftVisitStart("", yesterday, "2026-11-01T15:00:00Z"))
+        assertNull(shiftVisitStart("", null, "not a date"))
+    }
 }

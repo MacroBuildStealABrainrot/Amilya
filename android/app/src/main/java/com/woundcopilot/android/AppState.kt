@@ -631,9 +631,10 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun shiftOwner() = user?.str("id")?.takeIf { it.isNotBlank() }
     private fun shiftVisit(row:JSONObject, reportsKnown:Boolean=false, reports:List<ShiftReport> = emptyList()):ShiftVisit? {
         val owner=shiftOwner()?:return null
-        val id=row.str("id").takeIf { it.isNotBlank() }?:return null
+        val id=row.str("id").takeIf { it.isNotBlank() }?:throw IllegalStateException("A visit could not be checked.")
         val earlier=shiftCache.read(owner,id)
-        val started=storedInstant(row.str("created_at")) ?: earlier?.startedAt ?: storedInstant(row.str("updated_at")) ?: Instant.now()
+        val started=shiftVisitStart(row.str("created_at"),earlier?.startedAt,row.str("updated_at"))
+            ?: throw IllegalStateException("A visit date could not be checked.")
         return ShiftVisit(id,row.str("title").ifBlank { "Visit" },started,row.optInt("revision"),reportsKnown,reports)
     }
     private fun rememberShiftMetadata() {

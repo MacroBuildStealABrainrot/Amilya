@@ -33,6 +33,10 @@ internal data class ShiftSummaryPlan(
     val unavailable: List<ShiftVisit>,
 )
 
+/** Never invent today's date for an undated visit. The caller must stop if all three are missing. */
+internal fun shiftVisitStart(createdAt: String, rememberedStart: Instant?, updatedAt: String): Instant? =
+    runCatching { Instant.parse(createdAt) }.getOrNull() ?: rememberedStart ?: runCatching { Instant.parse(updatedAt) }.getOrNull()
+
 /** A saved draft is not finished. A newer unfinished version must not be hidden by an older signature. */
 internal fun planShiftSummary(visits: List<ShiftVisit>, today: LocalDate, zone: ZoneId): ShiftSummaryPlan {
     require(visits.map { it.id }.distinct().size == visits.size) { "The visit list could not be checked. Reopen the summary." }
