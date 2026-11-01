@@ -130,6 +130,21 @@ PERMANENT_REPORT_FAILURES = frozenset({'provider_credits', 'provider_access', 'r
 def report_request_ended(task, usage, resumed_attempt):
     """True when a failed report step can never be retried under the same request code (attempts used up, or a permanent failure)."""
     return task in REPORT_STAGE_TASKS and (resumed_attempt >= MAX_REPORT_STAGE_RETRIES or usage.get('failure_reason') in PERMANENT_REPORT_FAILURES)
+
+
+def cancelled_report_stage(operation, task):
+    """Only an explicitly released, uncharged report step is safe to resume.
+
+    A reserved or unknown operation is never evidence that the provider stopped.
+    Use deterministic child operation IDs rather than reopening a released hold:
+    the original worker can then never settle against the new worker's hold.
+    """
+    return bool(task in REPORT_STAGE_TASKS and operation is not None
+        and operation.task == task and operation.status == 'released'
+        and operation.release_reason == 'provider_cancelled'
+        and operation.charged_micros == 0)
+
+
 TASK_FILES = {'extract': '20_clinical_fact_extraction', 'document': '25_document_extraction',
               'image': '40_wound_image_assessment', 'review': '50_clinical_review',
               'holistic': '55_holistic_wound_review', 'escalation': '60_targeted_escalation',
@@ -514,7 +529,8 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         _release_if_stale(user, operation)
     if task in {'transcription', 'image'} | REPORT_STAGE_TASKS:
         base_operation=operation
-        # Resume successful checkpoints; retry only settled, waived failures.
+        # Resume successful checkpoints; retry settled waived failures or report
+        # steps whose own worker explicitly cancelled and released its hold.
         # Unknown/in-flight operations never qualify for another request.
         with SessionLocal() as retry_db:
             for retry_number in range(MAX_REPORT_STAGE_RETRIES if task in REPORT_STAGE_TASKS else MAX_MEDIA_RETRIES):
@@ -523,8 +539,12 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     retry_db.expire_all()
                     previous=retry_db.scalar(select(UsageOperation).where(UsageOperation.workspace_id==user.workspace_id,UsageOperation.operation_id==operation))
                 interrupted=billing.is_lease_expired_release(previous)
-                if not previous or not interrupted and (previous.status!='settled' or previous.usage.get('charge_waived') is not True):break
-                if task in REPORT_STAGE_TASKS:
+                cancelled=cancelled_report_stage(previous, task)
+                if cancelled and retry_db.scalar(select(ProviderResult.id).where(
+                        ProviderResult.workspace_id == user.workspace_id, ProviderResult.operation_id == operation)):
+                    break  # A saved result always wins; never generate past it.
+                if not previous or not (interrupted or cancelled) and (previous.status!='settled' or previous.usage.get('charge_waived') is not True):break
+                if task in REPORT_STAGE_TASKS and not cancelled:
                     # A report stage that timed out or failed upstream was settled
                     # without charge. Let the same request key try again (bounded),
                     # instead of replaying the old failure forever. Permanent
@@ -571,6 +591,16 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         if not reservation['created']:
             previous = ledger_db.scalar(select(UsageOperation).where(UsageOperation.workspace_id == user.workspace_id,
                 UsageOperation.operation_id == operation, UsageOperation.user_id == user.id))
+            if cancelled_report_stage(previous, task):
+                # Usually reached only at the durable attempt limit. It can also
+                # occur if a running worker cancels between our lookup and reserve.
+                exhausted = resumed_attempt >= MAX_REPORT_STAGE_RETRIES
+                ended = {REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE} if exhausted else {}
+                raise HTTPException(503,
+                    'This report was interrupted repeatedly. Your source is kept; review it before starting a new report.'
+                    if exhausted else 'This report step was interrupted. Try again to recover the same report.',
+                    headers={'X-WCP-Retryable': 'false' if exhausted else 'true',
+                             'X-WCP-Error': 'PROVIDER_UNAVAILABLE', **ended})
             if billing.is_lease_expired_release(previous):
                 raise HTTPException(503, 'This AI request was interrupted on the server. No charge was made. Try again.',
                                     headers={'X-WCP-Retryable': 'true', 'X-WCP-Error': 'PROVIDER_UNAVAILABLE'})
@@ -1034,8 +1064,10 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
     operations=[]
     token=document_operations.set(operations)
     try:return await _checked_quick_text(context,task,options,user=user,encounter_id=encounter_id)
-    except HTTPException:
-        if operations:
+    except HTTPException as error:
+        # A concurrent retry receiving 409 has not established that the document
+        # failed. Do not refund checkpoints another worker is still using.
+        if operations and error.status_code != 409:
             with SessionLocal() as refund_db:billing.refund_failed_document(refund_db,user,operations)
         raise
     finally:document_operations.reset(token);selection.reset(layer_token)
