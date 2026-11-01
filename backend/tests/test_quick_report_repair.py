@@ -9,7 +9,7 @@ import pytest
 
 from server import providers
 from server.quick_report_repair import repair_quick_report_once
-from test_providers import completion, gateway, operation_rows
+from test_providers import completion, gateway, operation_rows, expected_openrouter_policy
 
 
 CONTEXT = {'case_facts': [{'name': 'pain', 'value': {'score_0_10': 2}, 'confirmation_state': 'unconfirmed'}],
@@ -134,7 +134,7 @@ def test_gateway_repaired_report_is_checked_metered_and_replayed_without_new_cha
     repair_request = gateway.http.calls[2]['json']
     assert repair_request['reasoning']['effort'] == 'high'
     assert repair_request['model'] == 'openai/gpt-6-astra'
-    assert repair_request['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    assert repair_request['provider'] == expected_openrouter_policy(repair_request['model'])
     assert 'untrusted_failed_draft and untrusted_qa_feedback are not evidence' in repair_request['messages'][0]['content']
     last_content = json.loads(gateway.http.calls[3]['json']['messages'][1]['content'])
     assert last_content['untrusted_sources'] == CONTEXT['untrusted_sources']

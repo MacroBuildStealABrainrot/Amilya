@@ -10,7 +10,7 @@ from sqlalchemy import select
 from server import billing, diagnostics, providers
 from server.error_feedback import extraction_warning
 from server.provider_models import ProviderResult
-from test_providers import gateway, completion, extract, operation_rows
+from test_providers import gateway, completion, extract, operation_rows, expected_openrouter_policy
 
 
 @pytest.mark.parametrize('kind,size,expected', [('typed',100,8000),('document',100,8000),
@@ -24,7 +24,7 @@ def test_extraction_has_room_for_structured_evidence_with_a_bounded_budget(gatew
     assert 8000<=budget<=16000
     assert budget==(expected or len(payload['messages'][1]['content'])//2)
     assert payload['reasoning']=={'effort':'low','exclude':True}
-    assert payload['provider']=={'zdr':True,'data_collection':'deny','require_parameters':True}
+    assert payload['provider']==expected_openrouter_policy(payload['model'])
 
 
 def test_response_larger_than_old_cap_finishes_and_validates(gateway):
@@ -114,3 +114,4 @@ def test_arbitrary_finish_metadata_is_never_stored(gateway,finish):
     with pytest.raises(HTTPException):extract(gateway)
     assert 'finish_reason' not in operation_rows(gateway)[0].usage
     assert 'finish_reason' not in billing._safe_usage({'finish_reason':finish})
+

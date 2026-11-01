@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from server import providers
 from server.billing_models import UsageOperation
-from test_providers import gateway
+from test_providers import gateway, expected_openrouter_policy
 
 FIXTURE = Path(__file__).parents[1] / 'scripts/fixtures/render-synthetic-visit.m4a.b64'
 
@@ -47,7 +47,7 @@ def test_same_key_transcription_preserves_privacy_and_records_actual_cost(gatewa
     assert request['url'].endswith('/audio/transcriptions')
     payload = request['json']
     assert payload['model'] == providers.OPENROUTER_SPEECH_MODEL
-    assert payload['provider'] == {'zdr':True, 'data_collection':'deny'}
+    assert payload['provider'] == expected_openrouter_policy(payload['model'])
     assert payload['response_format'] == 'verbose_json'
     assert base64.b64decode(payload['input_audio']['data']) == audio()
     assert payload['input_audio']['format'] == 'm4a'
@@ -109,3 +109,4 @@ def test_repeat_clip_is_never_claimed_as_an_independent_verifier(gateway):
         encounter_id='synthetic-clip'))
     assert result['verifier']['method'] == 'repeat_openrouter_transcription'
     assert any('not an independent' in w for w in result['warnings'])
+

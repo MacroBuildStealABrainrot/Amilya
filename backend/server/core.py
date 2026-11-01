@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     openrouter_phi_approved: bool = False
     openrouter_require_zdr: bool = True
     openrouter_speech_enabled: bool = False
+    # Clinical routes are pinned to approved first-party endpoints. Add another
+    # provider only after its privacy terms and data location are reviewed.
+    openrouter_openai_provider_order: str = 'openai'
+    openrouter_anthropic_provider_order: str = 'anthropic'
+    openrouter_other_provider_order: str = ''
+    openrouter_allow_provider_fallbacks: bool = False
     cloudflare_api_token: str = ''
     cloudflare_account_id: str = ''
     cloudflare_phi_approved: bool = False
@@ -47,8 +53,10 @@ class Settings(BaseSettings):
     deepgram_enabled: bool = False
     speech_provider: str = 'auto'
     model_extraction: str = 'openai/gpt-6-luna'
-    model_documentation: str = 'openai/gpt-6.1-sol'
-    # Owner-approved (2026-10-28): Haiku writes standard notes; accuracy checks stay on model_documentation.
+    model_documentation: str = 'openai/gpt-6.1-terra'
+    # QA stays independent from the drafting model and remains on the stronger Sol tier.
+    model_documentation_qa: str = 'openai/gpt-6.1-sol'
+    # Owner-approved (2026-10-28): Haiku writes standard notes; accuracy checks stay on Sol.
     model_documentation_simple: str = 'anthropic/claude-haiku-5.5'
     model_vision: str = 'anthropic/claude-sonnet-5.5'  # owner's choice for wound photos (2026-10-28)
     model_review: str = 'openai/gpt-6.1-sol'
@@ -77,7 +85,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_qa','model_documentation_simple','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():
@@ -103,4 +111,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
 

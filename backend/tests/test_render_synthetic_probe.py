@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 from PIL import Image
 import pytest
-from test_providers import gateway, completion
+from test_providers import gateway, completion, expected_openrouter_policy
 from test_identity import client
 
 SCRIPTS = Path(__file__).parents[1] / 'scripts'
@@ -181,7 +181,7 @@ def test_probe_uses_actual_gateway_validation_and_ledger(gateway, capsys):
     assert asyncio.run(probe.check_workflows(gateway.user))
     assert len(gateway.http.calls) == 4
     for call in gateway.http.calls:
-        assert call['json']['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+        assert call['json']['provider'] == expected_openrouter_policy(call['json']['model'])
     assert capsys.readouterr().out.count('status=PASS') == 3
 
 
@@ -272,4 +272,5 @@ def test_http_probe_accepts_visible_synthetic_wound_but_rejects_unrelated_shapes
     assert probe.check_http_workflows(wound=True, photo_only=photo_only)
     assert len(gateway.http.calls) == (2 if photo_only else 5)
     assert capsys.readouterr().out.count('status=PASS') == (2 if photo_only else 4)
+
 
