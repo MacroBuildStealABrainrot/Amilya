@@ -4,15 +4,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FeedbackFadePolicyTest {
-    @Test fun harmlessInformationFadesAfterFiveSeconds() {
+    @Test fun harmlessInformationFadesAfterThreeSeconds() {
         listOf(
             "No internet connection. Your work is saved on this phone. Tap Try again when you're back online.",
             "Request: No internet connection. Your work is saved on this phone. Tap Try again when you're back online.",
             "Exact document saved to your workspace.", "Profile saved.", "Saved in the synthetic preview.",
         ).forEach { text ->
             val timer = FeedbackFadeTimer(text, 1, 100)
-            assertTrue(text, timer.isVisibleAt(5099))
-            assertFalse(text, timer.isVisibleAt(5100))
+            assertTrue(text, timer.isVisibleAt(3099))
+            assertFalse(text, timer.isVisibleAt(3100))
         }
     }
 
@@ -40,11 +40,11 @@ class FeedbackFadePolicyTest {
         val oldTimer = FeedbackFadeTimer(first.text!!, first.sequence, 0)
         val next = first.replace("Profile saved.")
         assertNotEquals(first.sequence, next.sequence)
-        val newTimer = FeedbackFadeTimer(next.text!!, next.sequence, 4900)
-        assertFalse(oldTimer.isVisibleAt(5000))
-        assertTrue(newTimer.isVisibleAt(5000))
-        assertTrue(newTimer.isVisibleAt(9899))
-        assertFalse(newTimer.isVisibleAt(9900))
+        val newTimer = FeedbackFadeTimer(next.text!!, next.sequence, 2900)
+        assertFalse(oldTimer.isVisibleAt(3000))
+        assertTrue(newTimer.isVisibleAt(3000))
+        assertTrue(newTimer.isVisibleAt(5899))
+        assertFalse(newTimer.isVisibleAt(5900))
     }
 
     @Test fun leavingAndReenteringThePresentationDoesNotConsumeAStayMessage() {
@@ -59,7 +59,7 @@ class FeedbackFadePolicyTest {
 
     @Test fun fadingDoesNotEraseTheStoredMessageOrSupportDetails() {
         val stored = FeedbackMessage().replace("Profile saved.")
-        assertFalse(FeedbackFadeTimer(stored.text!!, stored.sequence, 0).isVisibleAt(5000))
+        assertFalse(FeedbackFadeTimer(stored.text!!, stored.sequence, 0).isVisibleAt(3000))
         assertEquals("Profile saved.", stored.text)
         val reference = "Request: Your session is no longer authorized. Sign in again.\nSupport reference: WC-123456"
         assertTrue(FeedbackFadeTimer(reference, 1, 0).isVisibleAt(Long.MAX_VALUE))
@@ -68,8 +68,8 @@ class FeedbackFadePolicyTest {
     @Test fun replacingInformationWithASafetyWarningCancelsItsExpiry() {
         val information = FeedbackMessage().replace("Profile saved.")
         val warning = information.replace("Dose unclear")
-        val timer = FeedbackFadeTimer(warning.text!!, warning.sequence, 4900)
-        assertTrue(timer.isVisibleAt(5000))
+        val timer = FeedbackFadeTimer(warning.text!!, warning.sequence, 2900)
+        assertTrue(timer.isVisibleAt(3000))
         assertTrue(timer.isVisibleAt(Long.MAX_VALUE))
     }
 

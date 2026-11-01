@@ -21,6 +21,6 @@ internal data class FeedbackFadeTimer(
     val startedAtMillis: Long,
     val hasAction: Boolean = false,
 ) {
-    val fadeAfterMillis: Long? = if (feedbackMayFade(message, hasAction)) 5_000L else null
+    val fadeAfterMillis: Long? = if (feedbackMayFade(message, hasAction)) 3_000L else null
     fun isVisibleAt(nowMillis: Long): Boolean = fadeAfterMillis?.let { nowMillis - startedAtMillis < it } ?: true
 }
