@@ -59,20 +59,21 @@ class ModelIdentityError(ValueError):
 request_operation: ContextVar[str | None] = ContextVar('request_operation', default=None)
 document_operations: ContextVar[list | None] = ContextVar('document_operations',default=None)
 PROMPTS = Path(__file__).parent / 'prompts'
-PRICE_VERSION = 'normalized-2026-09-05'
+PRICE_VERSION = 'normalized-2026-11-01'
 # USD per million tokens: durable list-price normalization, independent of discounts.
 MODEL_PRICES = {
-    'meta/muse-spark-1.3': ('1.25', '4.25', '.15'),
     'openai/gpt-6-luna': ('.10', '.50', '.02'),
+    'openai/gpt-6.1-terra': ('1', '5', '.05'),
     'openai/gpt-6.1-sol': ('2', '10', '.2'),
     'openai/gpt-6-astra': ('10', '50', '.4'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
     'anthropic/claude-haiku-5.5': ('.10', '.50', '.01'),
 }
-# Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
+# Reviewed against the public OpenRouter endpoint catalog on 2026-11-01.
 # Exact aliases only: never accept arbitrary date suffixes or another model.
 MODEL_SNAPSHOTS = {
     'openai/gpt-6-luna': frozenset({'openai/gpt-6-luna-20260922'}),
+    'openai/gpt-6.1-terra': frozenset({'openai/gpt-6.1-terra-20261026'}),
     'openai/gpt-6.1-sol': frozenset({'openai/gpt-6.1-sol-20260929'}),
     'openai/gpt-6-astra': frozenset({'openai/gpt-6-astra-20260903'}),
     'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
@@ -734,7 +735,7 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
     payload = {'model': model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}],
         ('max_completion_tokens' if model.startswith('openai/') else 'max_tokens'): max_tokens,
         'response_format': {'type': 'json_schema', 'json_schema': {'name': 'clinical_' + task, 'strict': False, 'schema': result_schema(task)}},
-        'provider': {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}, 'stream': False,'usage':{'include':True}}
+        'provider': openrouter_provider_policy(model), 'stream': False,'usage':{'include':True}}
     if routing:
         payload['reasoning'] = {'effort': routing['effort_level'], 'exclude': True}
     # Conservatively reserve for text plus media and bounded output. Normalization
@@ -815,6 +816,22 @@ def simple_note_template(content):
     return isinstance(data, dict) and data.get('template') in SIMPLE_NOTE_TEMPLATES and not data.get('untrusted_layout_preferences')
 
 
+def openrouter_provider_policy(model):
+    """Fail closed to the configured provider order for clinical AI traffic."""
+    base = {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    setting = ('openrouter_openai_provider_order' if model.startswith('openai/') else
+               'openrouter_anthropic_provider_order' if model.startswith('anthropic/') else
+               'openrouter_other_provider_order')
+    raw = getattr(settings, setting, 'openai' if model.startswith('openai/') else
+                  'anthropic' if model.startswith('anthropic/') else '')
+    order = [value.strip().lower() for value in raw.split(',') if value.strip()]
+    if not order:
+        raise preflight_error(503, 'An approved OpenRouter provider order is required for this model')
+    base['order'] = order
+    base['allow_fallbacks'] = bool(getattr(settings, 'openrouter_allow_provider_fallbacks', False))
+    return base
+
+
 def configured_route(task, content):
     """Keep automatic effort selection while honoring the owner's model settings."""
     route = select_route(TASK_FAMILIES.get(task, task), content)
@@ -824,7 +841,8 @@ def configured_route(task, content):
     elif route['effort_level'] == 'high': selected = settings.model_frontier
     elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
         selected = settings.model_documentation_simple
-    elif family in {'draft', 'qa'}: selected = settings.model_documentation
+    elif family == 'draft': selected = settings.model_documentation
+    elif family == 'qa': selected = getattr(settings, 'model_documentation_qa', settings.model_documentation)
     elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
     else: selected = settings.model_extraction
     if selected not in MODEL_PRICES:
@@ -1213,7 +1231,7 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
                     headers={'Authorization':'Bearer ' + settings.openrouter_api_key},
                     json={'model':model, 'input_audio':{'data':base64.b64encode(data).decode(), 'format':formats[mime]},
                         'temperature':0, 'response_format':'verbose_json', 'timestamp_granularities':['segment'],
-                        'provider':{'zdr':True, 'data_collection':'deny'}})
+                        'provider':openrouter_provider_policy(model)})
             else:
                 response = await send('https://api.deepgram.com/v1/listen', params={'model': model, 'smart_format': 'true', 'utterances': 'true', 'mip_opt_out': 'true'},
                     headers={'Authorization': 'Token ' + settings.deepgram_api_key, 'Content-Type': mime}, content=data)
@@ -1333,6 +1351,7 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+
 
 
 

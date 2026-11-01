@@ -56,7 +56,7 @@ def test_exact_outgoing_router_model_not_task_configuration(trace,monkeypatch):
 
 def test_rate_limit_has_two_individually_timed_attempts(trace):
     trace.http.responses=[httpx.Response(429,headers={'Retry-After':'1'},json={'error':'synthetic'},request=httpx.Request('POST','https://provider.invalid')),completion()]
-    asyncio.run(providers.structured('extract','synthetic','meta/muse-spark-1.3',user=trace.user,encounter_id='synthetic'))
+    asyncio.run(providers.structured('extract','synthetic','openai/gpt-6-luna',user=trace.user,encounter_id='synthetic'))
     attempts=[e for e in events(trace) if e['source']=='provider']
     assert [e['retry_count'] for e in attempts]==[0,1]
     assert [e['status'] for e in attempts]==['failed','success']
@@ -80,14 +80,14 @@ def test_speech_fallback_records_original_and_fallback_even_when_both_fail(trace
 def test_untrusted_error_body_and_reported_model_cannot_leak(trace):
     sentinel='SYNTHETIC_SECRET_AND_CLINICAL_SENTINEL'
     trace.http.responses=[(400,{'error':{'message':sentinel},'model':sentinel})]
-    with pytest.raises(HTTPException):asyncio.run(providers.structured('extract',sentinel,'meta/muse-spark-1.3',user=trace.user,encounter_id='synthetic'))
+    with pytest.raises(HTTPException):asyncio.run(providers.structured('extract',sentinel,'openai/gpt-6-luna',user=trace.user,encounter_id='synthetic'))
     assert sentinel not in json.dumps(events(trace))
     assert next(e for e in events(trace) if e['source']=='provider')['error_message']=='Upstream HTTP rejection'
 
 def test_cancellation_retains_attempt_record(trace):
     def cancelled(_):raise asyncio.CancelledError()
     trace.http.responses=[cancelled]
-    with pytest.raises(asyncio.CancelledError):asyncio.run(providers.structured('extract','synthetic','meta/muse-spark-1.3',user=trace.user,encounter_id='synthetic'))
+    with pytest.raises(asyncio.CancelledError):asyncio.run(providers.structured('extract','synthetic','openai/gpt-6-luna',user=trace.user,encounter_id='synthetic'))
     attempt=next(e for e in events(trace) if e['source']=='provider')
     assert attempt['status']=='cancelled' and attempt['error_code']=='CANCELLED'
 
@@ -96,7 +96,7 @@ def test_diagnostic_storage_failure_does_not_replace_provider_result(trace,monke
     def broken():raise RuntimeError('Synthetic storage failure')
     monkeypatch.setattr(d,'SessionLocal',broken)
     trace.http.responses=[completion()]
-    result=asyncio.run(providers.structured('extract','synthetic','meta/muse-spark-1.3',user=trace.user,encounter_id='synthetic'))
+    result=asyncio.run(providers.structured('extract','synthetic','openai/gpt-6-luna',user=trace.user,encounter_id='synthetic'))
     assert result['facts']==[] and d.write_failures>before
 
 def test_admin_authorization_and_strict_client_metadata(trace):
@@ -153,11 +153,11 @@ def test_external_flow_metadata_is_closed_and_has_no_image_or_auth_content():
 def test_replay_keeps_actual_original_model_without_new_provider_call(trace):
     trace.http.responses=[completion()]
     kwargs=dict(user=trace.user,encounter_id='synthetic')
-    first=asyncio.run(providers.structured('extract','synthetic','meta/muse-spark-1.3',**kwargs))
-    second=asyncio.run(providers.structured('extract','synthetic','meta/muse-spark-1.3',**kwargs))
+    first=asyncio.run(providers.structured('extract','synthetic','openai/gpt-6-luna',**kwargs))
+    second=asyncio.run(providers.structured('extract','synthetic','openai/gpt-6-luna',**kwargs))
     assert len(trace.http.calls)==1 and first==second
     replay=events(trace)[-1]
-    assert replay['source']=='replay' and replay['selected_model']=='meta/muse-spark-1.3'
+    assert replay['source']=='replay' and replay['selected_model']=='openai/gpt-6-luna'
     assert replay['new_provider_request'] is False
 
 def test_saved_report_links_only_to_same_actor_job(trace):
@@ -178,11 +178,11 @@ def test_saved_report_links_only_to_same_actor_job(trace):
 
 def test_filter_by_model_failure_fallback_and_duration(trace):
     trace.http.responses=[(500,{})]
-    with pytest.raises(HTTPException):asyncio.run(providers.structured('extract','synthetic','meta/muse-spark-1.3',user=trace.user,encounter_id='synthetic'))
+    with pytest.raises(HTTPException):asyncio.run(providers.structured('extract','synthetic','openai/gpt-6-luna',user=trace.user,encounter_id='synthetic'))
     d.finish(502);trace.user.is_platform_admin=True
     app=FastAPI();app.include_router(d.router);app.dependency_overrides[current_user]=lambda:trace.user
     c=TestClient(app)
-    assert len(c.get('/admin/diagnostics?model=meta%2Fmuse-spark-1.3&status=failed&slow_ms=0&sort=duration').json()['items'])==1
+    assert len(c.get('/admin/diagnostics?model=openai%2Fgpt-6-luna&status=failed&slow_ms=0&sort=duration').json()['items'])==1
     assert c.get('/admin/diagnostics?model=nonexistent').json()['items']==[]
     assert c.get('/admin/diagnostics?fallback=true').json()['items']==[]
 

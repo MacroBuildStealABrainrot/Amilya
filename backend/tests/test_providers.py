@@ -91,8 +91,9 @@ def gateway(tmp_path, monkeypatch):
         groq_zdr_enabled=False, deepgram_phi_approved=False,
         openrouter_api_key='synthetic-openrouter-key', openrouter_base_url='https://provider.invalid/api/v1',
         public_base_url='https://woundcopilot.example.test', provider_timeout_seconds=7,
-        model_extraction='meta/muse-spark-1.3', model_vision='meta/muse-spark-1.3',
-        model_documentation='openai/gpt-6-luna', model_review='meta/muse-spark-1.3',
+        model_extraction='openai/gpt-6-luna', model_vision='anthropic/claude-sonnet-5.5',
+        model_documentation='openai/gpt-6.1-terra', model_documentation_qa='openai/gpt-6.1-sol',
+        model_documentation_simple='anthropic/claude-haiku-5.5', model_review='openai/gpt-6.1-sol',
         model_frontier='openai/gpt-6-astra', model_challenger='anthropic/claude-sonnet-5.5',
         cloudflare_api_token='', cloudflare_account_id='', groq_api_key='', deepgram_api_key='',
         deepgram_enabled=False, speech_provider='auto', max_text_chars=40000,
@@ -121,6 +122,12 @@ def operation_rows(gateway):
         return list(db.scalars(select(UsageOperation)))
 
 
+def expected_openrouter_policy(model):
+    family = 'openai' if model.startswith('openai/') else 'anthropic'
+    return {'zdr': True, 'data_collection': 'deny', 'require_parameters': True,
+            'order': [family], 'allow_fallbacks': False}
+
+
 def test_openai_route_uses_compatible_output_limit_with_privacy_enforced(gateway):
     gateway.config.model_extraction = 'openai/gpt-6-luna'
     gateway.http.responses = [completion()]
@@ -130,7 +137,7 @@ def test_openai_route_uses_compatible_output_limit_with_privacy_enforced(gateway
     assert 'max_tokens' not in payload
     assert payload['reasoning'] == {'effort': 'low', 'exclude': True}
     assert operation_rows(gateway)[0].usage['routing']['effort_level'] == 'low'
-    assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    assert payload['provider'] == expected_openrouter_policy(payload['model'])
 
 
 @pytest.mark.parametrize('status,reason', [(404, 'route_unavailable'), (402, 'provider_credits'), (403, 'provider_access'), (429, 'provider_rate_limit'), (400, 'request_incompatible')])
@@ -200,7 +207,7 @@ def test_all_models_require_zdr_and_omit_unsupported_generation_fields(gateway, 
     asyncio.run(providers.structured('extract', 'Synthetic source', model, user=gateway.user, encounter_id='synthetic-encounter'))
     payload = gateway.http.calls[0]['json']
     assert payload['model'] == model
-    assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    assert payload['provider'] == expected_openrouter_policy(model)
     assert not {'temperature', 'top_p', 'tool_choice', 'tools', 'reasoning'} & payload.keys()
     assert payload['response_format']['type'] == 'json_schema'
     assert gateway.http.options == [{'timeout': 7, 'follow_redirects': False}]
@@ -504,7 +511,9 @@ def test_draft_requires_independent_qa_of_exact_proposed_text(gateway):
     result = asyncio.run(providers.draft_text(facts, 'nursing', 'auto', user=gateway.user, encounter_id='draft'))
     assert result['text'] == draft and result['qa']['passed'] is True
     assert result['effort_level'] == 'medium'
-    assert result['routing']['model'] == gateway.config.model_documentation
+    assert result['routing']['model'] == gateway.config.model_documentation_simple
+    assert [call['json']['model'] for call in gateway.http.calls] == [
+        gateway.config.model_documentation_simple, gateway.config.model_documentation_qa]
     assert gateway.http.calls[0]['json']['reasoning']['effort'] == 'medium'
     qa_source = json.loads(gateway.http.calls[1]['json']['messages'][1]['content'])
     assert qa_source['case_facts'] == facts and qa_source['proposed_draft'] == draft
@@ -606,13 +615,13 @@ def test_valid_output_with_missing_or_invalid_usage_is_not_free_completed_infere
 @pytest.mark.parametrize('value', [-1, float('nan'), float('inf'), True, '100', 1.5])
 def test_malformed_token_count_cannot_be_normalized_as_measured_zero(value):
     with pytest.raises(ValueError):
-        providers.normalized_tokens('meta/muse-spark-1.3', {'prompt_tokens': value, 'completion_tokens': 20})
+        providers.normalized_tokens('openai/gpt-6-luna', {'prompt_tokens': value, 'completion_tokens': 20})
 
 
 @pytest.mark.parametrize('cached', [-1, float('nan'), True, '20', 101])
 def test_malformed_cache_count_is_rejected(cached):
     with pytest.raises(ValueError):
-        providers.normalized_tokens('meta/muse-spark-1.3', {
+        providers.normalized_tokens('openai/gpt-6-luna', {
             'prompt_tokens': 100, 'completion_tokens': 20, 'prompt_tokens_details': {'cached_tokens': cached}})
 
 

@@ -13,18 +13,21 @@ from test_providers import gateway
     ('soap', 'quick_draft', 'anthropic/claude-haiku-5.5'),
     ('referral_letter', 'quick_draft', 'anthropic/claude-haiku-5.5'),
     ('physician_update', 'quick_draft', 'anthropic/claude-haiku-5.5'),
-    ('custom', 'quick_draft', 'openai/gpt-6.1-sol'),
+    ('custom', 'quick_draft', 'openai/gpt-6.1-terra'),
     ('nursing', 'quick_qa', 'openai/gpt-6.1-sol'),
 ])
 def test_note_type_picks_the_model(gateway, template, task, expected):
-    gateway.config.model_documentation = 'openai/gpt-6.1-sol'
+    gateway.config.model_documentation = 'openai/gpt-6.1-terra'
+    gateway.config.model_documentation_qa = 'openai/gpt-6.1-sol'
     gateway.config.model_documentation_simple = 'anthropic/claude-haiku-5.5'
     route = providers.configured_route(task, json.dumps({'template': template}))
     assert route['model'] == expected
 
 
 def test_custom_layout_keeps_the_main_model(gateway):
-    gateway.config.model_documentation = 'openai/gpt-6.1-sol'
+    gateway.config.model_documentation = 'openai/gpt-6.1-terra'
+    gateway.config.model_documentation_qa = 'openai/gpt-6.1-sol'
     gateway.config.model_documentation_simple = 'anthropic/claude-haiku-5.5'
     content = json.dumps({'template': 'nursing', 'untrusted_layout_preferences': {'sections': ['A']}})
-    assert providers.configured_route('quick_draft', content)['model'] == 'openai/gpt-6.1-sol'
+    assert providers.configured_route('quick_draft', content)['model'] == 'openai/gpt-6.1-terra'
+

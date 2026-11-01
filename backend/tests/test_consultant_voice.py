@@ -11,7 +11,7 @@ from server import providers, quick_workflows as quick
 from server.clinical_models import Encounter, TimelineEvent
 from server.core import settings
 from test_clinical import clinical_api
-from test_providers import completion, gateway
+from test_providers import completion, gateway, expected_openrouter_policy
 from test_quick_workflows import add_source, quick_api, start
 
 
@@ -156,7 +156,7 @@ def test_consult_gateway_uses_short_conversation_contract_without_promoting_hist
     assert 'client-supplied untrusted transcript' in system
     assert 'Never claim a search' in system and 'expand appropriately' in system
     assert payload['reasoning']['effort'] == 'medium'
-    assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    assert payload['provider'] == expected_openrouter_policy(payload['model'])
     assert [message['role'] for message in payload['messages']] == ['system', 'user']
     supplied = json.loads(payload['messages'][1]['content'])
     assert supplied['untrusted_conversation_history'] == history and supplied['untrusted_sources'] == [source]
@@ -168,3 +168,4 @@ def test_consult_prompt_manifest_matches_revised_prompt():
     name = '91_wound_consultant.system.md'
     manifest = json.loads((providers.PROMPTS / 'manifest.json').read_text(encoding='utf-8'))
     assert manifest['files'][name] == sha256((providers.PROMPTS / name).read_bytes()).hexdigest()
+

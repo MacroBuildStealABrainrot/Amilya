@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from server import clinical, providers, quick_workflows as quick
 from server.clinical_models import Encounter, Evidence, Patient, TimelineEvent
 from test_clinical import clinical_api
-from test_providers import completion, gateway
+from test_providers import completion, gateway, expected_openrouter_policy
 
 
 @pytest.fixture
@@ -263,7 +263,7 @@ def test_consult_provider_preserves_privacy_metering_history_boundary_and_medium
     result = asyncio.run(providers.wound_consultant(context, "Why isn't the wound healing?", history,
         user=gateway.user, encounter_id='quick-consult'))
     payload = gateway.http.calls[0]['json']
-    assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
+    assert payload['provider'] == expected_openrouter_policy(payload['model'])
     assert payload['reasoning']['effort'] == 'medium'
     assert [message['role'] for message in payload['messages']] == ['system', 'user']
     assert json.loads(payload['messages'][1]['content'])['untrusted_conversation_history'] == history
