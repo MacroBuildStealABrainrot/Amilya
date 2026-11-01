@@ -226,6 +226,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun hash(text:String)=MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}
     private fun now()=Instant.now().toString()
     private fun clearClinical(){
+        shiftStorageProblem=false
         processingRecording=null;recordingConsent=false;autoStartRecording=false
         documentAlerts=emptyList();documentAlertSafetyCount=0;assessmentReview=null;assessmentEncounter=""
         voiceMessage=false;dismissError()
@@ -364,7 +365,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             val e=async{(api.call("/work")as JSONArray).objects()}
             val b=async{api.call("/billing")as JSONObject}
             val people=p.await();val work=e.await();val credits=b.await()
-            if(user?.str("id")==owner && !demo){patients=people;encounters=work;billing=credits}
+            if(user?.str("id")==owner && !demo){patients=people;encounters=work;billing=credits;rememberShiftMetadata()}
         }
     }
     fun refresh()=runTask {if(user==null){config=api.call("/config") as JSONObject}else if(case!=null && screen !in listOf("home","saved","account","new")){reloadCase()}else refreshHome()}
@@ -381,7 +382,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         case=if(demo)JSONObject((demoCases[id]?:throw IllegalArgumentException("Sample encounter not found.")).toString()) else api.call("/encounters/$id") as JSONObject
         answer=null;audit=emptyList();restoreDraft();restoreQuick();screen=quickDestination();refreshRecordingJobs()
     }
-    suspend fun reloadCase(){if(!demo){if(encounterId.startsWith("local-") && RecordingService.state.value.recording){notice="Recording continues on this device. Refresh after stopping.";return};ensureRemoteDocument();case=api.call("/encounters/$encounterId") as JSONObject;val e=case!!.getJSONObject("encounter");encounters=(listOf(e)+encounters.filter{it.str("id")!=e.str("id")}).sortedByDescending{it.str("updated_at")}}}
+    suspend fun reloadCase(){if(!demo){if(encounterId.startsWith("local-") && RecordingService.state.value.recording){notice="Recording continues on this device. Refresh after stopping.";return};ensureRemoteDocument();case=api.call("/encounters/$encounterId") as JSONObject;val e=case!!.getJSONObject("encounter");encounters=(listOf(e)+encounters.filter{it.str("id")!=e.str("id")}).sortedByDescending{it.str("updated_at")};rememberShiftCase()}}
     fun createEncounter(patientId:String?,name:String,external:String,woundId:String?,woundLabel:String,title:String,onPatient:(String)->Unit,onWound:(String)->Unit)=runTask {
         persistEditor();quickMode=null;voiceCorrection=false;voiceMessage=false;voiceInstruction="";answer=null;audit=emptyList()
         if(demo){
@@ -599,6 +600,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         check(user?.str("id")==owner && encounterId==local){"The active visit changed. Reopen your saved recording to continue."}
         vault.write(cache,response.toString())
         DeveloperDiagnostics.link(vault,owner,local,response.getJSONObject("encounter").str("id"))
+        forgetShiftVisit(local)
         case=response;editorOwner=storeKey("draft");chooseQuickMode(mode);updateTemplate(format)
         bindDiagnostics()
         persistEditor()
@@ -623,8 +625,69 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     var deleteWorkId by mutableStateOf<String?>(null)
     var closeWorkPrompt by mutableStateOf(false)
+    // End-of-shift reads only local copies. These hooks observe data already returned by existing routes.
+    private val shiftCache by lazy { ShiftSummaryCache(vaultStore) { vault.names() } }
+    private var shiftStorageProblem = false
+    private fun shiftOwner() = user?.str("id")?.takeIf { it.isNotBlank() }
+    private fun shiftVisit(row:JSONObject, reportsKnown:Boolean=false, reports:List<ShiftReport> = emptyList()):ShiftVisit? {
+        val owner=shiftOwner()?:return null
+        val id=row.str("id").takeIf { it.isNotBlank() }?:return null
+        val earlier=shiftCache.read(owner,id)
+        val started=storedInstant(row.str("created_at")) ?: earlier?.startedAt ?: storedInstant(row.str("updated_at")) ?: Instant.now()
+        return ShiftVisit(id,row.str("title").ifBlank { "Visit" },started,row.optInt("revision"),reportsKnown,reports)
+    }
+    private fun rememberShiftMetadata() {
+        val owner=shiftOwner()?:return
+        try {
+            val zone=java.time.ZoneId.systemDefault();val today=java.time.LocalDate.now(zone)
+            encounters.forEach { row ->
+                val created=storedInstant(row.str("created_at"))
+                if(created==null || created.atZone(zone).toLocalDate()==today)
+                    shiftVisit(row)?.let { shiftCache.metadata(owner,it,today,zone) }
+            }
+        } catch (_:Exception) { shiftStorageProblem=true }
+    }
+    private fun rememberShiftCase(confirmedWarningDocumentId:String?=null) {
+        val owner=shiftOwner()?:return
+        val data=case?:return
+        val row=data.optJSONObject("encounter")?:return
+        try {
+            val previous=shiftCache.read(owner,row.str("id"))
+            if(previous!=null && previous.revision>row.optInt("revision"))return
+            val latest=data.items("documents").maxWithOrNull(compareBy<JSONObject>{it.optInt("version")}.thenBy{it.str("id")})
+            val reports=listOfNotNull(latest).map { d ->
+                val id=d.str("id")
+                // Read this visit's own saved records, never the global banner or another visit's alerts.
+                val keyFor:(String)->String={ kind -> "$kind-$owner-${row.str("id")}" }
+                val previousReport=previous?.reports?.firstOrNull { it.id==id }
+                val notice=DocumentNotices(vaultStore) { keyFor("doc-notice-$it") }.read(id) ?: previousReport?.notice
+                val alerts=DocumentAlertNotes(vaultStore) { keyFor("doc-alerts-$it") }.read(id)?.first ?: previousReport?.alerts.orEmpty()
+                ShiftReport(id,d.optInt("version"),d.str("status"),d.str("text"),notice,alerts,
+                    id==confirmedWarningDocumentId || previousReport?.warningRecordKnown==true)
+            }
+            val zone=java.time.ZoneId.systemDefault();val today=java.time.LocalDate.now(zone)
+            shiftVisit(row,data.has("documents"),reports)?.let { shiftCache.remember(owner,it,today,zone) }
+        } catch (_:Exception) { shiftStorageProblem=true }
+    }
+    private fun forgetShiftVisit(id:String) {
+        val owner=shiftOwner()?:return
+        try { shiftCache.remove(owner,id) } catch (_:Exception) { shiftStorageProblem=true }
+    }
+    fun openShiftSummary() {
+        if(loading || RecordingService.state.value.recording)return
+        screen="shift_summary"
+    }
+    internal fun shiftSummarySnapshot(today:java.time.LocalDate,zone:java.time.ZoneId):ShiftSummaryPlan? {
+        val owner=shiftOwner()?:return null
+        return try {
+            rememberShiftMetadata();rememberShiftCase()
+            if(shiftStorageProblem)return null
+            planShiftSummary(shiftCache.today(owner,today,zone),today,zone)
+        } catch (_:Exception) { null }
+    }
     fun isSavedWork(row:JSONObject)=row.str("storage_state")=="saved" || row.optJSONObject("draft_data")?.str("retention")=="saved"
     private fun eraseLocalWork(id:String){
+        forgetShiftVisit(id)
         recordingRecovery.complete(id,user?.str("id")?:"sample");refreshRecordingJobs()
         val context=getApplication<Application>();val owner="${user?.str("id")}:$id"
         // Only remove copies inside this app's private directories, never gallery originals.
@@ -942,6 +1005,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun persistEditor(){val key=editorOwner ?: return;if(key!=storeKey("draft"))return;draftGeneration++;draftJob?.cancel();try{vault.write(key,draftJson().toString())}catch(_:Exception){notice="The local draft could not be saved on this device."}}
     private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts),"ui_alert_safety_count" to documentAlertSafetyCount,"ui_notice" to draftNotice.orEmpty())
     private fun restoreDraft(){
+        rememberShiftCase()
         assessmentReview=null;documentAlerts=emptyList();documentAlertSafetyCount=0
         draftGeneration++;draftJob?.cancel();restoring=true;editorOwner=storeKey("draft")
         val d=vault.read(editorOwner!!)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: if(case?.optJSONObject("encounter")?.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank())case?.items("documents")?.maxByOrNull{it.optInt("version")}?.let{
@@ -1004,6 +1068,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         }else mutation("save","/encounters/$encounterId/documents",p)
         mergeDocument(d)
         if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");savedNotices.save(d.str("id"),draftNotice);savedAlerts.save(d.str("id"),documentAlerts,documentAlertSafetyCount)}
+        rememberShiftCase(if(before==localRevision&&matchesEditor(d))d.str("id")else null)
         persistEditor();if(!demo)acknowledge("save",p)
         notice=if(demo)"Saved in the synthetic preview." else "Exact document saved to your workspace."
         refreshAcknowledged()
@@ -1018,7 +1083,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         require((case?.optJSONArray("conflicts")?.length()?:0)==0){"Resolve conflicting confirmed findings before signing."}
         val result=if(demo)JSONObject(saved.toString()).put("status","signed").put("case_revision",revision+1).put("signed_case_revision",revision+1).put("signed_at",now()).put("signed_by",user?.str("id"))
         else api.call("/documents/"+saved.str("id")+"/sign","POST",obj("content_hash" to saved.str("content_hash"),"acknowledge_review" to true,"expected_case_revision" to revision)) as JSONObject
-        mergeDocument(result);editorCaseRevision=result.optInt("case_revision");persistEditor();notice=if(demo)"Signed in synthetic preview only."else"Signed version preserved.";refreshAcknowledged()
+        mergeDocument(result);rememberShiftCase();editorCaseRevision=result.optInt("case_revision");persistEditor();notice=if(demo)"Signed in synthetic preview only."else"Signed version preserved.";refreshAcknowledged()
     }
     fun history()=runTask {audit=if(demo)listOf(obj("action" to "sample.encounter_opened","created_at" to "Synthetic preview"))else(api.call("/encounters/$encounterId/audit")as JSONArray).objects();screen="history"}
     fun logout()=runTask {

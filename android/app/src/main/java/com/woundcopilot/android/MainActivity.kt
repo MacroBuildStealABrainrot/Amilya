@@ -94,6 +94,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     fun back(){
         if(s.loading)return
         if(page=="record" && rec.recording){s.notice="Stop the recording before leaving this screen.";return}
+        if(page=="shift_summary"){navigate("saved");return}
         s.dismissError()
         if(s.voiceMessage){s.cancelVoiceMessage();return}
         if(s.voiceCorrection){s.cancelVoiceCorrection();return}
@@ -120,7 +121,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
                 // Owner's layout request (2026-10-28): no share, top microphone or refresh in the shared header.
                 // Owner's request (2026-10-30): one Voice button for spoken commands (not dictation), hidden while recording.
-                if(page !in listOf("welcome","login","signup","reconnect","record") && !rec.recording && s.user!=null)
+                if(page !in listOf("welcome","login","signup","reconnect","record","shift_summary") && !rec.recording && s.user!=null)
                     Surface(onClick={if(!s.loading)s.voiceCommandsOpen=true},shape=RoundedCornerShape(50),color=c.surfaceVariant,modifier=Modifier.padding(end=4.dp).semantics{contentDescription="Voice commands"}){
                         Row(Modifier.padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
                             InstrumentIcon("voice",Modifier.size(18.dp),c.primary);Text("Voice",style=MaterialTheme.typography.labelLarge)
@@ -150,6 +151,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                             route=="login"||route=="signup"->AuthScreen(s,route=="signup")
                             route=="home"->HomeScreen(s)
                             route=="saved"->SavedWorkScreen(s)
+                            route=="shift_summary"->ShiftSummaryScreen(s)
                             route=="document_capture"->DocumentCaptureScreen(s)
                             route=="photo_assessment"->QuickPhotoScreen(s)
                             route=="consultant"->QuickConsultantScreen(s)
@@ -225,6 +227,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
     val recorder by RecordingService.state.collectAsState()
     Page{
+        TextButton(onClick={s.openShiftSummary()},enabled=!s.loading&&!recorder.recording){Text("End-of-shift summary")}
         InstrumentTitle("Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
         Row{TextButton(onClick={recovery=false}){Text("Saved")};TextButton(onClick={recovery=true;s.refreshRecordingJobs()}){Text("Recovery & older work")}}
         val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
