@@ -184,6 +184,8 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     val pager=rememberPagerState(initialPage=workspacePages.indexOf(s.screen).coerceAtLeast(0),pageCount={3})
     var requested by remember{mutableStateOf<Int?>(null)}
     LaunchedEffect(s.screen){val destination=workspacePages.indexOf(s.screen);if(destination>=0&&destination!=pager.currentPage){requested=destination;pager.animateScrollToPage(destination);requested=null}}
+    // Free test servers go to sleep when idle. While the app is open, ask the server a harmless question every 4 minutes so it stays awake.
+    LaunchedEffect(Unit){if(BuildConfig.ISOLATED_TEST)kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){while(true){try{val c=java.net.URL("https://$ISOLATED_TEST_HOST/api/v1/health").openConnection() as java.net.HttpURLConnection;c.connectTimeout=20000;c.readTimeout=60000;c.getResponseCode();c.disconnect()}catch(_:Exception){};kotlinx.coroutines.delay(240_000)}}}
     LaunchedEffect(pager){snapshotFlow{pager.isScrollInProgress to pager.settledPage}.distinctUntilChanged().collect{(moving,position)->if(!moving&&requested==null&&s.screen in workspacePages&&workspacePages.indexOf(s.screen)!=position)s.screen=workspacePages[position]}}
     HorizontalPager(pager,Modifier.fillMaxSize().testTag("encounter-pager"),userScrollEnabled=!s.loading,key={workspacePages[it]}){index->when(index){0->EncounterScreen(s);1->FindingsScreen(s);2->DocumentsScreen(s)}}
 }
