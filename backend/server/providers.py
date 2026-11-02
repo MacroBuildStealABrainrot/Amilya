@@ -1087,6 +1087,16 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     draft = await routed(task, json.dumps(content, ensure_ascii=False, default=str),
         user=user, encounter_id=encounter_id, max_tokens=8000 if len(json.dumps(context,ensure_ascii=False))>20000 else 2400)
     draft = clean_generated_layout(draft, options, context)
+    if not settings.quick_ai_check:
+        # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
+        # find is shown to the clinician as a "check before saving" alert. No second AI check, no AI rewrite.
+        found = quality_defects(draft['text'], context)
+        alerts = list(draft.get('ui_alerts') or [])
+        alerts += [{'field': 'report', 'message': item} for item in found[:10]]
+        draft['ui_alerts'] = alerts
+        draft.setdefault('usage', {})['stages'] = []
+        draft['qa'] = {'passed': not found, 'discrepancies': found[:10], 'status': 'ai_check_off'}
+        return draft
     qa = await routed('quick_qa', json.dumps({**content, 'proposed_draft': draft['text'], 'proposed_status': draft.get('status', 'ready'), 'proposed_ui_alerts': draft.get('ui_alerts', [])},
         ensure_ascii=False, default=str), user=user, encounter_id=encounter_id, max_tokens=1000)
     defects = quality_defects(draft['text'], context)

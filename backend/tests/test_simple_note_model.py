@@ -39,3 +39,18 @@ def test_hard_looking_recording_still_uses_the_note_model_for_standard_notes(gat
     content = json.dumps({'template': 'nursing'})
     assert providers.configured_route('quick_draft', content)['model'] == 'anthropic/claude-haiku-5.5'
     assert providers.configured_route('quick_qa', content)['model'] == 'anthropic/claude-sonnet-5.5'
+
+
+def test_one_step_mode_writes_the_report_without_a_second_ai_check(gateway, monkeypatch):
+    """quick_ai_check off: exactly one AI request writes the report; no check, no rewrite."""
+    import asyncio
+    calls = []
+
+    async def fake_routed(task, content, *args, **kwargs):
+        calls.append(task)
+        return {'text': 'Small drainage. Cleaned with NS.', 'status': 'ready', 'ui_alerts': [], 'usage': {}}
+    monkeypatch.setattr(providers, 'routed', fake_routed)
+    monkeypatch.setattr(providers.settings, 'quick_ai_check', False, raising=False)
+    result = asyncio.run(providers._checked_quick_text({'untrusted_sources': []}, 'quick_draft', {'template': 'nursing'}, user=gateway.user, encounter_id='e1'))
+    assert calls == ['quick_draft']
+    assert result['qa']['status'] == 'ai_check_off' and result['text'].startswith('Small drainage')
