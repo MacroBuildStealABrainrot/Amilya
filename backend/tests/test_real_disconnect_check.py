@@ -64,6 +64,11 @@ def test_real_socket_drop_then_retry(gateway, monkeypatch):
         time.sleep(0.1)
     facts = {}
     try:
+        release.set(); gateway.http.responses = [DRAFT, CHECK]
+        c = httpx.post(f'http://127.0.0.1:{port}/api/v1/encounters/enc1/quick-report', json={}, headers={'Idempotency-Key': 'ctl'}, timeout=30)
+        facts['ctl'] = c.status_code; facts['ctlbody'] = c.text[:80]
+        ctl_ops = ops(gateway)
+        release.clear(); started.clear(); gateway.http.responses = [slow]
         body = b'{}'
         raw = socket.create_connection(('127.0.0.1', port))
         raw.sendall(b'POST /api/v1/encounters/enc1/quick-report HTTP/1.1\r\nHost: x\r\nIdempotency-Key: real-drop-1\r\n'
@@ -92,4 +97,7 @@ def test_real_socket_drop_then_retry(gateway, monkeypatch):
         facts['ai_calls'] = len(gateway.http.calls)
     finally:
         release.set(); server.should_exit = True; thread.join(10)
-    assert False, 'OBSERVED ' + json.dumps(facts, default=str)
+    short = {'ctl': facts.get('ctl'), 'cb': facts.get('ctlbody'), 'st': facts.get('provider_call_started'), 'cx': facts.get('server_cancelled_after_drop'),
+         'rt': facts.get('retry_statuses'), 'calls': facts.get('ai_calls')}
+    assert False, 'OBS1 ' + json.dumps(short)
+
