@@ -37,9 +37,7 @@ import org.json.JSONObject
         val current=photos.firstOrNull{it.str("id")==selected}?:photos.lastOrNull()
         current?.let{p->
             val id=p.str("id");s.localSource(id)?.let{LocalMediaPreview(it,"photo")}
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
-                TextButton({editing=p;label=p.str("label");group=p.str("group")},enabled=!s.loading){Text("Label / group")}
-                TextButton({val index=photos.indexOf(p);if(index>0){val copy=photos.toMutableList();java.util.Collections.swap(copy,index,index-1);s.arrangePhotos(copy)}},enabled=!s.loading&&photos.indexOf(p)>0){Text("Move earlier")}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){
                 TextButton({deleting=id},enabled=!s.loading){Text("Remove")}
             }
         }
