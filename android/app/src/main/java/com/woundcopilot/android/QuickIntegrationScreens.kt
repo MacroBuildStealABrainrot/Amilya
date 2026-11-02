@@ -59,10 +59,13 @@ import java.time.format.DateTimeFormatter
 @Composable fun DocumentCaptureScreen(s:AppState){
     LaunchedEffect(Unit){withFrameNanos{};Performance.end("document_open")}
     val sources=s.case?.items("evidence").orEmpty()
+    val context=LocalContext.current
+    val spokenText=sources.filter{it.str("kind") in listOf("audio","typed","transcript")}.map{it.str("text").trim()}.filter{it.isNotEmpty()}.joinToString("\n\n")
     Page{
         InstrumentTitle("Document")
         DocumentTypeSelector(s.editorTemplate, !s.loading) { if(s.editor.isBlank()){s.updateTemplate(it);s.persistEditor()}else s.reformatQuick(it) }
-        WcpButton("Record",{s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
+        WcpButton("Record",{s.textOnlyNext=false;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
+        WcpButton("Record, text only (no report)",{s.textOnlyNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         WcpButton("Write instead",{s.screen="evidence:typed"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
             TextButton({s.screen="photo"},enabled=!s.loading){InstrumentIcon("photo",Modifier.size(18.dp));Text("  Add photo")}
@@ -70,6 +73,7 @@ import java.time.format.DateTimeFormatter
         }
         if(s.editor.isNotBlank())WcpButton("Return to report",{s.screen="editor"},Modifier.fillMaxWidth(),enabled=!s.loading)
         else if(showsGenerateOnDocument(true,sources.size,s.earlierReportWaiting()))WcpButton(if(sources.isEmpty())"Recover earlier report" else "Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
+        if(spokenText.isNotBlank())WcpButton("Share text",{try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,spokenText)},"Share text"))}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
             sources.forEach{EvidenceItem(s,it)}
             if(s.editor.isBlank())TextButton({s.quickReport(false)},enabled=!s.loading){Text("Create draft without AI")}

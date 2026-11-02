@@ -155,6 +155,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     var demo by mutableStateOf(false); private set
     var loading by mutableStateOf(false); private set
     var quickMode by mutableStateOf<String?>(null); private set
+    /** True for one recording started with "Record, text only": keep the words, do not make a report. */
+    var textOnlyNext by mutableStateOf(false)
     var consultantMessages by mutableStateOf<List<JSONObject>>(emptyList()); private set
     /** Done on Ask Consultant asks whether to turn the conversation into a report instead of losing it. */
     var consultantReportPrompt by mutableStateOf(false)
@@ -859,7 +861,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             if(quality?.optBoolean("retake_required")==true){screen="photo_assessment";return}
         }
         when(quickMode){
-            "document"->{screen="document_capture";if(kind in listOf("audio","typed","transcript") && editor.isBlank())draftQuick(true)}
+            "document"->{screen="document_capture";val textOnly=textOnlyNext;if(kind=="audio")textOnlyNext=false;if(!textOnly && kind in listOf("audio","typed","transcript") && editor.isBlank())draftQuick(true)}
             "photo"->screen="photo_assessment"
             "consultant"->screen="consultant"
         }
