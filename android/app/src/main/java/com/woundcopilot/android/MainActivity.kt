@@ -281,7 +281,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             GlassPanel(Modifier.fillMaxWidth()){
                 Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)){
                     Text("Unfinished recording",style=MaterialTheme.typography.titleMedium)
-                    Text("Updated ${localTime(job.optLong("updated_at").toString())}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    epochMillisAsStoredTime(job.optLong("updated_at"))?.let{Text("Updated ${localTime(it)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
                         Button(onClick={onFinish(job)},enabled=!busy){Text(action)}
                         TextButton(onClick={discardTarget=job},enabled=!busy){Text("Discard")}

@@ -354,7 +354,13 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun toggleTheme(){dark=!dark;vault.write("theme",if(dark)"dark" else "light")}
     private fun setSession(s:JSONObject){val incoming=s.optJSONObject("user") ?: throw ApiException(502,"The server did not return a valid account.");if(demo || user?.str("id")!=incoming.str("id")){persistEditor();clearClinical()};demo=false;user=incoming;if(vault.read("pin-owner")!=incoming.str("id")){pinLock.clear();vault.write("pin-owner",incoming.str("id"));locked=true};if(!pinLock.configured)locked=true;legalRequired=s.optBoolean("requires_legal_acceptance");vault.write("cached-account",obj("user" to incoming,"requires_legal_acceptance" to legalRequired).toString());refreshRecordingJobs()}
     suspend fun refreshSession(){setSession(api.call("/auth/session") as JSONObject)}
-    fun login(email:String,password:String)=runTask {persistEditor();clearClinical();demo=false;user=null;api.clear();setSession(api.call("/auth/login","POST",obj("email" to email.trim(),"password" to password)) as JSONObject);screen="home";refreshHomeInBackground()}
+    fun login(email:String,password:String)=runTask("Signing in") {persistEditor();clearClinical();demo=false;user=null;api.clear()
+        // The free test server sleeps when idle and can take up to a minute to wake. Say so instead of looking stuck.
+        coroutineScope {
+            val waking=if(BuildConfig.ISOLATED_TEST)launch{delay(6_000);taskLabel="Waking up the test server. This can take up to a minute."}else null
+            try{setSession(api.call("/auth/login","POST",obj("email" to email.trim(),"password" to password)) as JSONObject)}finally{waking?.cancel()}
+        }
+        screen="home";refreshHomeInBackground()}
     fun signup(email:String,password:String,name:String,workspace:String)=runTask {persistEditor();clearClinical();demo=false;user=null;api.clear();val version=config.str("legal_version");setSession(api.call("/auth/signup","POST",obj("email" to email.trim(),"password" to password,"display_name" to name,"workspace_name" to workspace,"accept_terms" to true,"terms_version" to version,"privacy_version" to version)) as JSONObject);refreshHome();screen="home"}
     fun acceptLegal()=runTask {api.call("/auth/accept-legal","POST",obj("accept_terms" to true,"terms_version" to config.str("legal_version"),"privacy_version" to config.str("legal_version")));legalRequired=false;refreshHome();screen="home"}
     suspend fun refreshHome(){
