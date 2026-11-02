@@ -71,6 +71,8 @@ Identify the wound location and laterality only when supported by the photograph
 
 Use precise anatomical terminology.
 
+The location is the first thing the photo note must say, and it must be exact enough that a reader who never saw the photo knows precisely where the wound is. Name the specific body part with standard medical anatomical terms: the side (left or right) only when it is supplied or clearly visible, the region, the exact digit (count from the hallux or thumb; write hallux or great toe, second toe and so on, never just "a toe"), the surface (plantar, dorsal, medial, lateral, distal, proximal) and the segment or landmark when clearly visible (for example the plantar aspect of the right hallux, distal to the interphalangeal joint). Never use vague words such as "a toe", "the foot area" or "near the edge" when a specific term is supported. If only part of this can be determined, state the part that is clear and name the single part that is not (for example side not determinable from the photo); never guess a side or a digit.
+
 Examples:
 - Right plantar forefoot.
 - Left lateral malleolus.
