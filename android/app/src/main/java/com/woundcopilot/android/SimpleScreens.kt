@@ -241,6 +241,7 @@ fun ConsultantChatScreen(
     onVoiceMessage: (() -> Unit)? = null,
     errorText: String? = null,
     onRetry: (() -> Unit)? = null,
+    onCreateReport: (() -> Unit)? = null,
 ) {
     val c = MaterialTheme.colorScheme
     var draft by rememberSaveable(conversationKey, draftResetKey) { mutableStateOf(initialDraft) }
@@ -258,8 +259,18 @@ fun ConsultantChatScreen(
             Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(42.dp).background(c.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { InstrumentIcon("kosmo", Modifier.size(26.dp), c.primary) }
                 Text("Ask Consultant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
-                onOpenReport?.let { TextButton(onClick = it, enabled = !busy) { Text("Report") } }
+                onOpenReport?.let { TextButton(onClick = it, enabled = !busy) { Text("Open report") } }
                 TextButton(onClick = onDone) { Text("Done") }
+            }
+            onCreateReport?.let { createReport ->
+                val hasReportContent = messages.any { it.text.isNotBlank() } ||
+                    attachments.photoCount + attachments.fileCount + attachments.recordingCount + attachments.otherCount > 0
+                Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    WcpButton("Create report", createReport, Modifier.fillMaxWidth().testTag("consultant-create-report"),
+                        enabled = !busy && hasReportContent && draft.isBlank())
+                    if (draft.isNotBlank()) Text("Send or clear your message before creating a report.",
+                        style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+                }
             }
             HorizontalDivider(color = c.outlineVariant.copy(alpha = .5f))
             if (messages.isEmpty()) {

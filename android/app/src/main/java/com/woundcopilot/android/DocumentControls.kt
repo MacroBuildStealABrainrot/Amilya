@@ -67,14 +67,14 @@ internal fun orderedReportAlerts(alerts:List<Pair<String,String>>):Pair<List<Str
 @Composable fun DocumentReviewTools(s:AppState){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
         TextButton(onClick={s.improveReport()},enabled=!s.loading && s.editor.isNotBlank() && s.editorCaseRevision==s.revision,modifier=Modifier.weight(1f)){Text("Improve Report")}
-        TextButton(onClick={s.improveAssessment()},enabled=!s.loading,modifier=Modifier.weight(1f)){Text("Improve Assessment")}
+        TextButton(onClick={s.improveAssessment()},enabled=!s.loading,modifier=Modifier.weight(1f)){Text("Anything missed?")}
     }
 }
 
 @Composable fun AssessmentReviewDialog(s:AppState){
     val result=s.assessmentReview?:return
     if(s.assessmentEncounter!=s.encounterId)return
-    AlertDialog(onDismissRequest={s.assessmentReview=null},title={Text("Improve Assessment")},text={
+    AlertDialog(onDismissRequest={s.assessmentReview=null},title={Text("Anything missed?")},text={
         Column(Modifier.heightIn(max=450.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)){
             if(s.assessmentRevision!=s.revision)Text("Visit information changed. These questions describe the earlier visit information.",color=MaterialTheme.colorScheme.error)
             Text(result.str("answer"))
