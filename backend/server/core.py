@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     model_challenger: str = 'anthropic/claude-sonnet-5.5'
     # Owner choice (2026-11-02, test server only): false = speech-to-text + one Sonnet report, no second AI check or rewrite.
     quick_ai_check: bool = True
+    # Owner choice (2026-11-02): cap how hard the AI thinks for everything except wound photos. '' = automatic.
+    max_reasoning_effort: str = ''
     provider_timeout_seconds: int = 60
     provider_execution_enabled: bool = False
     # Stuck-credit recovery (1.8.5-test10, development only; OFF by default). See STUCK-REQUEST-LEASE-PLAN.md.

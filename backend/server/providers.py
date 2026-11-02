@@ -866,6 +866,10 @@ def configured_route(task, content):
     """Keep automatic effort selection while honoring the owner's model settings."""
     route = select_route(TASK_FAMILIES.get(task, task), content)
     family = TASK_FAMILIES.get(task, task)
+    order = ('low', 'medium', 'high')
+    cap = getattr(settings, 'max_reasoning_effort', '')
+    if cap in order and task != 'image' and order.index(route['effort_level']) > order.index(cap):
+        route = {**route, 'effort_level': cap, 'reason': 'owner_effort_cap'}
     if task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
     elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):

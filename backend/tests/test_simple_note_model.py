@@ -54,3 +54,11 @@ def test_one_step_mode_writes_the_report_without_a_second_ai_check(gateway, monk
     result = asyncio.run(providers._checked_quick_text({'untrusted_sources': []}, 'quick_draft', {'template': 'nursing'}, user=gateway.user, encounter_id='e1'))
     assert calls == ['quick_draft']
     assert result['qa']['status'] == 'ai_check_off' and result['text'].startswith('Small drainage')
+
+
+def test_owner_effort_cap_lowers_thinking_but_not_for_photos(gateway, monkeypatch):
+    monkeypatch.setattr(providers.settings, 'max_reasoning_effort', 'low', raising=False)
+    monkeypatch.setattr(providers, 'select_route', lambda task, content: {'effort_level': 'high', 'reason': 'test'})
+    assert providers.configured_route('quick_draft', json.dumps({'template': 'nursing'}))['effort_level'] == 'low'
+    assert providers.configured_route('assistant', '{}')['effort_level'] == 'low'
+    assert providers.configured_route('image', '{}')['effort_level'] == 'high'
