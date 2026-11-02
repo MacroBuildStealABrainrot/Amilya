@@ -44,7 +44,7 @@ import org.json.JSONObject
         val sendParts=mutableListOf<String>()
         photos.groupBy{it.str("group")}.entries.forEachIndexed{index,(groupName,views)->
             val ids=views.map{it.str("id")}.toSet()
-            Text(if(groupName.startsWith("Unassigned"))"Photo ${photos.indexOf(views.first())+1} · wound not assigned"else groupName,style=MaterialTheme.typography.titleMedium)
+            if(!groupName.startsWith("Unassigned"))Text(groupName,style=MaterialTheme.typography.titleMedium)
             val findings=s.case?.items("facts").orEmpty().filter{it.str("source_ref") in ids && it.str("confirmation_state")!="rejected"}
                 .distinctBy{it.str("name")+it.opt("value")?.toString().orEmpty()}
             val sourcePhotos=s.case?.items("evidence").orEmpty().filter{it.str("id") in ids}
