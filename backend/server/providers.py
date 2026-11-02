@@ -868,9 +868,10 @@ def configured_route(task, content):
     family = TASK_FAMILIES.get(task, task)
     if task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
-    elif route['effort_level'] == 'high': selected = settings.model_frontier
     elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
+        # Standard notes stay on the owner-approved note model even when the recording looks hard (cost).
         selected = settings.model_documentation_simple
+    elif route['effort_level'] == 'high': selected = settings.model_frontier
     elif family in {'draft', 'qa'}: selected = settings.model_documentation
     elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
     else: selected = settings.model_extraction
