@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     quick_ai_check: bool = True
     # Owner choice (2026-11-02): cap how hard the AI thinks for everything except wound photos. '' = automatic.
     max_reasoning_effort: str = ''
+    # Owner choice (2026-11-02): add-on buttons (Improve Report, Anything missed?) may use a cheaper model. '' = normal routing.
+    model_addon: str = ''
     provider_timeout_seconds: int = 60
     provider_execution_enabled: bool = False
     # Stuck-credit recovery (1.8.5-test10, development only; OFF by default). See STUCK-REQUEST-LEASE-PLAN.md.
@@ -81,7 +83,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():

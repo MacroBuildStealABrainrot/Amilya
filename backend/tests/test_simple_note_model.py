@@ -62,3 +62,11 @@ def test_owner_effort_cap_lowers_thinking_but_not_for_photos(gateway, monkeypatc
     assert providers.configured_route('quick_draft', json.dumps({'template': 'nursing'}))['effort_level'] == 'low'
     assert providers.configured_route('assistant', '{}')['effort_level'] == 'low'
     assert providers.configured_route('image', '{}')['effort_level'] == 'high'
+
+
+def test_addon_buttons_can_use_a_cheaper_model(gateway, monkeypatch):
+    monkeypatch.setattr(providers.settings, 'model_addon', 'anthropic/claude-haiku-5.5', raising=False)
+    gateway.config.model_documentation_simple = 'anthropic/claude-sonnet-5.5'
+    assert providers.configured_route('improve_report', json.dumps({'template': 'nursing'}))['model'] == 'anthropic/claude-haiku-5.5'
+    assert providers.configured_route('improve_assessment', '{}')['model'] == 'anthropic/claude-haiku-5.5'
+    assert providers.configured_route('quick_draft', json.dumps({'template': 'nursing'}))['model'] == 'anthropic/claude-sonnet-5.5'

@@ -870,7 +870,8 @@ def configured_route(task, content):
     cap = getattr(settings, 'max_reasoning_effort', '')
     if cap in order and task != 'image' and order.index(route['effort_level']) > order.index(cap):
         route = {**route, 'effort_level': cap, 'reason': 'owner_effort_cap'}
-    if task == 'image': selected = settings.model_vision
+    if task in {'improve_report', 'improve_assessment'} and getattr(settings, 'model_addon', ''): selected = settings.model_addon
+    elif task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
     elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
         # Standard notes stay on the owner-approved note model even when the recording looks hard (cost).
