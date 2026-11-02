@@ -1091,7 +1091,7 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     draft = await routed(task, json.dumps(content, ensure_ascii=False, default=str),
         user=user, encounter_id=encounter_id, max_tokens=8000 if len(json.dumps(context,ensure_ascii=False))>20000 else 2400)
     draft = clean_generated_layout(draft, options, context)
-    if not settings.quick_ai_check:
+    if not getattr(settings, 'quick_ai_check', True):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
         # find is shown to the clinician as a "check before saving" alert. No second AI check, no AI rewrite.
         found = quality_defects(draft['text'], context)
