@@ -1468,8 +1468,8 @@
     "bytes": 382
   },
   "backend/server/prompts/documentation/community_nursing_v1.md": {
-    "sha256": "043d900ce0186192b799ca9211b18478b9888fa318e8603081934c028e2cbca7",
-    "bytes": 3724
+    "sha256": "487b76328869b6a54ece6c6db9b8bd717486c1a31f0c5ee6296eab8430dc13cd",
+    "bytes": 3484
   },
   "backend/server/prompts/documentation/formats/custom_v1.md": {
     "sha256": "1921aadb020f6666cd98455c4bedbeacf6de8c27f4e4aced6b168021eb4541f4",
