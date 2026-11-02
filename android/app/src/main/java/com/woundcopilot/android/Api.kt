@@ -295,6 +295,10 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
         if(kind=="photo" && photoReview!=null)fields["photo_review"]=photoReview.toString()
 
+        if(kind=="photo" && mime in setOf("image/jpeg","image/png","image/webp")){
+            val smaller=PhotoShrink.shrunkCopy(file)
+            if(smaller!=null)try{return multipart("/encounters/$encounter/upload",smaller,"image/jpeg",fields,key)}finally{smaller.delete()}
+        }
         return multipart("/encounters/$encounter/upload",file,mime,fields,key)
 
     }
