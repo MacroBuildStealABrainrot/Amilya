@@ -70,3 +70,17 @@ def test_addon_buttons_can_use_a_cheaper_model(gateway, monkeypatch):
     assert providers.configured_route('improve_report', json.dumps({'template': 'nursing'}))['model'] == 'anthropic/claude-haiku-5.5'
     assert providers.configured_route('improve_assessment', '{}')['model'] == 'anthropic/claude-haiku-5.5'
     assert providers.configured_route('quick_draft', json.dumps({'template': 'nursing'}))['model'] == 'anthropic/claude-sonnet-5.5'
+
+
+def test_owner_can_turn_the_check_box_off(gateway, monkeypatch):
+    import asyncio
+
+    async def fake_inner(*args, **kwargs):
+        return {'text': 'Small drainage.', 'status': 'ready', 'ui_alerts': [{'field': 'x', 'message': 'Confirm product'}], 'usage': {}}
+    monkeypatch.setattr(providers, '_checked_quick_text', fake_inner)
+    monkeypatch.setattr(providers.settings, 'show_report_alerts', False, raising=False)
+    result = asyncio.run(providers.checked_quick_text({}, 'quick_draft', {'template': 'nursing'}, user=gateway.user, encounter_id='e1'))
+    assert result['ui_alerts'] == [] and result['text'] == 'Small drainage.'
+    monkeypatch.setattr(providers.settings, 'show_report_alerts', True, raising=False)
+    result = asyncio.run(providers.checked_quick_text({}, 'quick_draft', {'template': 'nursing'}, user=gateway.user, encounter_id='e1'))
+    assert result['ui_alerts']

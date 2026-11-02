@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     max_reasoning_effort: str = ''
     # Owner choice (2026-11-02): add-on buttons (Improve Report, Anything missed?) may use a cheaper model. '' = normal routing.
     model_addon: str = ''
+    # Owner choice (2026-11-02): false = never show the "Check before saving or sending" box on a report.
+    show_report_alerts: bool = True
     provider_timeout_seconds: int = 60
     provider_execution_enabled: bool = False
     # Stuck-credit recovery (1.8.5-test10, development only; OFF by default). See STUCK-REQUEST-LEASE-PLAN.md.

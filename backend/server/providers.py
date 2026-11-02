@@ -1071,7 +1071,10 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
     layer_token=select_documentation(user,options.get('template','nursing'))
     operations=[]
     token=document_operations.set(operations)
-    try:return await _checked_quick_text(context,task,options,user=user,encounter_id=encounter_id)
+    try:
+        result=await _checked_quick_text(context,task,options,user=user,encounter_id=encounter_id)
+        if not getattr(settings,'show_report_alerts',True) and isinstance(result,dict):result['ui_alerts']=[]
+        return result
     except TerminalReportError as error:
         # Temporary 409/502/503/504 responses do not establish that the whole
         # report ended. Keep successful checkpoints charged once for its retry.
