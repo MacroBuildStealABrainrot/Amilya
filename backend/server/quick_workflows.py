@@ -21,6 +21,7 @@ from server.core import settings
 from server.db import get_db
 from server.identity import User, check_rate, current_user, require_csrf
 from server.schemas import StrictModel, TemplateSelection
+from server.report_errors import TerminalReportError
 
 router = APIRouter(tags=['quick workflows'])
 MUTATION = [Depends(require_csrf)]
@@ -191,8 +192,10 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
         try:
             result = await providers.quick_documentation(context, payload.template, payload.preferred_length,
                 custom_template=custom_template, user=user, encounter_id=encounter_id)
-        except HTTPException as error:
-            if error.status_code not in {402,429,502,503,504}:raise
+        except TerminalReportError as error:
+            # Only a confirmed final failure may complete this request with a
+            # backup draft. Temporary errors must reach the phone so its same
+            # request remains recoverable, with completed checkpoints intact.
             # Never display the draft rejected by semantic QA. Recover from original source
             # using the already-supported manual projection, including rejected/edited facts.
             result = documentation.source_report(context, payload.template, clinical.fact_phrase)

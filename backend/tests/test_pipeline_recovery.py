@@ -4,6 +4,7 @@ import io
 import json
 import pytest
 from fastapi import HTTPException
+from server.report_errors import TerminalReportError
 from PIL import Image
 from server import providers
 from test_clinical import clinical_api
@@ -11,11 +12,11 @@ from test_quick_workflows import quick_api, start, add_source
 from test_providers import gateway, completion
 
 @pytest.mark.parametrize('status',[402,429,502,503,504])
-def test_failed_ai_report_recovers_from_original_not_rejected_draft(quick_api,monkeypatch,status):
+def test_terminal_ai_report_recovers_from_original_not_rejected_draft(quick_api,monkeypatch,status):
     case=start(quick_api)
     text='Synthetic client reports pain 2 out of 10. Dressing changed. Medication name unclear.'
     add_source(quick_api,case,text)
-    async def fail(*a,**k):raise HTTPException(status,'SYNTHETIC_PRIVATE_PROVIDER_TEXT')
+    async def fail(*a,**k):raise TerminalReportError(status,'SYNTHETIC_PRIVATE_PROVIDER_TEXT')
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={'use_ai':True})
     assert response.status_code==200,response.text
@@ -73,7 +74,7 @@ def test_recovery_never_restores_rejected_findings(quick_api,monkeypatch):
     case=start(quick_api);source=add_source(quick_api,case)
     fact=source['facts'][0]
     assert quick_api.client.post(f"/api/v1/facts/{fact['id']}/review",json={'expected_revision':1,'action':'reject'}).status_code==200
-    async def fail(*a,**k):raise HTTPException(502,'Synthetic QA rejection')
+    async def fail(*a,**k):raise TerminalReportError(502,'Synthetic QA rejection')
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
     assert response.status_code==200
@@ -87,7 +88,7 @@ def test_concurrent_source_edit_blocks_recovered_outdated_draft(quick_api,monkey
     async def fail(*a,**k):
         with quick_api.sessions() as db:
             row=db.get(Encounter,case['encounter']['id']);row.revision+=1;db.commit()
-        raise HTTPException(502,'Synthetic QA rejection')
+        raise TerminalReportError(502,'Synthetic QA rejection')
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
     assert response.status_code==409 and 'Patient reports pain' not in response.text

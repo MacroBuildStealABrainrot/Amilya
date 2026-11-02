@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 import json
 from typing import Any
 
-from fastapi import HTTPException
+from .report_errors import TerminalReportError
 
 REVIEW_FAILURE = 'The report did not pass source-faithfulness review. Your original source and editor text remain available.'
 
@@ -40,7 +40,7 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     from . import diagnostics
     diagnostics.faithfulness(checked.get('passed') is True and checked.get('discrepancies')==[] and not quality_defects(repaired['text'],context),len(checked.get('discrepancies',[])),'after_repair')
     if checked.get('passed') is not True or checked.get('discrepancies') != [] or quality_defects(repaired['text'], context):
-        raise HTTPException(502, REVIEW_FAILURE)
+        raise TerminalReportError(502, REVIEW_FAILURE)
     # The repaired generation is the top-level usage entry. Include the initial
     # draft and both checks so all four stages remain visible to cost accounting.
     repaired.setdefault('usage', {})['stages'] = [

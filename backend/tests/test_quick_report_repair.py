@@ -195,10 +195,18 @@ def test_report_total_stage_timeout_is_settled_and_retried_once_per_request(gate
     # Earlier successful stages are replayed from their saved result; only the timed-out stage is tried again.
     assert len(gateway.http.calls) == len(prefix) + 2
     rows=operation_rows(gateway)
-    assert all(row.charged_micros==0 for row in rows), 'A failed whole report must return all stage charges'
+    successful = [row for row in rows if row.charged_micros > 0]
+    assert len(successful) == len(prefix), 'Temporary failure must keep each completed checkpoint charged once'
     failed = [row for row in rows if row.usage.get('charge_waived') and row.usage.get('waive_reason')!='document_failed']
     assert len(failed) == 2 and all(row.status == 'settled' for row in failed)
     assert all(row.charged_micros == 0 and row.actual_cost_micros is None for row in failed)
+    # Only the third, terminal failure refunds the completed checkpoints.
+    gateway.http.responses = [never_finishes]
+    with pytest.raises(HTTPException) as terminal:
+        gateway_document(gateway)
+    assert terminal.value.headers[providers.REPORT_STATE_HEADER] == providers.REPORT_ENDED_NO_CHARGE
+    assert len(gateway.http.calls) == len(prefix) + 3
+    assert all(row.charged_micros == 0 for row in operation_rows(gateway))
 
 
 def test_success_with_discrepancies_is_never_accepted_or_repaired(gateway):

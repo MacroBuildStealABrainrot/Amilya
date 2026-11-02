@@ -1,17 +1,29 @@
 """Cancelled report stages: real gateway/accounting, fake provider and money only."""
 import asyncio
+import json
+import os
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import threading
+from uuid import uuid4
 
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import sessionmaker
 from types import SimpleNamespace
 import httpx
 
 from server import billing, providers
 from server.billing_models import BillingAccount, CreditLedger, UsageOperation
 from server.provider_models import ProviderResult
+from server.db import Base
+from server.identity import User, Workspace
+from server.clinical_models import Encounter, Evidence, Patient
+from server import quick_workflows as quick
+from server.db import get_db
+from server.identity import current_user, require_csrf
 from test_providers import completion, gateway  # noqa: F401
 
 
@@ -20,6 +32,48 @@ CONTEXT = {'case_facts': [], 'untrusted_sources': [
     'rejected_claims_do_not_reinstate': []}
 DRAFT = completion({'text': 'DRAFT — CLINICIAN REVIEW REQUIRED\nRight heel. Cleansed with NS. Dressed with Mepilex.'})
 CHECK = completion({'passed': True, 'discrepancies': []})
+
+
+@pytest.fixture(params=['sqlite', 'postgresql'])
+def concurrent_gateway(request, gateway, monkeypatch):
+    if request.param == 'sqlite':
+        yield gateway
+        return
+    url = os.environ.get('WCP_TEST_POSTGRES_URL')
+    if not url:
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            pytest.fail('The dedicated CI Postgres service is required for this proof')
+        pytest.skip('Dedicated CI Postgres is not available locally')
+    target = make_url(url)
+    # Never connect to Render, Google Cloud, a remote database, or an arbitrary
+    # local user's database. This is the existing throwaway workflow service.
+    assert os.environ.get('GITHUB_ACTIONS') == 'true'
+    assert target.host in ('127.0.0.1', 'localhost') and target.port == 55432
+    assert target.database == 'wcp_test' and target.username == 'wcp'
+    schema = 'report_cancel_' + uuid4().hex
+    admin = create_engine(url)
+    engine = create_engine(url, connect_args={'options': '-c search_path=' + schema})
+    sessions = sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    try:
+        with admin.begin() as conn:
+            conn.execute(text('CREATE SCHEMA ' + schema))
+        Base.metadata.create_all(engine)
+        with gateway.sessions() as source, sessions() as destination:
+            for model in (Workspace, User, BillingAccount):
+                for row in source.scalars(select(model)):
+                    destination.add(model(**{column.key: getattr(row, column.key)
+                        for column in model.__table__.columns}))
+                destination.flush()
+            destination.commit()
+        monkeypatch.setattr(providers, 'SessionLocal', sessions)
+        gateway.sessions = sessions
+        gateway.engine = engine
+        yield gateway
+    finally:
+        engine.dispose()
+        with admin.begin() as conn:
+            conn.execute(text('DROP SCHEMA IF EXISTS ' + schema + ' CASCADE'))
+        admin.dispose()
 
 
 async def write_report(gateway):
@@ -119,6 +173,152 @@ def test_retry_while_check_is_still_running_does_not_refund_or_restart(gateway):
     assert_balanced(snapshot(gateway))
 
 
+def test_retryable_503_after_cancelled_check_keeps_the_charged_draft(gateway):
+    gateway.http.responses = [DRAFT, cancelled]
+    with pytest.raises(asyncio.CancelledError):
+        report(gateway)
+    before = snapshot(gateway)
+    assert before['charged'] > 0 and before['results'] == 1
+    gateway.http.responses = [lambda _: httpx.ConnectError('Synthetic temporary connection failure')]
+    with pytest.raises(HTTPException) as error:
+        report(gateway)
+    assert error.value.status_code == 503
+    assert providers.REPORT_STATE_HEADER not in (error.value.headers or {})
+    retryable = snapshot(gateway)
+    assert retryable['charged'] == before['charged'], 'a retryable 503 must keep the completed draft charged once'
+    assert retryable['refunds'] == []
+    assert retryable['results'] == 1 and retryable['calls'] == 3
+    assert_balanced(retryable)
+    gateway.http.responses = [CHECK]
+    assert report(gateway)['qa']['passed'] is True
+    completed = snapshot(gateway)
+    assert completed['calls'] == 4 and completed['results'] == 2
+    assert completed['refunds'] == []
+    assert_balanced(completed)
+    report(gateway)
+    assert snapshot(gateway) == completed
+
+
+def test_explicit_retryable_503_between_lookup_and_reserve_keeps_checkpoint(gateway, monkeypatch):
+    gateway.http.responses = [DRAFT, cancelled]
+    with pytest.raises(asyncio.CancelledError):
+        report(gateway)
+    before = snapshot(gateway)
+    reserve = billing.reserve
+    raced = []
+    def competing_worker_cancelled(db, user, operation_id, estimate, encounter_id=None, task='ai'):
+        answer = reserve(db, user, operation_id, estimate, encounter_id, task)
+        if task == 'quick_qa' and answer['created'] and not raced:
+            # Another worker claimed and cancelled this child after our lookup.
+            # Use real accounting transitions, not a fabricated billing response.
+            raced.append(operation_id)
+            billing.release(db, user, operation_id, 'provider_cancelled')
+            return reserve(db, user, operation_id, estimate, encounter_id, task)
+        return answer
+    monkeypatch.setattr(billing, 'reserve', competing_worker_cancelled)
+    with pytest.raises(HTTPException) as error:
+        report(gateway)
+    assert error.value.status_code == 503 and error.value.headers['X-WCP-Retryable'] == 'true'
+    assert providers.REPORT_STATE_HEADER not in error.value.headers
+    after = snapshot(gateway)
+    assert after['charged'] == before['charged'] and after['refunds'] == []
+    assert after['calls'] == 2 and after['results'] == 1
+    assert_balanced(after)
+    gateway.http.responses = [CHECK]
+    assert report(gateway)['qa']['passed'] is True
+    assert snapshot(gateway)['calls'] == 3
+    assert snapshot(gateway)['refunds'] == []
+
+
+def test_http_retryable_503_preserves_pending_report_and_checkpoint(gateway, monkeypatch):
+    app = FastAPI()
+    app.include_router(quick.router, prefix='/api/v1')
+    def database():
+        with gateway.sessions() as db:
+            yield db
+    app.dependency_overrides[get_db] = database
+    app.dependency_overrides[current_user] = lambda: gateway.user
+    app.dependency_overrides[require_csrf] = lambda: None
+    monkeypatch.setattr(quick, 'check_rate', lambda *args, **kwargs: None)
+    @app.middleware('http')
+    async def request_identity(request, call_next):
+        token = providers.request_operation.set(request.headers['Idempotency-Key'])
+        try:
+            return await call_next(request)
+        finally:
+            providers.request_operation.reset(token)
+    with gateway.sessions() as db:
+        db.add(Patient(id='synthetic-patient', workspace_id=gateway.user.workspace_id,
+            display_name='Synthetic case'))
+        db.flush()
+        encounter = Encounter(id='cancelled-report', patient_id='synthetic-patient',
+            workspace_id=gateway.user.workspace_id, title='Synthetic visit', created_by=gateway.user.id)
+        db.add(encounter)
+        db.flush()
+        db.add(Evidence(id='synthetic-source', workspace_id=gateway.user.workspace_id,
+            encounter_id=encounter.id, kind='typed', text=CONTEXT['untrusted_sources'][0]['text'],
+            created_by=gateway.user.id, request_hash='synthetic-hash'))
+        db.commit()
+        context = quick.source_context(db, encounter)
+    gateway.http.responses = [DRAFT, cancelled]
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(providers.quick_documentation(context, 'nursing', 'concise',
+            user=gateway.user, encounter_id='cancelled-report'))
+    before = snapshot(gateway)
+    client = TestClient(app)
+    headers = {'Idempotency-Key': 'synthetic-request'}
+    path = '/api/v1/encounters/cancelled-report/quick-report'
+    gateway.http.responses = [lambda _: httpx.ConnectError('Synthetic temporary connection failure')]
+    failed = client.post(path, json={}, headers=headers)
+    assert failed.status_code == 503, 'a temporary failure must not complete the request with a backup draft'
+    assert providers.REPORT_STATE_HEADER not in failed.headers
+    assert 'recovery' not in failed.json()
+    retryable = snapshot(gateway)
+    assert retryable['charged'] == before['charged'] > 0 and retryable['refunds'] == []
+    assert retryable['results'] == 1 and retryable['calls'] == 3
+    gateway.http.responses = [CHECK]
+    completed = client.post(path, json={}, headers=headers)
+    assert completed.status_code == 200 and completed.json()['qa']['passed'] is True
+    assert 'Right heel' in completed.json()['text'] and 'recovery' not in completed.json()
+    state = snapshot(gateway)
+    assert state['calls'] == 4 and state['results'] == 2 and state['refunds'] == []
+    assert_balanced(state)
+    assert client.post(path, json={}, headers=headers).json()['text'] == completed.json()['text']
+    assert snapshot(gateway) == state
+
+
+def test_ended_signal_waits_for_app_credit_refund_and_does_not_erase_provider_cost(gateway, monkeypatch):
+    for attempt in range(3):
+        gateway.http.responses = ([DRAFT] if attempt == 0 else []) + [cancelled]
+        with pytest.raises(asyncio.CancelledError):
+            report(gateway)
+    before = snapshot(gateway)
+    assert before['charged'] > 0 and before['refunds'] == []
+    original_refund = billing.refund_failed_document
+    def unavailable(*args, **kwargs):
+        raise HTTPException(503, 'Synthetic accounting temporarily unavailable')
+    monkeypatch.setattr(billing, 'refund_failed_document', unavailable)
+    with pytest.raises(HTTPException) as error:
+        report(gateway)
+    assert error.value.status_code == 503
+    assert providers.REPORT_STATE_HEADER not in (error.value.headers or {})
+    assert snapshot(gateway) == before
+    monkeypatch.setattr(billing, 'refund_failed_document', original_refund)
+    with pytest.raises(HTTPException) as ended:
+        report(gateway)
+    assert ended.value.headers[providers.REPORT_STATE_HEADER] == providers.REPORT_ENDED_NO_CHARGE
+    after = snapshot(gateway)
+    assert after['charged'] == 0 and len(after['refunds']) == 1
+    assert after['calls'] == before['calls']
+    with gateway.sessions() as db:
+        completed_draft = db.scalar(select(UsageOperation).where(UsageOperation.task == 'quick_draft'))
+        assert completed_draft.actual_cost_micros == 1000, 'app-credit refund must preserve measured provider cost'
+    assert_balanced(after)
+    with pytest.raises(HTTPException):
+        report(gateway)
+    assert snapshot(gateway) == after
+
+
 def test_two_retries_after_cancellation_share_one_new_attempt(gateway):
     gateway.http.responses = [cancelled]
     with pytest.raises(asyncio.CancelledError):
@@ -147,22 +347,24 @@ def test_two_retries_after_cancellation_share_one_new_attempt(gateway):
     assert_balanced(state)
 
 
-def test_independent_worker_threads_claim_only_one_cancelled_retry(gateway):
+def test_independent_worker_threads_claim_only_one_cancelled_retry(concurrent_gateway, capsys):
+    gateway = concurrent_gateway
     gateway.http.responses = [cancelled]
     with pytest.raises(asyncio.CancelledError):
         report(gateway)
+    root_id = snapshot(gateway)['operations'][0][0]
     race = threading.Barrier(2)
     started = threading.Event()
     finish = threading.Event()
     async def delayed_draft(_):
         started.set()
-        assert await asyncio.to_thread(finish.wait, 5), 'synthetic worker was not released'
+        assert await asyncio.to_thread(finish.wait, 10), 'synthetic worker was not released'
         return DRAFT
     gateway.http.responses = [delayed_draft, CHECK]
     def worker():
         token = providers.request_operation.set('synthetic-request')
         try:
-            race.wait(timeout=3)
+            race.wait(timeout=5)
             try:
                 return report(gateway)
             except HTTPException as error:
@@ -172,17 +374,31 @@ def test_independent_worker_threads_claim_only_one_cancelled_retry(gateway):
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(worker) for _ in range(2)]
         try:
-            assert started.wait(3)
-            completed, _ = wait(futures, timeout=3, return_when=FIRST_COMPLETED)
+            assert started.wait(5)
+            completed, _ = wait(futures, timeout=5, return_when=FIRST_COMPLETED)
             assert len(completed) == 1
             assert next(iter(completed)).result() == 409
         finally:
             finish.set()
-        results = [future.result(timeout=5) for future in futures]
+        results = [future.result(timeout=10) for future in futures]
     assert sum(isinstance(result, dict) for result in results) == 1
     state = snapshot(gateway)
     assert state['calls'] == 3 and state['results'] == 2
     assert_balanced(state)
+    assert results.count(409) == 1 and state['refunds'] == []
+    children = [op for op in state['operations'] if op[1] == 'quick_draft' and op[0] != root_id]
+    assert len(children) == 1 and children[0][2] == 'settled'
+    with gateway.sessions() as db:
+        claims = list(db.scalars(select(CreditLedger).where(
+            CreditLedger.kind == 'reserved', CreditLedger.event_key == 'reserve:' + children[0][0])))
+    assert len(claims) == 1
+    counts = {'database': gateway.engine.dialect.name, 'completed_report_responses': 1,
+        'ai_calls': state['calls'], 'successful_stage_charges': sum(op[4] > 0 for op in state['operations']),
+        'app_charged_micros': state['charged'], 'refunds': len(state['refunds']),
+        'retry_child_reservations': len(claims), 'losers_409': results.count(409), 'held_micros': state['reserved']}
+    # Closed fake counts only: no source text, database URL, credentials or IDs.
+    with capsys.disabled():
+        print('AMILYA_CANCEL_CONCURRENCY ' + json.dumps(counts, sort_keys=True))
 
 
 def test_a_cancelled_worker_finishing_late_cannot_charge_or_replace_the_retry(gateway):

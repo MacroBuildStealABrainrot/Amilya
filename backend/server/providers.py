@@ -38,6 +38,7 @@ from .core import settings
 from .db import SessionLocal
 from .identity import User, check_rate, require_admin
 from .provider_models import ProviderResult
+from .report_errors import TerminalReportError
 from .performance import timed
 from .billing_models import UsageOperation
 from .schemas import Name, Measurement, Location, Tissue, PhotoTissue, Pain, Observation, validated_value
@@ -119,10 +120,11 @@ MAX_REPORT_STAGE_ATTEMPTS = 3  # total per report step and request key, INCLUDIN
 MAX_REPORT_STAGE_RETRIES = MAX_REPORT_STAGE_ATTEMPTS - 1
 MAX_MEDIA_RETRIES = 3  # transcription and photo: unchanged from earlier versions
 # The phone keeps its request code for every retry of a report. The server tells it, with this header, ONLY when the request
-# has really ended for good: no report was kept and nothing was charged, and this code can never finish later. Only then may the
+# has really ended for good and its app-credit refund has completed. This does not describe the provider's bill. Only then may the
 # phone start a new request with a new code. Without the header the phone must keep the code (a finished report is sent back
 # for the same code with no new AI call and no new charge).
 REPORT_STATE_HEADER = 'X-Amilya-Report-State'
+# Legacy phone protocol: app-credit accounting only, never a provider-fee claim.
 REPORT_ENDED_NO_CHARGE = 'ended-no-charge'
 PERMANENT_REPORT_FAILURES = frozenset({'provider_credits', 'provider_access', 'route_unavailable', 'request_incompatible', 'output_limit'})
 
@@ -595,12 +597,12 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                 # Usually reached only at the durable attempt limit. It can also
                 # occur if a running worker cancels between our lookup and reserve.
                 exhausted = resumed_attempt >= MAX_REPORT_STAGE_RETRIES
-                ended = {REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE} if exhausted else {}
-                raise HTTPException(503,
+                error_type = TerminalReportError if exhausted else HTTPException
+                raise error_type(503,
                     'This report was interrupted repeatedly. Your source is kept; review it before starting a new report.'
                     if exhausted else 'This report step was interrupted. Try again to recover the same report.',
                     headers={'X-WCP-Retryable': 'false' if exhausted else 'true',
-                             'X-WCP-Error': 'PROVIDER_UNAVAILABLE', **ended})
+                             'X-WCP-Error': 'PROVIDER_UNAVAILABLE'})
             if billing.is_lease_expired_release(previous):
                 raise HTTPException(503, 'This AI request was interrupted on the server. No charge was made. Try again.',
                                     headers={'X-WCP-Retryable': 'true', 'X-WCP-Error': 'PROVIDER_UNAVAILABLE'})
@@ -616,9 +618,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                         message = ('We could not assess this photo after several attempts. Your photo is saved. Retake it, try later, or chart by hand.'
                                    if exhausted else
                                    'This provider attempt previously failed. No new request or charge was made; a configured fallback may supply its saved result.')
-                        ended = {REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE} if report_request_ended(task, previous.usage, resumed_attempt) else {}
-                        raise HTTPException(int(code), message,
-                            headers={**photo_error_headers(previous.usage, exhausted), **ended})
+                        error_type = TerminalReportError if report_request_ended(task, previous.usage, resumed_attempt) else HTTPException
+                        raise error_type(int(code), message,
+                            headers=photo_error_headers(previous.usage, exhausted))
             raise HTTPException(409, 'This AI request is already processing or awaiting reconciliation. Refresh the case before retrying.')
     if document_operations.get() is not None:document_operations.get().append(operation)
     started = time.monotonic()
@@ -737,7 +739,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         if usage.get('failure_reason'):
             error.headers = {**photo_error_headers(usage, task == 'image' and resumed_attempt >= 3), **(error.headers or {})}
         if report_request_ended(task, usage, resumed_attempt):
-            error.headers = {**(error.headers or {}), REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE}
+            raise TerminalReportError(error.status_code, error.detail, headers=error.headers)
         raise error
     return result
 
@@ -1064,11 +1066,13 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
     operations=[]
     token=document_operations.set(operations)
     try:return await _checked_quick_text(context,task,options,user=user,encounter_id=encounter_id)
-    except HTTPException as error:
-        # A concurrent retry receiving 409 has not established that the document
-        # failed. Do not refund checkpoints another worker is still using.
-        if operations and error.status_code != 409:
+    except TerminalReportError as error:
+        # Temporary 409/502/503/504 responses do not establish that the whole
+        # report ended. Keep successful checkpoints charged once for its retry.
+        if operations:
             with SessionLocal() as refund_db:billing.refund_failed_document(refund_db,user,operations)
+        # Expose this only AFTER the app-credit refund transaction succeeded.
+        error.headers = {**(error.headers or {}), REPORT_STATE_HEADER: REPORT_ENDED_NO_CHARGE}
         raise
     finally:document_operations.reset(token);selection.reset(layer_token)
 
@@ -1093,7 +1097,7 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
         return await repair_quick_report_once(context, task, options, draft, qa,
             user=user, encounter_id=encounter_id, routed=routed)
     if qa.get('passed') is not True or qa.get('discrepancies') != []:
-        raise HTTPException(502, 'The report check could not be verified. Your original source and editor text remain available.')
+        raise TerminalReportError(502, 'The report check could not be verified. Your original source and editor text remain available.')
     draft.setdefault('usage', {})['stages'] = [qa.get('usage', {})]
     draft['qa'] = {'passed': True, 'discrepancies': []}
     return draft

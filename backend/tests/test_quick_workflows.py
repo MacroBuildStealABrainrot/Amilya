@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import func, select
 
 from server import clinical, providers, quick_workflows as quick
+from server.report_errors import TerminalReportError
 from server.clinical_models import Encounter, Evidence, Patient, TimelineEvent
 from test_clinical import clinical_api
 from test_providers import completion, gateway
@@ -210,17 +211,19 @@ def test_quick_responses_detect_concurrent_source_change(quick_api, monkeypatch,
 
 
 @pytest.mark.parametrize('status', [402, 422, 429, 502, 503, 504])
-def test_quick_report_preserves_provider_failures_and_source(quick_api, monkeypatch, status):
+@pytest.mark.parametrize('terminal', [False, True])
+def test_quick_report_preserves_provider_failures_and_source(quick_api, monkeypatch, status, terminal):
     case = start(quick_api)
     add_source(quick_api, case)
     case_id = case['encounter']['id']
     before = quick_api.client.get(f'/api/v1/encounters/{case_id}').json()
     async def failed(*args, **kwargs):
-        raise HTTPException(status, 'Synthetic provider gate')
+        error_type = TerminalReportError if terminal else HTTPException
+        raise error_type(status, 'Synthetic provider gate')
     monkeypatch.setattr(providers, 'quick_documentation', failed)
     response = quick_api.client.post(f'/api/v1/encounters/{case_id}/quick-report', json={})
-    assert response.status_code == (422 if status == 422 else 200)
-    if status != 422:
+    assert response.status_code == (200 if terminal else status)
+    if terminal:
         assert response.json()['recovery']['mode'] == 'source_only'
         assert response.json()['qa']['passed'] is False
         assert response.json()['ui_alerts']
