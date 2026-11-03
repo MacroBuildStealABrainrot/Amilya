@@ -221,7 +221,7 @@ fun AccountScreen(state: AppState) {
             )
         }
         }
-        if (!state.demo) com.woundcopilot.android.StoredDiagnosticsSection(state)
+        if (!state.demo && !com.woundcopilot.android.BuildConfig.ISOLATED_TEST) com.woundcopilot.android.StoredDiagnosticsSection(state)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Help & policies")
         var automaticBiometrics by remember{mutableStateOf(state.vault.read("biometric-auto")!="false")}
