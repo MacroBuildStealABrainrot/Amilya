@@ -24,7 +24,9 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
     val api=error as? ApiException
     val task=when(purpose){"audio"->"Recording processing";"report"->"Report generation";"photo"->"Photo assessment";"consultant"->"Ask Consultant";else->"Request"}
     var code=api?.category
+    val aiPaused=api?.status==503 && Regex("(?i)paused|AI_PAUSED|TEST_WINDOW|owner activates").containsMatchIn(api.message.orEmpty()+" "+(api.category.orEmpty()))
     val reason=when {
+        aiPaused -> "AI processing is temporarily unavailable. Your recording is saved safely. Tap Try again later."
         error is java.net.SocketTimeoutException -> "The connection was too slow. Your work is saved on this phone. Tap Try again."
         error is java.net.UnknownHostException -> "No internet connection. Your work is saved on this phone. Tap Try again when you're back online."
         error is javax.net.ssl.SSLException -> {code="TLS_CONNECTION_FAILED";"The secure connection could not be verified. Check the device date and contact support if it persists."}
@@ -64,6 +66,7 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         error is IllegalArgumentException -> error.message.orEmpty().takeIf{it.isNotBlank() && it.length<=500 && !Regex("(?i)sk-|bearer |input_value|traceback").containsMatchIn(it)} ?: "The input or local request state is invalid. Review your selections."
         else -> {code="UNEXPECTED_APP_ERROR";"An unexpected application error occurred. Contact support with the request reference."}
     }
+    if(aiPaused)return "$reason"
     val technical=listOfNotNull(code,api?.status?.let{"HTTP $it"},api?.upstreamStatus?.let{"provider HTTP $it"},api?.requestId?.takeIf{runCatching{java.util.UUID.fromString(it).toString()==it}.getOrDefault(false)}?.let{"Request $it"})
     return "$task: $reason" + if(technical.isEmpty())""else "\n"+technical.joinToString(" · ")
 }

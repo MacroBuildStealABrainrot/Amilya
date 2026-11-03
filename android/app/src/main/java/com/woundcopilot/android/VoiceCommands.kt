@@ -86,6 +86,8 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
         s.autoStartRecording=true;s.screen="record"
     }
     fun handle(raw:String){
+        // Fix by Voice is dictation of a correction only: its words are never run as app commands (Save, Send, Done, Record, Go home).
+        if(s.voiceCorrection || s.screen=="voice_correction"){status="Fix by Voice is open. Finish or close it before using voice commands.";return}
         status="Heard: $raw";tones.startTone(ToneGenerator.TONE_PROP_ACK,70)
         val command=parseVoiceCommand(raw,wake,activelyListening=true)
         if(command==null){status="Command unclear. Please repeat it.";tones.startTone(ToneGenerator.TONE_PROP_NACK,90);return}

@@ -493,6 +493,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         fun photoEvent(stage:String,status:String){if(kind=="photo" && uploadOwner!=null && photoJob!=null)runCatching{DeveloperDiagnostics.photo(vault,uploadOwner,photoJob,file,stage,photoStart,status)}}
         photoEvent("photo_source","success")
         val digest=withContext(Dispatchers.IO){val md=MessageDigest.getInstance("SHA-256");file.inputStream().use{input->val b=ByteArray(8192);while(true){val n=input.read(b);if(n<0)break;md.update(b,0,n)}};md.digest().joinToString(""){"%02x".format(it.toInt() and 255)}}
+        // Paid AI work already done is reused: the same recording or photo already in this visit is never sent again.
+        if(!demo && !voiceCorrection && !voiceMessage && kind in listOf("audio","photo") && case?.items("evidence")?.any{it.str("kind")==kind && it.optJSONObject("metadata")?.str("media_hash")==digest}==true){
+            notice="This was already processed. The existing result is being used."
+            screen=if(quickMode=="consultant")"consultant" else if(editor.isNotBlank())"editor" else "encounter";return
+        }
         val captureKind=if(kind=="audio" && voiceMessage)"message"else if(kind=="audio" && voiceCorrection)"correction"else if(kind=="document")"file"else kind
         val identity=obj("file" to file.name,"hash" to digest,"mime" to mime,"kind" to kind,"photo_review" to photoReview)
         if(captureKind in listOf("message","correction"))identity.put("purpose",captureKind)
@@ -736,7 +741,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         encounters=encounters.filter{it.str("id") !in ids};deleteWorkId=null;screen="saved";refreshHome()
         notice="Deleted from active app storage. Copies already exported or retained in backups are outside this deletion."
     }
-    fun saveWorkAndClose()=runTask("Saving work"){
+    fun saveWorkAndClose()=runTask("Saving report…"){
+        viewModelScope.launch{delay(8000);if(loading && taskLabel=="Saving report…")taskLabel="Still saving. Your report is safe on this device."}
         ensureRemoteDocument()
         if(editor.isNotBlank() && savedId==null) {
             // Keep the close dialog open when a photo has changed the source revision.
@@ -948,10 +954,19 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return@runTask}
         snapshotDraft();editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;persistEditor();if(!demo)acknowledge(intent,payload);voiceCorrection=false;voiceInstruction="";warnings(response);screen="editor"
     }
+    /** Says what is actually missing instead of a generic refusal. */
+    private fun missingInfoMessage():String{
+        val kinds=case?.items("evidence")?.map{it.str("kind")}.orEmpty()
+        return when{
+            kinds.isEmpty()->"Nothing has been added yet. Record or type the assessment and treatment, then generate the note."
+            kinds.all{it=="photo"}->"The current source only contains a photo. Add assessment or treatment information (record it or type it) before generating the nursing note."
+            else->"The sources added so far do not contain enough assessment or treatment information to write a note. Add what you assessed or did, then generate again."
+        }
+    }
     private fun acceptDocumentResult(result:JSONObject):Boolean {
         orderedReportAlerts(result.items("ui_alerts").map{it.str("field") to it.str("message")}).let{(all,safety)->documentAlerts=all;documentAlertSafetyCount=safety}
         if(result.str("status","ready")!="ready" || result.str("text").isBlank()){
-            notice=result.str("ui_message").ifBlank{"Not enough visit information to generate this document."}
+            notice=result.str("ui_message").let{m->if(m.isBlank() || m.startsWith("Not enough visit information")) missingInfoMessage() else m}
             return false
         }
         return true
@@ -1045,7 +1060,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(d.str("status")=="signed")c.getJSONObject("encounter").put("status","signed")
         case=c
     }
-    fun saveDocument()=runTask("Saving exact document") {saveDocumentNow()}
+    fun saveDocument()=runTask("Saving report…") {saveDocumentNow()}
     private suspend fun saveDocumentNow() {
         ensureRemoteDocument()
         require(editor.isNotBlank()&&editor.length<=60000){"Enter document text within 60,000 characters."}

@@ -266,7 +266,7 @@ fun ConsultantChatScreen(
                 val hasReportContent = messages.any { it.text.isNotBlank() } ||
                     attachments.photoCount + attachments.fileCount + attachments.recordingCount + attachments.otherCount > 0
                 Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    WcpButton("Create report", createReport, Modifier.fillMaxWidth().testTag("consultant-create-report"),
+                    WcpButton(if (onOpenReport != null) "Update report with consultation" else "Create report", createReport, Modifier.fillMaxWidth().testTag("consultant-create-report"),
                         enabled = !busy && hasReportContent && draft.isBlank())
                     if (draft.isNotBlank()) Text("Send or clear your message before creating a report.",
                         style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)

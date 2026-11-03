@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,7 +39,10 @@ fun SendOptions(
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf(false) }
     var phone by remember { mutableStateOf(false) }
+    val prefs = remember { context.getSharedPreferences("send_defaults", Context.MODE_PRIVATE) }
+    val savedNumber = remember(open) { prefs.getString("default_phone", "").orEmpty() }
     var number by remember { mutableStateOf("") }
+    var makeDefault by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(openRequested) { if (openRequested) { onOpenHandled(); if (text.isNotBlank() && !busy) { open = true; phone = false; problem = null } } }
     WcpButton("Send", { open = true; phone = false; problem = null }, modifier.fillMaxWidth(), enabled = text.isNotBlank() && !busy)
@@ -52,8 +56,13 @@ fun SendOptions(
                     OutlinedTextField(number, { number = it; problem = null }, label = { Text("Phone number") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
                     Text("Messages opens with the text filled in. Check it, then tap Send there.", style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(makeDefault, { makeDefault = it })
+                        Text("Set as default recipient")
+                    }
+                    if (savedNumber.isNotBlank()) TextButton({ prefs.edit().remove("default_phone").apply(); number = ""; makeDefault = false; open = false }) { Text("Remove saved default") }
                 } else {
-                    WcpButton("Text message", { phone = true; problem = null }, Modifier.fillMaxWidth(), secondary = true)
+                    WcpButton(if (savedNumber.isNotBlank()) "Text message (default saved)" else "Text message", { phone = true; problem = null; if (number.isBlank()) number = savedNumber; makeDefault = false }, Modifier.fillMaxWidth(), secondary = true)
                     WcpButton("Another app", {
                         scope.launch {
                             try {
@@ -84,7 +93,7 @@ fun SendOptions(
         },
         confirmButton = {
             if (phone) TextButton(enabled = phoneRecipient(number) != null, onClick = {
-                try { context.startActivity(reportMessageIntent(number, text)); open = false; number = "" }
+                try { context.startActivity(reportMessageIntent(number, text)); if (makeDefault) prefs.edit().putString("default_phone", number.trim()).apply(); open = false; number = "" }
                 catch (_: ActivityNotFoundException) { problem = "No text messaging app is installed. Use Another app instead." }
                 catch (_: Exception) { problem = "Messages could not be opened. Nothing was lost." }
             }) { Text("Open Messages") }

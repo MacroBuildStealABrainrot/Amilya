@@ -74,6 +74,8 @@ import java.time.format.DateTimeFormatter
         if(s.editor.isNotBlank())WcpButton("Return to report",{s.screen="editor"},Modifier.fillMaxWidth(),enabled=!s.loading)
         else if(showsGenerateOnDocument(true,sources.size,s.earlierReportWaiting()))WcpButton(if(sources.isEmpty())"Recover earlier report" else "Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
         if(spokenText.isNotBlank())WcpButton("Share text",{try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,spokenText)},"Share text"))}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(spokenText.isNotBlank())WcpButton("Copy text",{try{(context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Voice to text",spokenText));s.notice="Text copied."}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(spokenText.isNotBlank() && s.editor.isBlank())WcpButton("Create report from this text",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
             sources.forEach{EvidenceItem(s,it)}
             if(s.editor.isBlank())TextButton({s.quickReport(false)},enabled=!s.loading){Text("Create draft without AI")}

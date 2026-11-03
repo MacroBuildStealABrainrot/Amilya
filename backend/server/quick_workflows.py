@@ -299,6 +299,9 @@ async def _transcribe_reviewable_audio(encounter_id: str, file: UploadFile, cons
     clinical.timeline(db, user, encounter_id, event, encounter_id,
         {'case_revision': expected, 'bytes': len(data), 'mime': mime})
     clinical.finish(db)
+    if result.get('background_suspected'):
+        # Fix by Voice and Ask Consultant messages: unrelated or foreign-language speech is never offered as the clinician's words.
+        result = {**result, 'text': '', 'needs_rerecord': True}
     review_warning = ('Review the recognized message before sending it. No message was sent and no clinical evidence was added.'
         if purpose == 'message' else 'Review the recognized correction before applying it. No clinical evidence was added.')
     return {**result, 'case_revision': expected, 'review_required': True,

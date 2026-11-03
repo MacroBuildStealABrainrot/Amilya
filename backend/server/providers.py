@@ -1374,6 +1374,24 @@ async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
     raise errors[-1]
 
 
+def foreign_speech_share(text):
+    """Share of letters outside Latin script (Arabic, Cyrillic, CJK...). High share in a clinic note usually means TV, radio or other people, not the clinician."""
+    letters = [c for c in str(text or '') if c.isalpha()]
+    if not letters: return 0.0
+    return sum(1 for c in letters if ord(c) > 0x024F) / len(letters)
+
+
+BACKGROUND_SPEECH_WARNING = ('Part of this recording sounds like another language or background audio (TV, radio or another person). '
+    'It may not be your voice. Check it against what you said, or record again.')
+
+
+def flag_background_speech(result):
+    if isinstance(result, dict) and foreign_speech_share(result.get('text')) > 0.2:
+        result['background_suspected'] = True
+        result.setdefault('warnings', []).append(BACKGROUND_SPEECH_WARNING)
+    return result
+
+
 async def transcribe(data, mime, filename, duration_seconds=None, *, user, db=None, encounter_id):
     if len(data) > settings.max_audio_mb * 1024**2: raise HTTPException(413, 'Audio exceeds size limit')
     seconds = await asyncio.to_thread(audio_duration, data)  # blocking ffprobe: run off the event loop
@@ -1391,7 +1409,7 @@ async def transcribe(data, mime, filename, duration_seconds=None, *, user, db=No
                 'openrouter':OPENROUTER_SPEECH_MODEL}[available[0]]) if errors else None
             result = await speech_attempt(provider, data, mime, filename, seconds, user=user, encounter_id=encounter_id,diagnostic_original=original)
             if errors: result['warnings'].append('A configured fallback speech provider was used.')
-            return result
+            return flag_background_speech(result)
         except HTTPException as exc:
             if exc.status_code not in {502, 503, 504}: raise
             errors.append(exc)

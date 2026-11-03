@@ -84,3 +84,12 @@ def test_owner_can_turn_the_check_box_off(gateway, monkeypatch):
     monkeypatch.setattr(providers.settings, 'show_report_alerts', True, raising=False)
     result = asyncio.run(providers.checked_quick_text({}, 'quick_draft', {'template': 'nursing'}, user=gateway.user, encounter_id='e1'))
     assert result['ui_alerts']
+
+
+def test_foreign_script_speech_is_flagged_as_background():
+    from server import providers
+    assert providers.foreign_speech_share('Wound bed with granulation tissue') == 0
+    flagged = providers.flag_background_speech({'text': 'مرحبا كيف حالك اليوم', 'warnings': []})
+    assert flagged['background_suspected'] and flagged['warnings']
+    ok = providers.flag_background_speech({'text': 'Packed with Hydrofera Blue', 'warnings': []})
+    assert 'background_suspected' not in ok
