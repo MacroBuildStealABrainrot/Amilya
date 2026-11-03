@@ -29,7 +29,7 @@ def test_only_approved_cap_and_expiry_qualify():
     assert activation.key_is_bounded(metadata(), NOW + 600, NOW)
 
 
-@pytest.mark.parametrize('change', [dict(limit=None), dict(limit=1), dict(limit=2), dict(limit=True),
+@pytest.mark.parametrize('change', [dict(limit=None), dict(limit=2.01), dict(limit=5), dict(limit=True),
     dict(limit_remaining=0), dict(limit_remaining=2), dict(usage=float('nan')),
     dict(limit_reset='daily'), dict(is_management_key=True), dict(expires_at=None),
     dict(expires_at='2027-01-01T00:00:00Z'), dict(expires_at='2026-10-28T00:00:00Z')])
