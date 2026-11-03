@@ -428,6 +428,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         // Standing reminders the clinician already knows (review before use) are not repeated after every step.
         val messages=result.optJSONArray("warnings")?:return
         val kept=(0 until messages.length()).map{messages.optString(it)}.filter{it.isNotBlank() && !routineReminder(it)}
+            .map{if(Regex("\\[(AI_PAUSED|AI_NOT_CONFIGURED)").containsMatchIn(it))"AI processing is temporarily unavailable. Your recording is saved safely. Try again later." else it}.distinct()
         if(kept.isNotEmpty())notice=kept.joinToString("\n")
     }
     private fun canonical(value:Any?):String=when(value){
