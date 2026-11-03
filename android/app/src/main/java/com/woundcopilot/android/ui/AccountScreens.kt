@@ -184,6 +184,8 @@ fun AccountScreen(state: AppState) {
             Switch(checked = state.dark, onCheckedChange = null)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        // Credits and service status are owner details; the nurse does not need them in the test app.
+        if (!com.woundcopilot.android.BuildConfig.ISOLATED_TEST) {
         SectionLabel("Workspace credits", action = if (state.demo) null else "Refresh", onAction = { state.runTask { state.refreshHome() } })
         EvidenceRail {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -217,6 +219,7 @@ fun AccountScreen(state: AppState) {
                 if (state.config.optBoolean("clinical_data_enabled")) "Clinical data enabled" else "Synthetic data only",
                 if (state.config.optBoolean("clinical_data_enabled")) "Use your workspace's approved data handling policies." else "This deployment is not enabled for identifiable clinical data. Use synthetic examples.",
             )
+        }
         }
         if (!state.demo) com.woundcopilot.android.StoredDiagnosticsSection(state)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
