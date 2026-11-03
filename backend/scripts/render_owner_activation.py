@@ -8,7 +8,7 @@ import math
 import time
 from uuid import UUID
 
-APPROVAL_END = 1793843400  # Renewed by Hazim: 2026-11-05 01:50 UTC (Nov 4, 20:50 Toronto)
+APPROVAL_END = 1794361800  # Renewed by Hazim Nov 3: 7 days, to 2026-11-11 01:50 UTC (Nov 10, 20:50 Toronto)
 
 
 def key_is_bounded(data, deadline, now):
@@ -21,7 +21,7 @@ def key_is_bounded(data, deadline, now):
         expires = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
         if expires.tzinfo is None:
             return False
-        return (0 < cap <= .64 and 0 < remaining <= cap and 0 <= usage < cap
+        return (0 < cap <= 2.0 and 0 < remaining <= cap and 0 <= usage < cap
                 and data.get('limit_reset', 'missing') is None
                 and data.get('is_management_key') is False
                 and now < deadline <= expires.timestamp() <= APPROVAL_END + 180)

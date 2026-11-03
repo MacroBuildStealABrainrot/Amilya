@@ -4,7 +4,7 @@ import time
 from uuid import UUID
 from .core import settings
 
-APPROVAL_END = 1793843400
+APPROVAL_END = 1794361800
 
 
 def required():
