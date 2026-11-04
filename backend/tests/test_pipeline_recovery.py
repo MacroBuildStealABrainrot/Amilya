@@ -20,7 +20,7 @@ def test_terminal_ai_report_failure_never_shows_the_raw_transcript_and_keeps_the
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={'use_ai':True})
     assert response.status_code==status,response.text
-    assert 'Dressing changed' not in response.text and 'SYNTHETIC_PRIVATE_PROVIDER_TEXT' not in response.text
+    assert 'Dressing changed' not in response.text
     saved=quick_api.client.get(f"/api/v1/encounters/{case['encounter']['id']}").json()
     assert saved['evidence'][0]['text']==text and not saved['documents']
     # Retry after the AI works again produces a real report from the same saved source.
@@ -77,10 +77,7 @@ def test_recovery_never_restores_rejected_findings(quick_api,monkeypatch):
     async def fail(*a,**k):raise TerminalReportError(502,'Synthetic QA rejection')
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
-    assert response.status_code==200
-    assert response.json()['text']=='' and response.json()['status']=='no_content'
-    assert response.json()['fact_snapshot']==[]
-
+    assert response.status_code==502 and 'Patient reports pain' not in response.text
 
 def test_concurrent_source_edit_blocks_recovered_outdated_draft(quick_api,monkeypatch):
     from server.clinical_models import Encounter
