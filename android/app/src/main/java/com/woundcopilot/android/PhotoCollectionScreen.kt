@@ -59,6 +59,15 @@ import org.json.JSONObject
             if(paragraph.isNotBlank()){Text(paragraph);sendParts+=if(groupName.startsWith("Unassigned"))paragraph else "$groupName: $paragraph"}
         }
         SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
+        val shareContext=androidx.compose.ui.platform.LocalContext.current
+        val photoFiles=photos.mapNotNull{s.localSource(it.str("id"))}.filter{it.isFile}
+        if(photoFiles.isNotEmpty())WcpButton(if(photoFiles.size==1)"Share photo" else "Share photos",{try{
+            val dir=java.io.File(shareContext.cacheDir,"exports").apply{mkdirs()}
+            val uris=ArrayList<android.net.Uri>(photoFiles.mapIndexed{i,f->val copy=java.io.File(dir,"photo-"+System.currentTimeMillis()+"-"+i+"."+f.extension.ifBlank{"jpg"});f.copyTo(copy,true);androidx.core.content.FileProvider.getUriForFile(shareContext,shareContext.packageName+".files",copy)})
+            val intent=android.content.Intent(if(uris.size==1)android.content.Intent.ACTION_SEND else android.content.Intent.ACTION_SEND_MULTIPLE).apply{type="image/*";addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
+            if(uris.size==1)intent.putExtra(android.content.Intent.EXTRA_STREAM,uris[0]) else intent.putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM,uris)
+            shareContext.startActivity(android.content.Intent.createChooser(intent,"Share photos"))
+        }catch(_:Exception){s.notice="The photos could not be shared."}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         TextButton({s.saveWorkAndClose()},enabled=!s.loading&&photos.isNotEmpty()){Text("Save assessment")}
         WcpButton("Done",{s.finishPhotoAssessment()},Modifier.fillMaxWidth(),enabled=!s.loading)
         TextButton({s.chooseQuickMode("document");if(s.editor.isBlank())s.quickReport()else s.screen="editor"},enabled=!s.loading){Text("Add to Report")}
