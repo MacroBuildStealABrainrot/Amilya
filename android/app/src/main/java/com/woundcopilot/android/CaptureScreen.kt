@@ -224,6 +224,11 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
         if(s.externalCapture.canDiscard)TextButton({s.externalCapture.discard()}){Text("Cancel pending selection")}
         if (selectedFile != null && (!audio || !rec.recording)) {
             LocalMediaPreview(selectedFile, kind)
+            if (kind != "document" && selectedFile.isFile && !(audio && rec.recording)) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val shareMime = if (photo) "image/jpeg" else "audio/mp4"
+                TextButton({ s.notice = PhoneSave.save(context, selectedFile, shareMime) }, Modifier.weight(1f), enabled = idle) { Text("Save to phone") }
+                TextButton({ PhoneSave.share(context, selectedFile, shareMime, "Share")?.let { s.notice = it } }, Modifier.weight(1f), enabled = idle) { Text("Share") }
+            }
             if (!sizeValid) Text("This file is too large to process. Choose another file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             // A restored selection waits for an explicit action. New photos start
             // automatically in the selection callback; request failures use Retry.

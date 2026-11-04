@@ -61,6 +61,7 @@ import org.json.JSONObject
         SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
         val shareContext=androidx.compose.ui.platform.LocalContext.current
         val photoFiles=photos.mapNotNull{s.localSource(it.str("id"))}.filter{it.isFile}
+        if(photoFiles.isNotEmpty())WcpButton(if(photoFiles.size==1)"Save photo to phone" else "Save photos to phone",{s.notice=photoFiles.map{PhoneSave.save(shareContext,it,"image/jpeg")}.let{r->if(r.all{x->x.startsWith("Saved")})"Saved to your phone in Pictures/Amilya." else r.first{x->!x.startsWith("Saved")}}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(photoFiles.isNotEmpty())WcpButton(if(photoFiles.size==1)"Share photo" else "Share photos",{try{
             val dir=java.io.File(shareContext.cacheDir,"exports").apply{mkdirs()}
             val uris=ArrayList<android.net.Uri>(photoFiles.mapIndexed{i,f->val copy=java.io.File(dir,"photo-"+System.currentTimeMillis()+"-"+i+"."+f.extension.ifBlank{"jpg"});f.copyTo(copy,true);androidx.core.content.FileProvider.getUriForFile(shareContext,shareContext.packageName+".files",copy)})

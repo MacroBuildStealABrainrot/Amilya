@@ -81,6 +81,8 @@ import java.time.format.DateTimeFormatter
             val uri=androidx.core.content.FileProvider.getUriForFile(context,context.packageName+".files",copy)
             context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="audio/mp4";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)},"Share recording"))
         }catch(_:Exception){s.notice="The recording could not be shared."}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Save recording to phone",{s.notice=PhoneSave.save(context,java.io.File(audioPath),"audio/mp4")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(spokenText.isNotBlank())WcpButton("Save text to phone",{s.notice=PhoneSave.saveText(context,spokenText,"visit-text")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(spokenText.isNotBlank())WcpButton("Copy text",{try{(context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Voice to text",spokenText));s.notice="Text copied."}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(spokenText.isNotBlank() && s.editor.isBlank())WcpButton("Create report from this text",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
