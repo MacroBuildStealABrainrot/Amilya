@@ -65,79 +65,79 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val Graphite = darkColorScheme(
-    primary = Color(0xFFACE5CF),
-    onPrimary = Color(0xFF10382C),
-    primaryContainer = Color(0xFF234D40),
-    onPrimaryContainer = Color(0xFFCCF6E5),
-    secondary = Color(0xFFD6D1BD),
-    onSecondary = Color(0xFF35352B),
-    secondaryContainer = Color(0xFF44483D),
-    onSecondaryContainer = Color(0xFFF2EED9),
-    tertiary = Color(0xFFB4C9EB),
-    onTertiary = Color(0xFF18334F),
-    tertiaryContainer = Color(0xFF304763),
-    onTertiaryContainer = Color(0xFFDCE8FF),
-    background = Color(0xFF11191B),
-    onBackground = Color(0xFFF2F2E9),
-    surface = Color(0xFF172224),
-    onSurface = Color(0xFFF2F2E9),
-    surfaceVariant = Color(0xFF263335),
-    onSurfaceVariant = Color(0xFFB8C5C3),
-    surfaceTint = Color(0xFFACE5CF),
-    inverseSurface = Color(0xFFE3E6DE),
-    inverseOnSurface = Color(0xFF25302E),
-    inversePrimary = Color(0xFF2F6653),
-    outline = Color(0xFF80938D),
-    outlineVariant = Color(0xFF3A4948),
+    primary = Color(0xFF1AB8E8),
+    onPrimary = Color(0xFF011E5A),
+    primaryContainer = Color(0xFF0B3C86),
+    onPrimaryContainer = Color(0xFFEDF8FE),
+    secondary = Color(0xFF48F5F5),
+    onSecondary = Color(0xFF011E5A),
+    secondaryContainer = Color(0xFF0A4A80),
+    onSecondaryContainer = Color(0xFFD8FBFB),
+    tertiary = Color(0xFF8ED8F5),
+    onTertiary = Color(0xFF011E5A),
+    tertiaryContainer = Color(0xFF12356F),
+    onTertiaryContainer = Color(0xFFEDF8FE),
+    background = Color(0xFF011E5A),
+    onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF05286E),
+    onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF0E3478),
+    onSurfaceVariant = Color(0xFFC3DCF2),
+    surfaceTint = Color(0xFF1AB8E8),
+    inverseSurface = Color(0xFFEDF8FE),
+    inverseOnSurface = Color(0xFF011E5A),
+    inversePrimary = Color(0xFF0B7FAA),
+    outline = Color(0xFF6C9BC8),
+    outlineVariant = Color(0xFF1D4A8E),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
-    errorContainer = Color(0xFF602824),
+    errorContainer = Color(0xFF8C1D18),
     onErrorContainer = Color(0xFFFFDAD6),
-    surfaceDim = Color(0xFF11191B),
-    surfaceBright = Color(0xFF364244),
-    surfaceContainerLowest = Color(0xFF0D1416),
-    surfaceContainerLow = Color(0xFF172224),
-    surfaceContainer = Color(0xFF1C292B),
-    surfaceContainerHigh = Color(0xFF273537),
-    surfaceContainerHighest = Color(0xFF324244),
+    surfaceDim = Color(0xFF011749),
+    surfaceBright = Color(0xFF16408A),
+    surfaceContainerLowest = Color(0xFF011649),
+    surfaceContainerLow = Color(0xFF04246A),
+    surfaceContainer = Color(0xFF082B74),
+    surfaceContainerHigh = Color(0xFF0E3480),
+    surfaceContainerHighest = Color(0xFF173F8C),
 )
 
 private val Paper = lightColorScheme(
-    primary = Color(0xFF225C47),
+    primary = Color(0xFF0B86B4),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD6EDDE),
-    onPrimaryContainer = Color(0xFF123B2A),
-    secondary = Color(0xFF615D45),
+    primaryContainer = Color(0xFF1AB8E8),
+    onPrimaryContainer = Color(0xFF011E5A),
+    secondary = Color(0xFF0A5F8C),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE9E4CE),
-    onSecondaryContainer = Color(0xFF343421),
-    tertiary = Color(0xFF355F85),
+    secondaryContainer = Color(0xFFC9F8F8),
+    onSecondaryContainer = Color(0xFF011E5A),
+    tertiary = Color(0xFF1F4F9A),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFDCE8F8),
-    onTertiaryContainer = Color(0xFF18364D),
-    background = Color(0xFFF4F3EC),
-    onBackground = Color(0xFF202D2C),
-    surface = Color(0xFFFFFEF9),
-    onSurface = Color(0xFF202D2C),
-    surfaceVariant = Color(0xFFE5E8DF),
-    onSurfaceVariant = Color(0xFF4C5E58),
-    surfaceTint = Color(0xFF225C47),
-    inverseSurface = Color(0xFF283733),
-    inverseOnSurface = Color(0xFFF2F2E9),
-    inversePrimary = Color(0xFFACE5CF),
-    outline = Color(0xFF708179),
-    outlineVariant = Color(0xFFCCD4C9),
-    error = Color(0xFF9E3229),
+    tertiaryContainer = Color(0xFFDCEBFB),
+    onTertiaryContainer = Color(0xFF011E5A),
+    background = Color(0xFFF6FBFE),
+    onBackground = Color(0xFF011E5A),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF011E5A),
+    surfaceVariant = Color(0xFFEDF8FE),
+    onSurfaceVariant = Color(0xFF2B4A7C),
+    surfaceTint = Color(0xFF1AB8E8),
+    inverseSurface = Color(0xFF011E5A),
+    inverseOnSurface = Color(0xFFEDF8FE),
+    inversePrimary = Color(0xFF48F5F5),
+    outline = Color(0xFF5E86B5),
+    outlineVariant = Color(0xFFC5DCEF),
+    error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFFBE0D9),
     onErrorContainer = Color(0xFF702219),
-    surfaceDim = Color(0xFFDADDD3),
-    surfaceBright = Color(0xFFFFFEF9),
+    surfaceDim = Color(0xFFD9E8F3),
+    surfaceBright = Color.White,
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF6F6EE),
-    surfaceContainer = Color(0xFFEEEEE5),
-    surfaceContainerHigh = Color(0xFFE7E9DF),
-    surfaceContainerHighest = Color(0xFFE1E5DA),
+    surfaceContainerLow = Color(0xFFF3FAFE),
+    surfaceContainer = Color(0xFFEDF8FE),
+    surfaceContainerHigh = Color(0xFFE3F2FC),
+    surfaceContainerHighest = Color(0xFFD9ECF9),
 )
 
 private val WoundTypography = Typography(
@@ -178,27 +178,7 @@ fun WoundTheme(dark: Boolean = true, content: @Composable () -> Unit) {
 fun Wordmark(compact: Boolean = false) {
     val accent = MaterialTheme.colorScheme.primary
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(if (compact) 27.dp else 34.dp)) {
-            val unit = size.minDimension / 34f
-            val stroke = 2.2f * unit
-            // Open brackets and one evidence point recur throughout the workspace.
-            val left = Path().apply {
-                moveTo(13f * unit, 4f * unit)
-                lineTo(5f * unit, 4f * unit)
-                lineTo(5f * unit, 30f * unit)
-                lineTo(13f * unit, 30f * unit)
-            }
-            val right = Path().apply {
-                moveTo(21f * unit, 4f * unit)
-                lineTo(29f * unit, 4f * unit)
-                lineTo(29f * unit, 30f * unit)
-                lineTo(21f * unit, 30f * unit)
-            }
-            drawPath(left, accent, style = Stroke(stroke, cap = StrokeCap.Round))
-            drawPath(right, accent, style = Stroke(stroke, cap = StrokeCap.Round))
-            drawLine(accent.copy(alpha = .42f), Offset(17f * unit, 9f * unit), Offset(17f * unit, 25f * unit), strokeWidth = unit)
-            drawCircle(accent, radius = 3.3f * unit, center = Offset(17f * unit, 17f * unit))
-        }
+        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.woundcopilot.android.R.drawable.amilya_logo), contentDescription = "Amilya", modifier = Modifier.size(if (compact) 32.dp else 44.dp))
         Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
