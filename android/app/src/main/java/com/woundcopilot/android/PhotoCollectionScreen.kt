@@ -37,6 +37,8 @@ import org.json.JSONObject
         current?.let{p->
             val id=p.str("id");s.localSource(id)?.let{LocalMediaPreview(it,"photo")}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
+                val saveCtx=androidx.compose.ui.platform.LocalContext.current
+                TextButton({s.localSource(id)?.takeIf{it.isFile}?.let{f->val r=PhoneSave.save(saveCtx,f,"image/jpeg");s.notice=if(r.startsWith("Saved"))"Saved to your phone in Pictures > Amilya."else r}},enabled=!s.loading){Text("Save")}
                 TextButton({deleting=id},enabled=!s.loading){Text("Remove")}
             }
         }
