@@ -871,8 +871,6 @@ def configured_route(task, content):
     if cap in order and task != 'image' and order.index(route['effort_level']) > order.index(cap):
         route = {**route, 'effort_level': cap, 'reason': 'owner_effort_cap'}
     if task in {'improve_report', 'improve_assessment'} and getattr(settings, 'model_addon', ''): selected = settings.model_addon
-    elif task in {'quick_draft', 'quick_refine'}:
-        minimum = max(minimum, 8000)
     elif task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
     elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
@@ -903,6 +901,8 @@ async def routed(task, content, model=None, **kwargs):
     minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
     if task in {'extract', 'document'}:
         minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
+    elif task in {'quick_draft', 'quick_refine'}:
+        minimum = max(minimum, 8000)
     elif task == 'image':
         # High-effort specialist reasoning also uses this allowance; leave room for the answer.
         minimum = max(minimum, 12000)
