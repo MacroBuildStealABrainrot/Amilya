@@ -70,9 +70,7 @@ def test_default_disabled_and_zdr_cannot_be_relaxed(gateway):
     assert exc.value.status_code == 503 and not gateway.http.calls
 
 
-@pytest.mark.parametrize('changes', [dict(text=None), dict(segments='bad'),
-    dict(segments=[{'start':float('nan'),'end':2,'text':'Synthetic'}]),
-    dict(segments=[{'start':0,'end':90,'text':'Synthetic'}]),
+@pytest.mark.parametrize('changes', [dict(text=None), dict(text='x' * 400000),
     dict(model='invented-model-private-words')])
 def test_invalid_transcripts_fail_without_charge(gateway, changes):
     enable(gateway)
@@ -109,3 +107,17 @@ def test_repeat_clip_is_never_claimed_as_an_independent_verifier(gateway):
         encounter_id='synthetic-clip'))
     assert result['verifier']['method'] == 'repeat_openrouter_transcription'
     assert any('not an independent' in w for w in result['warnings'])
+
+
+@pytest.mark.parametrize('segments', ['bad', [{'start':float('nan'),'end':2,'text':'Synthetic'}],
+    [{'start':0,'end':90,'text':'Synthetic'}], [{'start':9,'end':3,'text':'Synthetic'}], ['not a segment'], [{'text':'no times'}]])
+def test_odd_timing_never_stops_a_recording_and_never_changes_the_words(gateway, segments):
+    """2026-11-04: a normal (HTTP 200) reply with unusable timing stopped a 60-minute recording. Timing is a helper only."""
+    enable(gateway)
+    gateway.http.responses = [transcript(segments=segments)]
+    result = call(gateway)
+    assert result['text'] == transcript()['text']
+    assert all(0 <= x['start'] <= x['end'] <= providers.audio_duration(audio()) for x in result['segments'])
+    with gateway.sessions() as db:
+        operation = db.scalar(select(UsageOperation))
+        assert not operation.usage.get('charge_waived')

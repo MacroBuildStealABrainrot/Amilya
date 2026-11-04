@@ -103,14 +103,15 @@ class AudioChunks(private val api:Api,private val vault:Vault){
         state.optJSONObject("result")?.let{return it}
         check(state.optInt("parts")==count){"The saved recording changed. Review the original before retrying."}
         for(index in state.optInt("completed") until count){
-            stage("Transcribing")
+            stage("Transcribing section ${index+1} of $count")
             val bytes=withContext(Dispatchers.IO){sealed.part(index)}
             try{
                 val overlap=withContext(Dispatchers.IO){sealed.overlapMillis(index)}
                 api.multipartBytes("/encounters/$encounter/audio-parts","segment-$index.m4a",bytes,"audio/mp4",
                     mapOf("job_id" to state.str("job_id"),"index" to index.toString(),"count" to count.toString(),"consent" to "true")+
                         (if(overlap>0)mapOf("overlap_ms" to overlap.toString()) else emptyMap()),"${state.str("job_id")}-$index")
-            }finally{bytes.fill(0)}
+            }catch(e:ApiException){throw sectionFailure(e,index,count)}
+            finally{bytes.fill(0)}
             state.put("completed",index+1);vault.write(checkpoint,state.toString())
         }
         stage("Preparing transcript")
@@ -143,9 +144,9 @@ class AudioChunks(private val api:Api,private val vault:Vault){
             for(index in 0 until old.length())File(old.getString(index)).delete()
         }
         for(index in state.optInt("completed") until count){
-            stage("Transcribing")
-            api.multipart("/encounters/$encounter/audio-parts",File(files.getString(index)),"audio/mp4",
-                mapOf("job_id" to state.str("job_id"),"index" to index.toString(),"count" to count.toString(),"consent" to "true"),"${state.str("job_id")}-$index")
+            stage("Transcribing section ${index+1} of $count")
+            try{api.multipart("/encounters/$encounter/audio-parts",File(files.getString(index)),"audio/mp4",
+                mapOf("job_id" to state.str("job_id"),"index" to index.toString(),"count" to count.toString(),"consent" to "true"),"${state.str("job_id")}-$index")}catch(e:ApiException){throw sectionFailure(e,index,count)}
             state.put("completed",index+1);vault.write(checkpoint,state.toString())
         }
         stage("Preparing transcript")
@@ -154,4 +155,14 @@ class AudioChunks(private val api:Api,private val vault:Vault){
         for(index in 0 until count)File(files.getString(index)).delete()
         return result
     }
+}
+
+/** Says exactly which piece of a long recording failed and what is already saved. Only for failures a retry can fix. */
+internal fun sectionFailure(e:ApiException,index:Int,count:Int):Exception{
+    if(e.status !in listOf(502,503,504))return e
+    val saved=if(index==0)"Nothing was lost: your recording is saved on this phone."
+        else "Sections 1 to $index are already saved and will not be sent or charged again. Your recording is saved on this phone."
+    val reference=e.requestId?.let{runCatching{" Support reference: WC-"+((it.replace("-","").take(8).toLong(16))%1_000_000).toString().padStart(6,'0')}.getOrNull()}.orEmpty()
+    val why=if(e.category=="INVALID_RESPONSE")"the speech service reply could not be used" else "the speech service did not respond"
+    return ReportRetryException("Transcription stopped at section ${index+1} of $count: ${why}. $saved Tap Try again to continue from section ${index+1}.$reference")
 }

@@ -696,8 +696,13 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
     except ModelIdentityError:
         usage['failure_reason'] = 'request_incompatible'
         error = HTTPException(502, 'The provider returned an unexpected model. The owner must review routing; no findings were accepted.')
-    except (ValueError, KeyError, TypeError, IndexError):
+    except (ValueError, KeyError, TypeError, IndexError) as invalid:
         usage['failure_reason'] = 'invalid_response'
+        if task == 'transcription':
+            # A fixed code only (never the provider's words): says which check failed so the cause is knowable next time.
+            reason_code = str(invalid) if str(invalid) in {'transcript_text_missing', 'transcript_text_too_long'} else type(invalid).__name__
+            usage['invalid_reason'] = reason_code
+            diagnostics.event({'source': 'server', 'stage': 'transcription_invalid', 'status': 'failed', 'error_code': reason_code})
         error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.')
     except httpx.HTTPError:
         usage['failure_reason'] = 'provider_connection'
@@ -1300,6 +1305,7 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
                 if not isinstance(raw, dict): raise ValueError('Invalid transcript')
             return raw
     def validate(raw):
+        unusable = 0
         if provider == 'cloudflare':
             if raw.get('success') is False: raise ValueError('Provider failure')
             raw = raw.get('result', raw)
@@ -1310,15 +1316,24 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
         else: text, segments = raw.get('text'), raw.get('segments') or []
         if provider == 'openrouter':
             if not model_identity_matches(model, raw.get('model')): raise ModelIdentityError()
-            if not isinstance(segments, list) or len(segments) > 1000: raise ValueError('Invalid transcript segments')
-            for segment in segments:
+            # Timing details are helpers only; the transcript TEXT is what matters. A speech service can return odd timings on
+            # noisy or foreign-language audio (a 200 reply on 2026-11-04 still failed here and stopped a 60-minute recording).
+            # Unusable timing is repaired or left out and said so; the words themselves are never dropped or changed.
+            if not isinstance(segments, list): segments = []
+            repaired, unusable = [], 0
+            for segment in segments[:1000]:
                 if (not isinstance(segment, dict) or not isinstance(segment.get('text'), str)
                         or len(segment['text']) > settings.max_text_chars
-                        or any(type(segment.get(k)) not in (int,float) or not math.isfinite(segment[k]) for k in ('start','end'))
-                        or not 0 <= segment['start'] <= segment['end'] <= seconds + 1):
-                    raise ValueError('Invalid transcript segments')
+                        or any(type(segment.get(k)) not in (int,float) or not math.isfinite(segment[k]) for k in ('start','end'))):
+                    unusable += 1; continue
+                start, end = sorted((float(segment['start']), float(segment['end'])))
+                repaired.append({**segment, 'start': min(max(start, 0.0), seconds), 'end': min(max(end, 0.0), seconds)})
+            unusable += max(0, len(segments) - 1000)
+            segments = repaired
         limit = 8000 if purpose == 'audio_verification' else settings.max_text_chars
-        if not isinstance(text, str) or len(text) > limit or (purpose == 'audio_verification' and not text.strip()): raise ValueError('Invalid transcript')
+        if not isinstance(text, str): raise ValueError('transcript_text_missing')
+        if len(text) > limit: raise ValueError('transcript_text_too_long')
+        if purpose == 'audio_verification' and not text.strip(): raise ValueError('transcript_text_missing')
         clean = []
         for segment in segments[:1000]:
             if not isinstance(segment, dict): continue
@@ -1326,6 +1341,7 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             clean.append(item)
         warnings = ['Review negation, units, laterality, numbers and speaker attribution before confirmation.']
         original_text = text
+        if provider == 'openrouter' and unusable: warnings.append('Some timing details from the speech service were unusable and were left out. The transcript words are complete and unchanged.')
         text, clean, looped, repeated_clinical = collapse_speech_loops(text, clean)
         if looped: warnings.append('The speech service repeated the same short phrase several times in a row; the extra copies were left out of the working transcript. The original transcript is kept unchanged with this source. Check this part against the recording.')
         if repeated_clinical: warnings.append('A sentence with a number, dose, negation or side was repeated 3 or more times in a row. It was NOT shortened. Check this part against the recording.')
