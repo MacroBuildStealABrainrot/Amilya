@@ -33,7 +33,7 @@ from server.schemas import (AssistantRequest, DocumentCreate, DraftRequest, Enco
 
 router = APIRouter(tags=['clinical'])
 MUTATION = [Depends(require_csrf)]
-VISUAL_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate'}
+VISUAL_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate', 'visible_finding'}
 SOURCE_LABELS = {'clinician_manual': 'Clinician assessed', 'clinician_statement': 'Clinician stated',
                  'patient_report': 'Patient reported', 'caregiver_report': 'Caregiver reported',
                  'record_derived': 'Record states', 'image_visible': 'Photo-visible observation',

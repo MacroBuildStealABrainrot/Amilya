@@ -12,7 +12,8 @@ Name = Literal['wound_measurement', 'wound_location', 'pain', 'exudate', 'odour'
                'offloading_assessment', 'compression', 'treatment_performed', 'patient_education',
                'narrative', 'vascular_test', 'lab', 'culture', 'imaging', 'history', 'allergy',
                'medication', 'nutrition', 'mobility', 'infection_findings', 'fever', 'chills',
-               'diabetes', 'renal_disease', 'edema', 'smoking', 'pressure_exposure', 'glucose_control']
+               'diabetes', 'renal_disease', 'edema', 'smoking', 'pressure_exposure', 'glucose_control',
+               'visible_finding']
 Mode = Literal['auto', 'fast', 'advanced', 'deep']
 Template = Literal['nursing', 'soap', 'sbar', 'handoff', 'referral', 'physician_update', 'referral_letter', 'custom']
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]

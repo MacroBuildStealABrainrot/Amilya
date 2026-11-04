@@ -100,14 +100,14 @@ def model_identity_matches(selected, reported):
 SPEECH_PRICES = {'cloudflare': Decimal('510'), 'groq': Decimal('40000') / 60,
                  'deepgram': Decimal('7700')}  # microUSD per minute, medical reserve uses configurable cap
 GROQ_FULL_WHISPER_MICROS_PER_MINUTE = Decimal('111000') / 60
-PHOTO_NAMES = {'wound_edges', 'periwound', 'wound_tissue', 'exudate'}
+PHOTO_NAMES = {'wound_edges', 'periwound', 'wound_tissue', 'exudate', 'visible_finding'}
 PHOTO_RETAKE_MESSAGES = {
     'blur': 'Hold the camera steady and retake the photo.',
     'lighting': 'Improve the lighting and retake the photo.',
     'distance': 'Move closer and retake the photo.',
-    'framing': 'Keep the entire wound in the frame.',
-    'obstruction': 'The wound is obscured. Retake when it is visible.',
-    'no_wound': 'No wound is clear in this photo. Retake the photo.',
+    'framing': 'Keep the entire area in the frame.',
+    'obstruction': 'The area is obscured. Retake when it is visible.',
+    'no_wound': 'No clear clinical finding is visible in this photo. Retake the photo.',
     'uncertain': "Photo isn't clear enough for assessment. Retake the photo.",
 }
 MAX_RATE_LIMIT_ATTEMPTS = 2
@@ -999,7 +999,7 @@ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
             # The existing gateway meters, validates and replays each attempt independently.
             diagnostics.event({'source':'server','stage':'photo_schema_recovery','status':'pending','error_code':'INVALID_RESPONSE'})
             strict = [{'type':'text','text': 'Recovery attempt 1. Return only quality, facts, warnings using the supplied schema. '
-                'Only wound_tissue, wound_edges, periwound, exudate may be observed. Use value.text and an empty quote. '
+                'Only wound_tissue, wound_edges, periwound, exudate, visible_finding may be observed. Use value.text and an empty quote. '
                 'Describe tissue in words only. Do not return percentages in text or numeric tissue fields. '
                 'Omit any unassessable candidate. Do not add location, measurements, depth, diagnosis or nonvisual findings. '
                 'If the image is inadequate, return insufficient quality with the applicable reason and no facts.'}, *content]
