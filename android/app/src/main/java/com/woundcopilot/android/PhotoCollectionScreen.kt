@@ -30,7 +30,6 @@ import org.json.JSONObject
                 val bitmap=remember(file?.path){file?.let{BitmapFactory.decodeFile(it.path,BitmapFactory.Options().apply{inSampleSize=8})}?.asImageBitmap()}
                 Column(Modifier.width(110.dp).clickable{selected=p.str("id")}){
                     if(bitmap!=null)Image(bitmap,"Photo ${index+1}",Modifier.size(100.dp))else Text("Photo ${index+1}")
-                    Text(p.str("label").ifBlank{"Photo ${index+1}"},style=MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -38,15 +37,13 @@ import org.json.JSONObject
         current?.let{p->
             val id=p.str("id");s.localSource(id)?.let{LocalMediaPreview(it,"photo")}
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
-                TextButton({editing=p;label=p.str("label");group=p.str("group")},enabled=!s.loading){Text("Label / group")}
-                TextButton({val index=photos.indexOf(p);if(index>0){val copy=photos.toMutableList();java.util.Collections.swap(copy,index,index-1);s.arrangePhotos(copy)}},enabled=!s.loading&&photos.indexOf(p)>0){Text("Move earlier")}
                 TextButton({deleting=id},enabled=!s.loading){Text("Remove")}
             }
         }
         val sendParts=mutableListOf<String>()
         photos.groupBy{it.str("group")}.entries.forEachIndexed{index,(groupName,views)->
             val ids=views.map{it.str("id")}.toSet()
-            Text(if(groupName.startsWith("Unassigned"))"Photo ${photos.indexOf(views.first())+1} · wound not assigned"else groupName,style=MaterialTheme.typography.titleMedium)
+            if(!groupName.startsWith("Unassigned"))Text(groupName,style=MaterialTheme.typography.titleMedium)
             val findings=s.case?.items("facts").orEmpty().filter{it.str("source_ref") in ids && it.str("confirmation_state")!="rejected"}
                 .distinctBy{it.str("name")+it.opt("value")?.toString().orEmpty()}
             val sourcePhotos=s.case?.items("evidence").orEmpty().filter{it.str("id") in ids}
@@ -61,7 +58,6 @@ import org.json.JSONObject
         SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
         val shareContext=androidx.compose.ui.platform.LocalContext.current
         val photoFiles=photos.mapNotNull{s.localSource(it.str("id"))}.filter{it.isFile}
-        if(photoFiles.isNotEmpty())WcpButton(if(photoFiles.size==1)"Save photo to phone" else "Save photos to phone",{s.notice=photoFiles.map{PhoneSave.save(shareContext,it,"image/jpeg")}.let{r->if(r.all{x->x.startsWith("Saved")})"Saved to your phone in Pictures/Amilya." else r.first{x->!x.startsWith("Saved")}}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(photoFiles.isNotEmpty())WcpButton(if(photoFiles.size==1)"Share photo" else "Share photos",{try{
             val dir=java.io.File(shareContext.cacheDir,"exports").apply{mkdirs()}
             val uris=ArrayList<android.net.Uri>(photoFiles.mapIndexed{i,f->val copy=java.io.File(dir,"photo-"+System.currentTimeMillis()+"-"+i+"."+f.extension.ifBlank{"jpg"});f.copyTo(copy,true);androidx.core.content.FileProvider.getUriForFile(shareContext,shareContext.packageName+".files",copy)})

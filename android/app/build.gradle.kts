@@ -14,8 +14,8 @@ android {
         buildConfigField("boolean", "REPAIR_SERVER", "false")
         buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
         buildConfigField("boolean", "ISOLATED_TEST", "false")
-        versionCode = 67
-        versionName = "1.9.0-test31"
+        versionCode = 68
+        versionName = "1.9.0-test32"
         manifestPlaceholders["appLabel"] = "WoundCoPilot"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
