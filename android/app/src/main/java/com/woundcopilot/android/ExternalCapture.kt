@@ -85,7 +85,7 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
             LockPolicy.Deferred.SEND->{
                 deferredPhoto=null
                 val files=s.pendingPhotoFiles()
-                if(files.isNotEmpty()){s.screen=p.str("screen");s.uploadPhotos(files)}
+                if(files.isNotEmpty())s.screen=p.str("screen")
             }
         }
     }
@@ -136,8 +136,7 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
                 val matches=s.user?.str("id")==p.str("owner") && s.encounterId==p.str("encounter")
                 if(matches && !s.locked){
                     s.screen=p.str("screen")
-                    if(p.str("media")=="photo"&&!s.loading)s.uploadPhotos(s.pendingPhotoFiles())
-                    else if(p.str("media")=="photo")deferredPhoto=p   // app busy: send when the current task ends
+                    // The clinician approves the picture first: it is shown on the photo screen and only sent to the AI when they tap Use this photo.
                 }else if(matches && p.str("media")=="photo")deferredPhoto=p   // app locked: send after unlock
                 event("external_saved",p)
             }catch(e:Exception){

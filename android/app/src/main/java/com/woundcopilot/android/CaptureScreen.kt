@@ -228,7 +228,7 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
             // A restored selection waits for an explicit action. New photos start
             // automatically in the selection callback; request failures use Retry.
             if (!photo || (idle && s.error == null)) WcpButton(
-                when { purpose == "message" -> "Review message"; purpose == "correction" -> "Review correction"; s.quickMode == "document" && audio -> "Create report"; photo -> "Analyze photo"; s.quickMode == "consultant" -> "Add to conversation"; audio -> "Add recording"; else -> "Add document" },
+                when { purpose == "message" -> "Review message"; purpose == "correction" -> "Review correction"; s.quickMode == "document" && audio -> "Create report"; photo -> "Use this photo"; s.quickMode == "consultant" -> "Add to conversation"; audio -> "Add recording"; else -> "Add document" },
                 {
                     val batch=if(photo)s.pendingPhotoFiles()else emptyList()
                     if(batch.isNotEmpty())s.uploadPhotos(batch)else s.upload(selectedFile,mime,kind)
