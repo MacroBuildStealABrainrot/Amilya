@@ -1388,8 +1388,8 @@
     "bytes": 1040
   },
   "backend/server/prompts/20_clinical_fact_extraction.system.md": {
-    "sha256": "f6c35f4584ab9e301c54bfc474c7fbeec5f8f5fedd9e325842dd5e39c3f396ae",
-    "bytes": 1698
+    "sha256": "9a4b7b73697d168997bacc4b54d329da1b3c629d486b6a3549df862c73cceca3",
+    "bytes": 2039
   },
   "backend/server/prompts/25_document_extraction.system.md": {
     "sha256": "8b6409698bdd73952094dd9da5a3f61ffcb8f476d99974b78e8b3813908666a7",

@@ -95,5 +95,6 @@ private val ROUTINE_REMINDERS = listOf(
     "review negation", "review the recognized message", "no message was sent", "review the transcript against the recording",
     "photo observations require clinical correlation", "draft — clinician review required", "draft for clinician review",
     "review the recognized correction", "source statements and ai suggestions are not automatically confirmed",
+    "an unsupported or invalid extracted finding", "source is labelled", "source is labeled", "wound dimensions are marked", "wound measurement depth", "dimensions are marked",
 )
 internal fun routineReminder(message: String): Boolean = message.trim().lowercase().let { text -> ROUTINE_REMINDERS.any { text.startsWith(it) } }
