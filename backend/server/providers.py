@@ -105,9 +105,9 @@ PHOTO_RETAKE_MESSAGES = {
     'blur': 'Hold the camera steady and retake the photo.',
     'lighting': 'Improve the lighting and retake the photo.',
     'distance': 'Move closer and retake the photo.',
-    'framing': 'Keep the entire area in the frame.',
-    'obstruction': 'The area is obscured. Retake when it is visible.',
-    'no_wound': 'No clear clinical finding is visible in this photo. Retake the photo.',
+    'framing': 'Retake the photo with everything in the frame.',
+    'obstruction': 'Something is blocking the view. Retake the photo.',
+    'no_wound': 'Nothing clear is visible in this photo. Retake the photo.',
     'uncertain': "Photo isn't clear enough for assessment. Retake the photo.",
 }
 MAX_RATE_LIMIT_ATTEMPTS = 2
