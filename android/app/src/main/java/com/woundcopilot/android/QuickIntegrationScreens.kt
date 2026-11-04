@@ -74,6 +74,13 @@ import java.time.format.DateTimeFormatter
         if(s.editor.isNotBlank())WcpButton("Return to report",{s.screen="editor"},Modifier.fillMaxWidth(),enabled=!s.loading)
         else if(showsGenerateOnDocument(true,sources.size,s.earlierReportWaiting()))WcpButton(if(sources.isEmpty())"Recover earlier report" else "Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
         if(spokenText.isNotBlank())WcpButton("Share text",{try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,spokenText)},"Share text"))}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        val audioPath=s.vault.read("capture-${s.user?.str("id")}-${s.encounterId}-audio").orEmpty()
+        if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Share recording",{try{
+            val src=java.io.File(audioPath);val dir=java.io.File(context.cacheDir,"exports").apply{mkdirs()}
+            val copy=java.io.File(dir,"visit-recording-"+System.currentTimeMillis()+"."+src.extension.ifBlank{"m4a"});src.copyTo(copy,true)
+            val uri=androidx.core.content.FileProvider.getUriForFile(context,context.packageName+".files",copy)
+            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="audio/mp4";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)},"Share recording"))
+        }catch(_:Exception){s.notice="The recording could not be shared."}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(spokenText.isNotBlank())WcpButton("Copy text",{try{(context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Voice to text",spokenText));s.notice="Text copied."}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(spokenText.isNotBlank() && s.editor.isBlank())WcpButton("Create report from this text",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
