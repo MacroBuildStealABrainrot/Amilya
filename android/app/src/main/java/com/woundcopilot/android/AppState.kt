@@ -360,7 +360,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         // The free test server sleeps when idle and can take up to a minute to wake. Say so instead of looking stuck.
         coroutineScope {
             val waking=if(BuildConfig.ISOLATED_TEST)launch{delay(6_000);taskLabel="Waking up the test server. This can take up to a minute."}else null
-            try{setSession(api.call("/auth/login","POST",obj("email" to email.trim(),"password" to password)) as JSONObject)}finally{waking?.cancel()}
+            try{setSession(try{api.call("/auth/login","POST",obj("email" to email.trim(),"password" to password)) as JSONObject}catch(e:ApiException){if(e.status==401)throw IllegalArgumentException("Email or password is incorrect. Check them and try again.") else throw e})}finally{waking?.cancel()}
         }
         screen="home";refreshHomeInBackground()}
     fun signup(email:String,password:String,name:String,workspace:String)=runTask {persistEditor();clearClinical();demo=false;user=null;api.clear();val version=config.str("legal_version");setSession(api.call("/auth/signup","POST",obj("email" to email.trim(),"password" to password,"display_name" to name,"workspace_name" to workspace,"accept_terms" to true,"terms_version" to version,"privacy_version" to version)) as JSONObject);refreshHome();screen="home"}
