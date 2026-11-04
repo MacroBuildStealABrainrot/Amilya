@@ -4,7 +4,7 @@
   "files": {
     "00_healthcare_boundary.system.md": "13ffeb5b1c74b1fa90c0edb0ee42f0d7d60b873003b9b923fd24b5144735e9b0",
     "05_scope_guard.system.md": "df4a627ef978be02e0b30da22e32d3f600cac9696d911b5ec7e7b99ff1b8f229",
-    "06_documentation_rules.system.md": "67e5fc19667930bce80be22310e4f09788d7cb07946bb97537462a10941857c2",
+    "06_documentation_rules.system.md": "f21f0b35114eb606f80960733334b97ddb8095be7a902473b7fb5407f2828970",
     "10_task_router.system.md": "464da884526eef6827b806a8ecaa49c3cd5d57c711ea75b1f070894e41ab0345",
     "20_clinical_fact_extraction.system.md": "9a4b7b73697d168997bacc4b54d329da1b3c629d486b6a3549df862c73cceca3",
     "25_document_extraction.system.md": "8b6409698bdd73952094dd9da5a3f61ffcb8f476d99974b78e8b3813908666a7",
@@ -26,7 +26,7 @@
     "91_wound_consultant.system.md": "7b5caa5e71aaa8268afb8c0c416eaefebfea9d116ca8974a717c8494629314fb",
     "92_improve_assessment.system.md": "0f5cc446b895826b239f072efe9cce0d4edcd25e76a3de6b29a7ca3c01201314",
     "documentation/clinical_style_v1.md": "732830c158171a3852b3dfbf1e01f9e10a4306d958b0e80202731db20b19115e",
-    "documentation/community_nursing_v1.md": "82fa16053b581aea234a365bf773b3068d7b8b4021c70a3daa0e60547db0832a",
+    "documentation/community_nursing_v1.md": "7b1f8b814ccd8dd61bc5548a1d2714cef82ee3d08a82ccdfe85398aaac2da6a2",
     "documentation/formats/custom_v1.md": "1921aadb020f6666cd98455c4bedbeacf6de8c27f4e4aced6b168021eb4541f4",
     "documentation/formats/diagnostics_v1.md": "fddc170ca211076fe3228681ad39ae7f2a70ad8e50843e8b67c6caf513b18a58",
     "documentation/formats/handoff_v1.md": "956bd2ffb87ff8f6403b787deaf19bfc33a2b4d2bb8576efdeb38e3844fc663f",
