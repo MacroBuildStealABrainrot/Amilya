@@ -7,7 +7,7 @@ ROOT=Path(__file__).parent/'prompts'/'documentation'
 VERSION='documentation_layers_v2'
 selection=ContextVar('documentation_selection',default=('OTHER_CLINICIAN','nursing'))
 ROLES={'NURSE','NURSE_PRACTITIONER','PHYSICIAN','OTHER_CLINICIAN'}
-TYPES={'nursing','soap','sbar','physician_update','referral_letter','handoff','custom'}
+TYPES={'nursing','soap','sbar','physician_update','referral_letter','handoff','diagnostics','medical_order','custom'}
 
 def clinician_role(user):
     value=(getattr(user,'profile',None) or {}).get('profession','')

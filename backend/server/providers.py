@@ -850,7 +850,7 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
 
 
 # Owner's blind review (2026-10-28) preferred Haiku's notes; custom layouts stay on the main model until tested.
-SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
+SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter', 'diagnostics', 'medical_order'})
 
 
 def simple_note_template(content):

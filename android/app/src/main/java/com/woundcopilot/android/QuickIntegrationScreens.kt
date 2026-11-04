@@ -52,7 +52,7 @@ import java.time.format.DateTimeFormatter
                 rawTitle else type
             SimpleSavedWork(e.str("id"),title,localTime(e.str("updated_at")))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},
-        onConsultant={s.startQuick("consultant")},onOpenWork={s.openEncounter(it)},
+        onConsultant={s.startQuick("consultant")},onDiagnostics={s.startDocumentAs("diagnostics")},onReview={s.beginCaseReview()},onOrder={s.startDocumentAs("medical_order")},onOpenWork={s.openEncounter(it)},
         onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
 }
 
@@ -97,6 +97,7 @@ import java.time.format.DateTimeFormatter
 @Composable fun QuickPhotoScreen(s:AppState){PhotoCollectionScreen(s)}
 
 @Composable fun QuickConsultantScreen(s:AppState){
+    LaunchedEffect(s.autoReview,s.loading){if(s.autoReview&&!s.loading){s.autoReview=false;s.sendConsultant(CASE_REVIEW_REQUEST)}}
     val sources=s.case?.items("evidence").orEmpty()
     ConsultantChatScreen(s.encounterId,s.consultantMessages.map{ConsultantMessage(it.str("id"),it.str("content"),it.str("role")=="user",it.str("effort"))},
         initialDraft=s.consultantDraft,draftResetKey=s.consultantReset,busy=s.loading,
@@ -135,3 +136,5 @@ import java.time.format.DateTimeFormatter
             catch(_:Exception){s.error="No sharing app is available. Copy the link and code from this dialog."}
         })
 }
+
+const val CASE_REVIEW_REQUEST="Give a full review of this case: the likely diagnosis and important alternatives, the treatment plan, when to escalate, and what information is missing."

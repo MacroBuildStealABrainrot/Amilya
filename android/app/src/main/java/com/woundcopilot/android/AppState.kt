@@ -389,6 +389,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         persistEditor();voiceCorrection=false;voiceMessage=false;voiceInstruction=""
         case=if(demo)JSONObject((demoCases[id]?:throw IllegalArgumentException("Sample encounter not found.")).toString()) else api.call("/encounters/$id") as JSONObject
         answer=null;audit=emptyList();restoreDraft();restoreQuick();screen=quickDestination();refreshRecordingJobs()
+        if(reviewPending){reviewPending=false;notice=null;chooseQuickMode("consultant");screen="consultant";autoReview=true}
     }
     suspend fun reloadCase(){if(!demo){if(encounterId.startsWith("local-") && RecordingService.state.value.recording){notice="Recording continues on this device. Refresh after stopping.";return};ensureRemoteDocument();case=api.call("/encounters/$encounterId") as JSONObject;val e=case!!.getJSONObject("encounter");encounters=(listOf(e)+encounters.filter{it.str("id")!=e.str("id")}).sortedByDescending{it.str("updated_at")};rememberShiftCase()}}
     fun createEncounter(patientId:String?,name:String,external:String,woundId:String?,woundLabel:String,title:String,onPatient:(String)->Unit,onWound:(String)->Unit)=runTask {
@@ -589,8 +590,15 @@ class AppState(application:Application):AndroidViewModel(application) {
         consultantDraft=vault.read(storeKey("consult-draft"))?:"";consultantReset++
     }
     fun chooseQuickMode(mode:String){quickMode=mode;vault.write(storeKey("quick-mode"),mode)}
+    var autoReview by mutableStateOf(false)
+    private var reviewPending=false
+    /** Diagnostics and Write Order are Document with a ready-made format. The choice is not saved as the default. */
+    fun startDocumentAs(format:String){startQuick("document");if(!loading&&case!=null)templateValue=format}
+    /** Review Case: pick a saved visit, then the consultant reviews it automatically. */
+    fun beginCaseReview(){if(loading)return;reviewPending=true;notice="Choose the visit to review.";screen="saved"}
     fun startQuick(mode:String){
         if(loading)return
+        reviewPending=false
         reportFromConsultation=false;consultantReportPrompt=false
         processingRecording=null
         recordingConsent=false

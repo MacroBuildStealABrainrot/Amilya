@@ -69,6 +69,9 @@ fun StartScreen(
     onDocument: () -> Unit,
     onPhoto: () -> Unit,
     onConsultant: () -> Unit,
+    onDiagnostics: () -> Unit = {},
+    onReview: () -> Unit = {},
+    onOrder: () -> Unit = {},
     onOpenWork: (String) -> Unit,
     onAccount: () -> Unit,
     onSavedWork: (() -> Unit)? = null,
@@ -82,7 +85,10 @@ fun StartScreen(
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             StartAction("Document", "Speak or write. Get your report.", "record", c.primary, !busy, onDocument)
             StartAction("Photo Assessment", "Add a photo. See visible findings.", "photo", c.primary, !busy, onPhoto)
+            StartAction("Diagnostics", "Labs, imaging, cultures, results.", "note", c.primary, !busy, onDiagnostics)
+            StartAction("Review Case", "Full review of a saved visit.", "cases", c.primary, !busy, onReview)
             StartAction("Ask Consultant", "Ask a question. Talk it through.", "kosmo", c.primary, !busy, onConsultant)
+            StartAction("Write Order", "Speak, type or use a template.", "edit", c.primary, !busy, onOrder)
         }
         if (false && (onSavedWork != null || onSendAll != null)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -130,7 +136,7 @@ private fun StartAction(title: String, detail: String, icon: String, accent: Col
         accent = accent,
     ) {
         // Icon with a short label underneath, so a new user knows what each button does.
-        Box(Modifier.fillMaxWidth().heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = "$title. $detail" },
+        Box(Modifier.fillMaxWidth().heightIn(min = 92.dp).semantics(mergeDescendants = true) { contentDescription = "$title. $detail" },
             contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 InstrumentIcon(icon, Modifier.size(48.dp), accent)

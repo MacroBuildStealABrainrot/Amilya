@@ -28,7 +28,7 @@ log=logging.getLogger('woundcopilot.diagnostics')
 write_failures=0
 _last_prune=0.0
 provider_log=logging.getLogger('woundcopilot.provider')
-TASKS={'transcription','audio_verification','nursing','soap','sbar','physician_update','referral_letter','handoff','custom','photo_assessment','ask_consultant','deep_review','clinical_review','document_save','recording','extract','document','quick_refine','improve_report','improve_assessment','external_flow','wear_control','unknown'}
+TASKS={'transcription','audio_verification','nursing','soap','sbar','physician_update','referral_letter','handoff','diagnostics','medical_order','custom','photo_assessment','ask_consultant','deep_review','clinical_review','document_save','recording','extract','document','quick_refine','improve_report','improve_assessment','external_flow','wear_control','unknown'}
 ERRORS={'HTTP_ERROR':'Upstream HTTP rejection','TIMEOUT':'Operation timed out','CONNECTION_FAILED':'Provider connection failed','CANCELLED':'Operation cancelled','INVALID_RESPONSE':'Response validation failed','INTERNAL_ERROR':'Operation failed','REQUEST_REJECTED':'Request rejected'}
 
 class DiagnosticRequest(Base):

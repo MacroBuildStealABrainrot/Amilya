@@ -7,6 +7,7 @@ DOCUMENT_TYPES = {
     'nursing': 'Nursing Note', 'soap': 'SOAP Note',
     'physician_update': 'Physician Update', 'referral_letter': 'Referral Letter',
     'sbar': 'SBAR', 'handoff': 'Handoff Report',
+    'diagnostics': 'Diagnostics Summary', 'medical_order': 'Order Draft',
 }
 # Historical records used referral for a physician update. Never reinterpret them as referrals.
 ALIASES = {'referral': 'physician_update'}

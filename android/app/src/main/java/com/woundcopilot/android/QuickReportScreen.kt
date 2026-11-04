@@ -25,6 +25,8 @@ val quickFormats = linkedMapOf(
     "physician_update" to "Physician Update",
     "referral_letter" to "Referral Letter",
     "handoff" to "Handoff Report",
+    "diagnostics" to "Diagnostics Summary",
+    "medical_order" to "Order Draft",
 )
 
 /** Editing is a report action. Signing always applies to an exact saved version. */
