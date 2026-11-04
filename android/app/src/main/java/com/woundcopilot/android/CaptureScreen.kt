@@ -215,9 +215,11 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
             if (photo) WcpButton(if (selectedFile == null) "Take photograph" else "Retake", {
                 launchExternal(ExternalKind.CAMERA)
             }, Modifier.fillMaxWidth(), enabled = idle)
+            if (!(photo && selectedFile != null)) {
             WcpButton(if (photo) "Choose an image" else "Choose a document", {
                 launchExternal(if(photo)ExternalKind.PHOTO_PICKER else ExternalKind.DOCUMENT_PICKER)
             }, Modifier.fillMaxWidth(), enabled = idle, secondary = photo)
+            }
             if (!photo) Text("PDF, text or CSV", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (importBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -240,6 +242,10 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                 },
                 Modifier.fillMaxWidth(), enabled = idle && sizeValid && (!audio || consent),
             )
+            if (photo) TextButton({
+                s.vault.remove(key); s.vault.remove("$key-mime"); s.vault.remove("$key-review"); path = ""
+                s.finishPhotoAssessment()
+            }, Modifier.fillMaxWidth(), enabled = idle) { Text("Cancel") }
         }
         if (purpose == "message") TextButton(onClick = { s.cancelVoiceMessage() }, enabled = idle && !rec.recording, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Back to conversation") }
         if (purpose == "correction") TextButton(onClick = { s.cancelVoiceCorrection() }, enabled = idle && !rec.recording, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Keep original report") }
