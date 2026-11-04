@@ -937,8 +937,8 @@ class AppState(application:Application):AndroidViewModel(application) {
                 if(!ai || e.status !in listOf(429,502,503,504))throw e
                 // The failed AI draft is never shown, and the raw transcript is not offered as a report.
                 // Sources stay saved; Try again redoes only the report (set by taskRecovery above).
-                throw ReportRetryException(if(e.status==429)"Too many reports at once. Wait a moment, then tap Try again. Your recording and sources are saved."
-                    else "The report couldn't be finished this time. Your recording and sources are saved. Tap Try again.")
+                throw ReportRetryException(if(e.status==429)"Too many reports at once, so the report was NOT generated. Wait a moment, then tap Try again. Your recording and transcript are saved."
+                    else "The report was NOT generated this time, so there is no report to review. Your recording and its transcript are saved. Tap Try again to write the report.")
             }
         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed during generation. Your edits were preserved."}
         if(!acceptDocumentResult(response)){if(!demo)reportDone();return}

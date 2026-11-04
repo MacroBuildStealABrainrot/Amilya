@@ -2,8 +2,8 @@
 
 Fake data, fake AI provider and fake billing only. No Render, Google Cloud or paid service is contacted.
 These replace the earlier throwaway diagnostic. They prove, through the real HTTP stack, that an interrupted report
-keeps the same request number, never duplicates a finished report, never charges twice, and keeps the source-only
-backup draft for a confirmed final failure only.
+keeps the same request number, never duplicates a finished report, never charges twice, and never replaces a failed report with the raw transcript
+(the recording and transcript stay saved; the phone offers Try again).
 
 Limit: the test app has the report route and the request-number middleware, but not the full production middleware
 or Render's network layer in front of it.
@@ -175,7 +175,7 @@ def test_cancelled_after_first_step_reuses_the_saved_draft_over_real_connection(
     assert_balanced(done)
 
 
-def test_three_cancellations_end_with_labelled_source_only_draft_and_no_fourth_ai_call(real_server, gateway):
+def test_three_cancellations_end_without_a_raw_transcript_report_and_no_fourth_ai_call(real_server, gateway):
     for number in range(3):
         gateway.http.responses = [cancelled]
         assert try_post(real_server, 'phone-request-4') != 200, f'attempt {number + 1} should not finish'
@@ -183,11 +183,8 @@ def test_three_cancellations_end_with_labelled_source_only_draft_and_no_fourth_a
     assert exhausted['calls'] == 3 and exhausted['results'] == 0
     gateway.http.responses = []
     final = real_server.post('phone-request-4')
-    assert final.status_code == 200, 'a confirmed final failure ends with the labelled backup draft'
-    body = final.json()
-    assert body['qa']['status'] == 'source_only_unchecked' and body['qa']['passed'] is False
-    assert body['recovery']['mode'] == 'source_only' and 'Right heel' in body['text']
-    assert any('source-only draft was recovered' in warning for warning in body['warnings'])
+    assert final.status_code != 200, 'a confirmed final failure must not hand back the raw transcript as a report'
+    assert 'Right heel' not in final.text and 'source_only' not in final.text
     state = snapshot(gateway)
     assert state['calls'] == 3, 'no fourth AI request after the attempt limit'
     assert state['reserved'] == 0 and state['charged'] == 0

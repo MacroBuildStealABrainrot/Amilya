@@ -193,18 +193,11 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
             result = await providers.quick_documentation(context, payload.template, payload.preferred_length,
                 custom_template=custom_template, user=user, encounter_id=encounter_id)
         except TerminalReportError as error:
-            # Only a confirmed final failure may complete this request with a
-            # backup draft. Temporary errors must reach the phone so its same
-            # request remains recoverable, with completed checkpoints intact.
-            # Never display the draft rejected by semantic QA. Recover from original source
-            # using the already-supported manual projection, including rejected/edited facts.
-            result = documentation.source_report(context, payload.template, clinical.fact_phrase)
-            result['qa'] = {'passed': False, 'status':'source_only_unchecked', 'discrepancies': []}
-            result['recovery'] = {'mode':'source_only','cause': (error.headers or {}).get('X-WCP-Error','REPORT_CHECK_OR_GENERATION_FAILED')}
-            result['ui_alerts'] = [{'field':'review','message':'AI generation or checking could not complete. This source-only draft has not passed an AI check. Review it against the original source before using it.'}]
-            warnings.append('A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording.')
+            # The report was NOT generated. A raw transcript is never shown as if it were a finished report:
+            # the recording and transcript stay saved as sources, and the phone offers a safe Try again.
             from . import diagnostics
-            diagnostics.event({'source':'server','stage':'report_source_recovery','status':'success','error_code':result['recovery']['cause']})
+            diagnostics.event({'source':'server','stage':'report_not_generated','status':'failed','error_code':(error.headers or {}).get('X-WCP-Error','REPORT_CHECK_OR_GENERATION_FAILED')})
+            raise
     else:
         result = documentation.source_report(context, payload.template, clinical.fact_phrase)
     db.refresh(encounter)

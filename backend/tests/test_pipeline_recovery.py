@@ -12,22 +12,22 @@ from test_quick_workflows import quick_api, start, add_source
 from test_providers import gateway, completion
 
 @pytest.mark.parametrize('status',[402,429,502,503,504])
-def test_terminal_ai_report_recovers_from_original_not_rejected_draft(quick_api,monkeypatch,status):
+def test_terminal_ai_report_failure_never_shows_the_raw_transcript_and_keeps_the_source(quick_api,monkeypatch,status):
     case=start(quick_api)
     text='Synthetic client reports pain 2 out of 10. Dressing changed. Medication name unclear.'
     add_source(quick_api,case,text)
     async def fail(*a,**k):raise TerminalReportError(status,'SYNTHETIC_PRIVATE_PROVIDER_TEXT')
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={'use_ai':True})
-    assert response.status_code==200,response.text
-    data=response.json()
-    assert data['status']=='ready' and 'Dressing changed' in data['text']
-    assert data['recovery']['mode']=='source_only' and data['qa']['passed'] is False
-    assert data['review_required'] is True and data['ui_alerts']
-    assert 'SYNTHETIC_PRIVATE_PROVIDER_TEXT' not in json.dumps(data)
-    assert 'antibiotic administered' not in data['text']
+    assert response.status_code==status,response.text
+    assert 'Dressing changed' not in response.text and 'SYNTHETIC_PRIVATE_PROVIDER_TEXT' not in response.text
     saved=quick_api.client.get(f"/api/v1/encounters/{case['encounter']['id']}").json()
     assert saved['evidence'][0]['text']==text and not saved['documents']
+    # Retry after the AI works again produces a real report from the same saved source.
+    async def ok(*a,**k):return {'text':'Synthetic completed note.','status':'ready','ui_alerts':[],'qa':{'passed':True,'discrepancies':[]}}
+    monkeypatch.setattr(providers,'quick_documentation',ok)
+    retry=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={'use_ai':True})
+    assert retry.status_code==200 and retry.json()['text']=='Synthetic completed note.' and 'recovery' not in retry.json()
 
 def test_authorization_failure_never_becomes_a_successful_draft(quick_api,monkeypatch):
     case=start(quick_api);add_source(quick_api,case)
@@ -91,7 +91,7 @@ def test_concurrent_source_edit_blocks_recovered_outdated_draft(quick_api,monkey
         raise TerminalReportError(502,'Synthetic QA rejection')
     monkeypatch.setattr(providers,'quick_documentation',fail)
     response=quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",json={})
-    assert response.status_code==409 and 'Patient reports pain' not in response.text
+    assert response.status_code==502 and 'Patient reports pain' not in response.text
 
 
 def test_failure_categories_survive_metadata_sanitization():

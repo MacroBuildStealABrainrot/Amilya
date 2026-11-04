@@ -871,6 +871,8 @@ def configured_route(task, content):
     if cap in order and task != 'image' and order.index(route['effort_level']) > order.index(cap):
         route = {**route, 'effort_level': cap, 'reason': 'owner_effort_cap'}
     if task in {'improve_report', 'improve_assessment'} and getattr(settings, 'model_addon', ''): selected = settings.model_addon
+    elif task in {'quick_draft', 'quick_refine'}:
+        minimum = max(minimum, 8000)
     elif task == 'image': selected = settings.model_vision
     elif task == 'challenge': selected = settings.model_challenger
     elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
@@ -1090,10 +1092,13 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
 async def _checked_quick_text(context, task, options, *, user, encounter_id):
     diagnostics.task(options.get('template','nursing'))
     from .documentation import quality_defects, clean_generated_layout
-    content = {**context, **options, 'document_task': task}
+    from .transcript_cleaning import clean_context_for_report
+    # Stage 2 of 3 (free, local): the raw transcript stays saved; only the copy sent to the writer drops sound-effect tags and glitches.
+    content = {**clean_context_for_report(context), **options, 'document_task': task}
     options = {**options, 'document_task': task}
+    # A whole-visit note plus reasoning ran out of 2,400 tokens on 2026-11-04 and nothing usable came back. Unused allowance is not billed.
     draft = await routed(task, json.dumps(content, ensure_ascii=False, default=str),
-        user=user, encounter_id=encounter_id, max_tokens=8000 if len(json.dumps(context,ensure_ascii=False))>20000 else 2400)
+        user=user, encounter_id=encounter_id, max_tokens=8000)
     draft = clean_generated_layout(draft, options, context)
     if not getattr(settings, 'quick_ai_check', True):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they

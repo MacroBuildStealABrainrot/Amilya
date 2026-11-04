@@ -222,11 +222,9 @@ def test_quick_report_preserves_provider_failures_and_source(quick_api, monkeypa
         raise error_type(status, 'Synthetic provider gate')
     monkeypatch.setattr(providers, 'quick_documentation', failed)
     response = quick_api.client.post(f'/api/v1/encounters/{case_id}/quick-report', json={})
-    assert response.status_code == (200 if terminal else status)
-    if terminal:
-        assert response.json()['recovery']['mode'] == 'source_only'
-        assert response.json()['qa']['passed'] is False
-        assert response.json()['ui_alerts']
+    # A failed report is never replaced by the raw transcript: the phone gets the error and offers Try again.
+    assert response.status_code == status
+    assert 'recovery' not in response.json() and 'Right heel' not in response.text
     assert quick_api.client.get(f'/api/v1/encounters/{case_id}').json() == before
 
 
