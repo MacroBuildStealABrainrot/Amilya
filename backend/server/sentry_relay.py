@@ -120,7 +120,7 @@ def build_event(component, *, stage, code, level='error', http_status=None, rout
     for key, value in (extra_tags or {}).items():
         if _SAFE.match(str(key)) and value is not None:
             tags[str(key)] = safe(value)
-    release = safe(release) if release else None
+    release = release if release and re.fullmatch(r'amilya-(backend|android)@[A-Za-z0-9_.\-]{1,40}', release) else None
     event = {
         'event_id': uuid.uuid4().hex,
         'timestamp': datetime.now(timezone.utc).isoformat(),
