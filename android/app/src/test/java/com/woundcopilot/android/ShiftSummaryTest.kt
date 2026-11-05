@@ -20,7 +20,7 @@ class ShiftSummaryTest {
         val p = plan()
         assertTrue(p.finished.isEmpty()); assertTrue(p.unfinished.isEmpty())
         val text = renderShiftSummary(p, emptySet())
-        assertTrue(text.contains("Finished reports selected: 0 of 0"))
+        assertTrue(text.contains("Reports included: 0 of 0"))
         assertTrue(text.contains("Only visits already available on this phone"))
     }
 
@@ -40,13 +40,15 @@ class ShiftSummaryTest {
         assertTrue(text.indexOf("Visit reference: B") < text.indexOf("Visit reference: C"))
     }
 
-    @Test fun noReportAndDraftOnlyAreListedAtTheTopAndNeverIncludedAsFinished() {
+    @Test fun savedUnsignedReportIsATodayReportNotMissingAndIsClearlyLabelled() {
         val p = plan(visit("empty", reports = emptyList()), visit("draft", reports = listOf(report("draft", "DRAFT WORDING", "draft"))), visit("ready"))
-        assertEquals(listOf("draft", "empty"), p.unfinished.map { it.id })
-        val text = renderShiftSummary(p, setOf("empty", "draft", "ready"))
-        assertTrue(text.indexOf("No finished report") < text.indexOf("Visit 1\n"))
-        assertTrue(text.contains("No report is saved.")); assertTrue(text.contains("Only an unfinished report is saved."))
-        assertFalse(text.contains("DRAFT WORDING")); assertEquals(1, p.finished.size)
+        assertEquals(listOf("draft", "ready"), p.reports.map { it.first.id })
+        assertEquals(listOf("empty"), p.withoutReport.map { it.id })
+        val text = renderShiftSummary(p, setOf("draft", "ready"))
+        assertTrue(text.contains("DRAFT WORDING")); assertTrue(text.contains("SAVED REPORT — NOT SIGNED (version 1)"))
+        assertTrue(text.contains("Signed report — version 1")); assertTrue(text.contains("No report is saved."))
+        assertTrue(text.contains("Reports included: 2 of 2 (1 signed, 1 saved but not signed)"))
+        assertFalse(text.contains("No finished report"))
     }
 
     @Test fun savedWarningsAndUncheckedSourceOnlyWarningStayInsideTheirOwnSection() {
@@ -77,7 +79,7 @@ class ShiftSummaryTest {
         val text = renderShiftSummary(p, setOf("B"))
         assertFalse(text.contains("A ONLY")); assertFalse(text.contains("A WARNING"))
         assertTrue(text.contains("Left out by your choice:")); assertTrue(text.contains("B ONLY"))
-        assertTrue(renderShiftSummary(p, emptySet()).contains("Finished reports selected: 0 of 2"))
+        assertTrue(renderShiftSummary(p, emptySet()).contains("Reports included: 0 of 2"))
     }
 
     @Test fun yesterdayIsExcludedEvenWhenUtcSaysTodayAndTomorrowIsAlsoExcluded() {
@@ -105,7 +107,8 @@ class ShiftSummaryTest {
     @Test fun newerDraftDoesNotFallBackToAnOlderSignedVersion() {
         val p = plan(visit("A", reports = listOf(report("A", "OLD SIGNED", version = 1), report("A", "NEW DRAFT", "draft", 2))))
         assertTrue(p.finished.isEmpty()); assertEquals(1, p.unfinished.size)
-        assertFalse(renderShiftSummary(p, setOf("A")).contains("OLD SIGNED"))
+        val text = renderShiftSummary(p, setOf("A"))
+        assertFalse(text.contains("OLD SIGNED")); assertTrue(text.contains("NEW DRAFT")); assertTrue(text.contains("NOT SIGNED"))
     }
 
     @Test fun latestSignedVersionIsUsedAndOlderVersionIsNotAppended() {
@@ -130,19 +133,39 @@ class ShiftSummaryTest {
         assertNull(shiftVisitStart("", null, "not a date"))
     }
 
-    @Test fun unsignedDraftsAreOnlySentWhenTickedAndAreStampedAndUnchanged() {
+    @Test fun untickedUnsignedReportIsLeftOutAndTickedOneIsStampedAndUnchanged() {
         val p = plan(visit("draft", reports = listOf(report("draft", "DRAFT WORDING 3 cm", "draft"))), visit("ready"), visit("empty", reports = emptyList()))
         assertEquals(listOf("draft"), p.drafts.map { it.first.id })
-        assertFalse(renderShiftSummary(p, setOf("ready"), emptySet()).contains("DRAFT WORDING"))
-        val text = renderShiftSummary(p, setOf("ready"), setOf("draft"))
-        assertTrue(text.contains("UNSIGNED DRAFT 1 — NOT REVIEWED OR SIGNED BY A CLINICIAN"))
-        assertTrue(text.contains("DRAFT WORDING 3 cm")); assertTrue(text.contains("Right heel: dressing changed."))
-        assertFalse(text.contains("Only an unfinished report is saved."))   // listed once, as a draft, not twice
+        assertFalse(renderShiftSummary(p, setOf("ready")).contains("DRAFT WORDING"))
+        val text = renderShiftSummary(p, setOf("ready", "draft"))
+        assertTrue(text.contains("SAVED REPORT — NOT SIGNED"))
+        assertTrue(text.contains("--- Saved report text (unchanged) ---\nDRAFT WORDING 3 cm\n--- End"))
+        assertEquals(1, Regex("DRAFT WORDING").findAll(text).count())
+    }
+
+    @Test fun phoneEditsReplaceOnlyUnsignedTextAndAreFlagged() {
+        val visits = listOf(
+            visit("draft", reports = listOf(report("draft", "AI WORDING", "draft"))),
+            visit("signed"),
+            visit("none", reports = emptyList()),
+            visit("unknown").copy(reportsKnown = false),
+            visit("same", reports = listOf(report("same", "SAME", "draft"))))
+        val edited = applyPhoneEdits(visits, mapOf("draft" to "MY EDIT", "signed" to "CHANGED AFTER SIGNING", "none" to "TYPED ONLY", "unknown" to "X", "same" to "SAME"))
+        val p = planShiftSummary(edited, day, zone)
+        val byId = p.reports.associate { it.first.id to it.second }
+        assertEquals("MY EDIT", byId["draft"]!!.text); assertTrue(byId["draft"]!!.editedOnPhone)
+        assertEquals("Right heel: dressing changed.", byId["signed"]!!.text); assertFalse(byId["signed"]!!.editedOnPhone)
+        assertEquals("TYPED ONLY", byId["none"]!!.text); assertTrue(byId["none"]!!.editedOnPhone)
+        assertFalse(byId["same"]!!.editedOnPhone)
+        assertEquals(listOf("unknown"), p.unavailable.map { it.id })
+        val text = renderShiftSummary(p, byId.keys)
+        assertTrue(text.contains("Includes your latest edits made on this phone that were not yet saved."))
+        assertFalse(text.contains("AI WORDING")); assertFalse(text.contains("CHANGED AFTER SIGNING"))
     }
 
     @Test fun visitsWithNoReportCanBeCollapsedToOneCountLine() {
         val p = plan(visit("e1", reports = emptyList()), visit("e2", reports = emptyList()), visit("ready"))
-        val text = renderShiftSummary(p, setOf("ready"), emptySet(), compactEmpty = true)
+        val text = renderShiftSummary(p, setOf("ready"), compactEmpty = true)
         assertTrue(text.contains("2 other visit(s) today have no report saved"))
         assertFalse(text.contains("Visit reference: e1"))
         assertTrue(renderShiftSummary(p, setOf("ready")).contains("Visit reference: e1"))   // default keeps the full list
