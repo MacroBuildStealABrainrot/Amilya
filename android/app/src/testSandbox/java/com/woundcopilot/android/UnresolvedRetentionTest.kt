@@ -146,7 +146,7 @@ class UnresolvedRetentionTest {
 
     @Test fun aNewRecordingIsRefusedWhenThePhoneIsNearlyFull() {
         val v = UnresolvedRetention.beforeStarting(UnresolvedRetention.MIN_FREE_TO_START_BYTES - 1, 0, 0)
-        assertEquals(UnresolvedRetention.Level.BLOCK, v.level); assertTrue(v.message!!.contains("Nothing in WoundCoPilot was deleted"))
+        assertEquals(UnresolvedRetention.Level.BLOCK, v.level); assertTrue(v.message!!.contains("Nothing in Amilya was deleted"))
         assertEquals(UnresolvedRetention.Level.OK, UnresolvedRetention.beforeStarting(UnresolvedRetention.MIN_FREE_TO_START_BYTES, 0, 0).level)
     }
 
