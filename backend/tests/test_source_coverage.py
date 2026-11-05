@@ -69,3 +69,9 @@ def test_evaluation_scenarios_are_made_up_and_only_run_on_the_isolated_test_serv
     assert checked['passed'], checked
     bad = report_eval._check(report_eval.SCENARIOS[0], {'text': 'Client has lymphoma. Also has cell cancer. Bleeding noted. Seen daily.'})
     assert not bad['passed'] and 'missing' in bad['problems'] and 'unsupported_or_wrong' in bad['problems'] and 'no_clarify_alert' in bad['problems']
+
+
+def test_handoff_products_are_checked():
+    from server.source_coverage import coverage_defects
+    defects = coverage_defects('Wound cleansed with NS.', {'untrusted_sources': [{'text': 'Cleansed with NS, Prisma applied, Darco footwear on.'}]})
+    assert any('Prisma' in d for d in defects) and any('Darco' in d for d in defects)

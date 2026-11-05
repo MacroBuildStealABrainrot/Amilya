@@ -75,3 +75,19 @@ def test_handoff_rules_reach_every_profession(profession):
         assert 'HISTORY, PHYSICAL EXAMINATION, ASSESSMENT and OUTCOME / PLAN' in prompt and 'Otherwise keep the chosen format' in prompt
     finally:
         layers.selection.reset(token)
+
+
+def test_second_handoff_rules_reach_generation():
+    token = layers.select(SimpleNamespace(profile={'profession': 'RPN'}), 'nursing')
+    try:
+        prompt = providers.prompt('quick_draft')
+        for phrase in ('does not probe to bone today', 'never write an action as done when it was only discussed',
+                       'PICC removal order requested', 'conversation in another language', 'never give a healing percentage from a photo',
+                       'Status:, Medication:, Tests: and Follow-ups:', 'Keep a label with nothing after it', 'brown-black', 'Darko = Darco'):
+            assert phrase in prompt, phrase
+    finally:
+        layers.selection.reset(token)
+
+
+def test_consultant_knows_abi_can_mislead():
+    assert 'non-compressible arteries' in providers.prompt('consult')

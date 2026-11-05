@@ -38,7 +38,8 @@ KEY_CONDITIONS = {
 PRODUCTS = ['PureCleanse', 'Inadine', 'Bactigras', 'Biatain', 'Mesorb', 'Mepilex', 'Betadine', 'povidone', 'Coban', 'Kling',
             'Tegaderm', 'Bacitracin', 'Acticoat', 'Aquacel', 'Hydrofera', 'Vashe', 'Kerramax', 'Iodosorb', 'Mepitel', 'Allevyn',
             'Duoderm', 'Intrasite', 'Medihoney', 'Silvercel', 'Prontosan', 'PICO', 'VAC', 'zinc', 'Tubigrip', 'Compreflex',
-            'Coloplast', 'Kerlix', 'Xeroform', 'Adaptic', 'Jelonet', 'UrgoClean', 'Urgotul', 'Exufiber', 'Sorbact', 'Promogran']
+            'Coloplast', 'Kerlix', 'Xeroform', 'Adaptic', 'Jelonet', 'UrgoClean', 'Urgotul', 'Exufiber', 'Sorbact', 'Promogran',
+            'Prisma', 'Viscopaste', 'EdemaWear', 'Drawtex', 'Darco', 'Mesalt']
 
 _WORD_NUMBERS = {'zero': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5', 'six': '6', 'seven': '7',
                  'eight': '8', 'nine': '9', 'ten': '10', 'eleven': '11', 'twelve': '12', 'fifteen': '15', 'twenty': '20',
