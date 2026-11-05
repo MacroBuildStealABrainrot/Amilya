@@ -26,3 +26,21 @@ def test_examples_hold_no_names_or_dates():
     assert not re.search(r'\b(Dr\.|Mr\.|Mrs\.|Ms\.)\s*[A-Z]', text)
     assert not re.search(r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\b', text)
     assert not re.search(r'\b\d{1,3}-year-old\b', text)
+
+
+@pytest.mark.parametrize('typed,role', [('RPN', 'NURSE'), ('Registered Practical Nurse', 'NURSE'), ('wound care nurse', 'NURSE'),
+    ('Nurse Practitioner', 'NURSE_PRACTITIONER'), ('Family doctor', 'PHYSICIAN'), ('Vascular surgeon', 'PHYSICIAN'),
+    ('Dermatologist', 'PHYSICIAN'), ('Psychiatrist', 'PHYSICIAN'), ('MD', 'PHYSICIAN'), ('GP', 'PHYSICIAN'),
+    ('Podiatrist', 'OTHER_CLINICIAN'), ('Psychologist', 'OTHER_CLINICIAN'), ('Physiotherapist', 'OTHER_CLINICIAN'), ('', 'OTHER_CLINICIAN')])
+def test_free_typed_professions_are_recognised(typed, role):
+    assert layers.clinician_role(SimpleNamespace(profile={'profession': typed})) == role
+
+
+def test_charting_rules_reach_generation_and_qa():
+    token = layers.select(SimpleNamespace(profile={'profession': 'MD'}), 'soap')
+    try:
+        for task in ('quick_draft', 'quick_qa'):
+            prompt = providers.prompt(task)
+            assert 'charting_rules_v1' in prompt and 'lungs clear' in prompt and 'EMS activated' in prompt
+    finally:
+        layers.selection.reset(token)

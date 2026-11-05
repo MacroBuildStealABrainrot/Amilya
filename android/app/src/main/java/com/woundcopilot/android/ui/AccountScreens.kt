@@ -301,6 +301,8 @@ private fun ProfileDialog(state: AppState, onDismiss: () -> Unit) {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 OutlinedTextField(name, { if (it.length <= 160) name = it }, label = { Text("Display name") }, singleLine = true, enabled = !state.loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next))
                 OutlinedTextField(profession, { if (it.length <= 160) profession = it }, label = { Text("Profession") }, singleLine = true, enabled = !state.loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next))
+                listOf(listOf("Nurse", "Doctor"), listOf("Nurse practitioner", "Other")).forEach { choices -> Row { choices.forEach { choice -> TextButton({ profession = choice }, enabled = !state.loading) { Text(choice) } } } }
+                Text("Reports and Ask Consultant use the voice and scope of your profession.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(careSetting, { if (it.length <= 160) careSetting = it }, label = { Text("Care setting") }, singleLine = true, enabled = !state.loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done))
                 Text("Your email and workspace identity stay the same.", style = MaterialTheme.typography.bodySmall)
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }

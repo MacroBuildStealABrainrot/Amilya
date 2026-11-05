@@ -21,9 +21,9 @@
     "83_quick_report_repair.system.md": "17c4ec1f3bbf2126ff5d6232d4a6107f7e385c44ce5aedad0c4c1e7e1ba888f7",
     "84_improve_report.system.md": "6eb4ccdce312c18580bb8e4194a67b20e5945cedff469d2539921d5b0cd59926",
     "85_documentation_qa.system.md": "53ae3731f8dd4e0f4d3a134ba54335707bed1c3f50883fede777d10b8c6633d9",
-    "86_quick_documentation_qa.system.md": "f8b1fc61389cfb46336ef22ad6388894f2af8c5579ec3c2bc068a854081690f2",
+    "86_quick_documentation_qa.system.md": "2b19c1ce1f30291f93c3146f0effff1fbde3c947b7a67a8444f75504523aa47a",
     "90_contextual_clinical_assistant.system.md": "0a05553d5ff7c4e402b5daccde44856c5e4e96a2672d2ac0538e739d8e1901f6",
-    "91_wound_consultant.system.md": "3a900602436a55e43a8a63d57d4f940d7f95327d8d650f6f9bb359c10e6ec9fa",
+    "91_wound_consultant.system.md": "9409dcf167a04ea605d9927da20f6108bff673b0ccfb6b3d02a9cac582932d18",
     "92_improve_assessment.system.md": "0f5cc446b895826b239f072efe9cce0d4edcd25e76a3de6b29a7ca3c01201314",
     "documentation/clinical_style_v1.md": "732830c158171a3852b3dfbf1e01f9e10a4306d958b0e80202731db20b19115e",
     "documentation/community_nursing_v1.md": "7b1f8b814ccd8dd61bc5548a1d2714cef82ee3d08a82ccdfe85398aaac2da6a2",
@@ -45,6 +45,7 @@
     "documentation/examples/nursing_v1.md": "930421b12b11889bc5c78a11e9c779e86f0a4aa9d71b142eb7b458e61c424963",
     "documentation/examples/physician_update_v1.md": "de4a7a22b08cf713da429dd15852e9eb3841202cc48a64234ec8be48b232b135",
     "documentation/examples/referral_letter_v1.md": "de4a7a22b08cf713da429dd15852e9eb3841202cc48a64234ec8be48b232b135",
-    "documentation/examples/soap_v1.md": "6dfdadf46d2aab0844c812b0a55c40f4d6ef8d2e61687ec12a2d4a37f8227107"
+    "documentation/examples/soap_v1.md": "6dfdadf46d2aab0844c812b0a55c40f4d6ef8d2e61687ec12a2d4a37f8227107",
+    "documentation/charting_rules_v1.md": "792eceb3b15cdce245de35be5201f88e5714193c99069f853eb2101d922d46d6"
   }
 }

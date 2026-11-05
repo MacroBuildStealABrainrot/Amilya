@@ -12,8 +12,16 @@ TYPES={'nursing','soap','sbar','physician_update','referral_letter','handoff','d
 def clinician_role(user):
     value=(getattr(user,'profile',None) or {}).get('profession','')
     if not isinstance(value,str):return 'OTHER_CLINICIAN'
-    value=value.strip().upper().replace(' ','_')
-    return {'RN':'NURSE','RPN':'NURSE','REGISTERED_NURSE':'NURSE','NP':'NURSE_PRACTITIONER','MD':'PHYSICIAN','DOCTOR':'PHYSICIAN'}.get(value,value if value in ROLES else 'OTHER_CLINICIAN')
+    value=value.strip().upper().replace(' ','_').replace('-','_')
+    exact={'RN':'NURSE','RPN':'NURSE','LPN':'NURSE','REGISTERED_NURSE':'NURSE','NP':'NURSE_PRACTITIONER','RN(EC)':'NURSE_PRACTITIONER','MD':'PHYSICIAN','DO':'PHYSICIAN','DOCTOR':'PHYSICIAN'}
+    if value in exact:return exact[value]
+    if value in ROLES:return value
+    # Free-typed professions: recognise common wordings rather than falling back to a neutral voice.
+    if 'PRACTITIONER' in value:return 'NURSE_PRACTITIONER'
+    if 'NURS' in value or 'NSWOC' in value:return 'NURSE'
+    if any(word in value for word in ('PSYCHOLOGIST','PODIATRIST','CHIROPODIST','PHYSIOTHERAP','DIETITIAN','PHARMACIST','AUDIOLOGIST','TECHNOLOGIST','THERAPIST')):return 'OTHER_CLINICIAN'
+    if value in {'GP','FP','FAMILY_PHYSICIAN'} or any(word in value for word in ('DOCTOR','PHYSICIAN','SURGEON','RESIDENT','HOSPITALIST','INTERNIST','FAMILY_MEDICINE','OLOGIST','IATRIST')):return 'PHYSICIAN'
+    return 'OTHER_CLINICIAN'
 
 def select(user,template):
     template=ALIASES.get(template,template)
@@ -28,5 +36,6 @@ def instructions():
         (ROOT/'formats'/f'{report}_v1.md').read_text(encoding='utf-8'),
         (ROOT/'community_nursing_v1.md').read_text(encoding='utf-8') if role in {'NURSE','OTHER_CLINICIAN'} else (ROOT/'clinical_style_v1.md').read_text(encoding='utf-8'),
         (ROOT/'clinical_reasoning_v1.md').read_text(encoding='utf-8'),
+        (ROOT/'charting_rules_v1.md').read_text(encoding='utf-8'),
         *([examples.read_text(encoding='utf-8')] if (examples:=ROOT/'examples'/f'{report}_v1.md').is_file() else []),
     ])
