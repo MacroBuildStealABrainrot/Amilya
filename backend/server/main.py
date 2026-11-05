@@ -30,6 +30,8 @@ async def lifespan(app):
     if settings.auto_create_schema:
         Base.metadata.create_all(engine)
     if os.environ.get('AMILYA_SENTRY_SELF_TEST')=='true':sentry_relay.self_test()
+    from server import report_eval
+    app.state.report_eval=report_eval.start_if_requested()
     yield
 
 

@@ -1095,7 +1095,9 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
     token=document_operations.set(operations)
     try:
         result=await _checked_quick_text(context,task,options,user=user,encounter_id=encounter_id)
-        if not getattr(settings,'show_report_alerts',True) and isinstance(result,dict):result['ui_alerts']=[]
+        if not getattr(settings,'show_report_alerts',True) and isinstance(result,dict):
+            # Owner choice: no general alert box. Only short "please confirm" clarifications stay (owner request 2026-11-05).
+            result['ui_alerts']=[a for a in result.get('ui_alerts') or [] if isinstance(a,dict) and a.get('field')=='clarify'][:3]
         return result
     except TerminalReportError as error:
         # Temporary 409/502/503/504 responses do not establish that the whole
@@ -1123,7 +1125,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     if not getattr(settings, 'quick_ai_check', True):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
         # find is shown to the clinician as a "check before saving" alert. No second AI check, no AI rewrite.
-        found = quality_defects(draft['text'], context)
+        from .source_coverage import coverage_defects
+        found = quality_defects(draft['text'], context) + coverage_defects(draft['text'], context)
         alerts = list(draft.get('ui_alerts') or [])
         alerts += [{'field': 'report', 'message': item} for item in found[:10]]
         draft['ui_alerts'] = alerts
@@ -1132,7 +1135,9 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
         return draft
     qa = await routed('quick_qa', json.dumps({**content, 'proposed_draft': draft['text'], 'proposed_status': draft.get('status', 'ready'), 'proposed_ui_alerts': draft.get('ui_alerts', [])},
         ensure_ascii=False, default=str), user=user, encounter_id=encounter_id, max_tokens=1000)
-    defects = quality_defects(draft['text'], context)
+    from .source_coverage import coverage_defects
+    # Free comparison with the sources (values, dates, products, key diagnoses, side) runs on every report.
+    defects = quality_defects(draft['text'], context) + coverage_defects(draft['text'], context)
     if defects:
         qa = {**qa, 'passed': False, 'discrepancies': list(dict.fromkeys(qa.get('discrepancies', []) + defects))[:20]}
     diagnostics.faithfulness(qa.get('passed') is True and qa.get('discrepancies')==[],len(qa.get('discrepancies',[])),'initial')

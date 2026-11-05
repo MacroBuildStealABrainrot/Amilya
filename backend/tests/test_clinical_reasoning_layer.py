@@ -51,7 +51,7 @@ def test_connected_writing_and_unclear_terms_rules_reach_generation_and_qa(task)
     token = layers.select(SimpleNamespace(profile={'profession': 'RPN'}), 'nursing')
     try:
         prompt = providers.prompt(task)
-        assert 'not a list of clipped fragments' in prompt or 'disconnected clipped fragments' in prompt
+        assert 'genuinely broken writing' in prompt or 'genuinely fragmented writing' in prompt
         assert 'cell cancer' in prompt
         if task == 'quick_draft':
             assert 'Shorter is not better' in prompt
