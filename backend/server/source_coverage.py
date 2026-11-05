@@ -123,3 +123,12 @@ def coverage_defects(report: str, context: dict) -> list[str]:
         if re.search(r'\b' + side + r'\b', note, re.I) and not re.search(r'\b' + side + r'\b', source, re.I):
             defects.append(f'The report says "{side}" but no source mentions {side}; check the side.')
     return list(dict.fromkeys(defects))[:12]
+
+
+def strong_findings(defects: list[str]) -> list[str]:
+    """Findings that are almost never harmless: a value, date or side in the report that no source contains."""
+    return [item for item in defects if 'not in any source' in item or 'that is not in the sources' in item or 'check the side' in item]
+
+
+def clarify_alerts(findings: list[str]) -> list[dict]:
+    return [{'field': 'clarify', 'message': 'Please check: ' + item} for item in findings[:3]]

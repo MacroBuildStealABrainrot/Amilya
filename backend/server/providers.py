@@ -1125,19 +1125,22 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     if not getattr(settings, 'quick_ai_check', True):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
         # find is shown to the clinician as a "check before saving" alert. No second AI check, no AI rewrite.
-        from .source_coverage import coverage_defects
-        found = quality_defects(draft['text'], context) + coverage_defects(draft['text'], context)
+        from .source_coverage import coverage_defects, strong_findings
+        found = quality_defects(draft['text'], context) + strong_findings(coverage_defects(draft['text'], context))
         alerts = list(draft.get('ui_alerts') or [])
         alerts += [{'field': 'report', 'message': item} for item in found[:10]]
         draft['ui_alerts'] = alerts
         draft.setdefault('usage', {})['stages'] = []
         draft['qa'] = {'passed': not found, 'discrepancies': found[:10], 'status': 'ai_check_off'}
         return draft
-    qa = await routed('quick_qa', json.dumps({**content, 'proposed_draft': draft['text'], 'proposed_status': draft.get('status', 'ready'), 'proposed_ui_alerts': draft.get('ui_alerts', [])},
+    from .source_coverage import coverage_defects, strong_findings, clarify_alerts
+    # Free comparison with the sources (values, dates, products, key diagnoses, side) runs on every report. Its findings
+    # go to the AI check, which compares the whole report with the sources and decides which ones are real defects.
+    coverage = coverage_defects(draft['text'], context)
+    qa = await routed('quick_qa', json.dumps({**content, 'proposed_draft': draft['text'], 'proposed_status': draft.get('status', 'ready'), 'proposed_ui_alerts': draft.get('ui_alerts', []),
+        **({'free_source_check_findings': coverage} if coverage else {})},
         ensure_ascii=False, default=str), user=user, encounter_id=encounter_id, max_tokens=1000)
-    from .source_coverage import coverage_defects
-    # Free comparison with the sources (values, dates, products, key diagnoses, side) runs on every report.
-    defects = quality_defects(draft['text'], context) + coverage_defects(draft['text'], context)
+    defects = quality_defects(draft['text'], context)
     if defects:
         qa = {**qa, 'passed': False, 'discrepancies': list(dict.fromkeys(qa.get('discrepancies', []) + defects))[:20]}
     diagnostics.faithfulness(qa.get('passed') is True and qa.get('discrepancies')==[],len(qa.get('discrepancies',[])),'initial')
@@ -1149,6 +1152,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
         raise TerminalReportError(502, 'The report check could not be verified. Your original source and editor text remain available.')
     draft.setdefault('usage', {})['stages'] = [qa.get('usage', {})]
     draft['qa'] = {'passed': True, 'discrepancies': []}
+    # A value or side that appears in no source is always shown to the clinician as a short "please check" note.
+    draft['ui_alerts'] = list(draft.get('ui_alerts') or []) + clarify_alerts(strong_findings(coverage))
     return draft
 
 
