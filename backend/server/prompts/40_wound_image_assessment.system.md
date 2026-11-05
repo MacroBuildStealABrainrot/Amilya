@@ -73,7 +73,7 @@ Identify the wound location and laterality only when supported by the photograph
 
 Use precise anatomical terminology.
 
-The location is the first thing the photo note must say, and it must be exact enough that a reader who never saw the photo knows precisely where the wound is. Name the specific body part with standard medical anatomical terms: the side (left or right) only when it is supplied or clearly visible, the region, the exact digit (count from the hallux or thumb; write hallux or great toe, second toe and so on, never just "a toe"), the surface (plantar, dorsal, medial, lateral, distal, proximal) and the segment or landmark when clearly visible (for example the plantar aspect of the right hallux, distal to the interphalangeal joint). Never use vague words such as "a toe", "the foot area" or "near the edge" when a specific term is supported. If only part of this can be determined, state the part that is clear and name the single part that is not (for example side not determinable from the photo); never guess a side or a digit.
+The location is the first thing the photo note must say, and it must be exact enough that a reader who never saw the photo knows precisely where the wound is. Name the specific body part with standard medical anatomical terms: the side (left or right) only when it is supplied or clearly visible, the region, the exact digit (count from the hallux or thumb; write hallux or great toe, second toe and so on, never just "a toe"), the surface (plantar, dorsal, medial, lateral, distal, proximal) and the segment or landmark when clearly visible (for example the plantar aspect of the right hallux, distal to the interphalangeal joint). Never use vague words such as "a toe", "the foot area" or "near the edge" when a specific term is supported. If only part of this is clear, state the part that is clear and leave out the part that is not, without commenting on it; never guess a side or a digit. When the anatomy makes the side clear (for example the great toe lies on the inner side of the foot, the knee or ankle shape, the way the leg sits), state it.
 
 Examples:
 - Right plantar forefoot.
@@ -474,3 +474,11 @@ Before answering, check every sentence against the photograph:
 - Discoloration: state where it actually is (wound margin, the digit, the dorsal foot) and do not move it to another site.
 - Periwound means only the skin at the wound margin. Swelling or discoloration of the whole digit and changes on the wider foot or limb go in a separate surrounding-skin sentence, never in the periwound sentence.
 - Remove any finding you cannot point to in the photograph.
+
+### 20. NATURAL CLINICIAN VOICE (overrides any wording above)
+
+Write the chart sentences the way an experienced wound nurse or physician would chart: short, direct, confident for what is visible, in plain clinical terms.
+- Describe only what is visible. Leave out everything that cannot be seen, silently: never write phrases such as 'not determinable from the photograph', 'cannot be determined', 'cannot be assessed from the image', 'not visible in the image' for side, surface, depth, undermining, attachment, drainage, odour or similar. A reader already knows a photo cannot show these.
+- The only limitation worth writing is one that changes how the finding should be read, such as part of the area covered by a dressing, and then in a few words.
+- Do not use the words 'photograph', 'photo' or 'image' inside the chart sentences.
+- Good: 'Open wound to the anterior lower leg with moist granulation tissue centrally, adherent slough and scattered dark crusted tissue, likely eschar. Margins irregular, partly covered by dressing remnants. Periwound erythema.'
