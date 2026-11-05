@@ -64,6 +64,6 @@ internal object RecordingPermissions {
     fun notificationHint(sdk: Int, notificationsGranted: Boolean): String? =
         if (sdk >= 33 && !notificationsGranted)
             "Notifications are off for this app, so the recording controls are not in the notification shade. Use Stop on this screen. " +
-                "To turn them on: Settings > Apps > WoundCoPilot > Notifications."
+                "To turn them on: Settings > Apps > Amilya > Notifications."
         else null
 }

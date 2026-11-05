@@ -115,7 +115,7 @@ internal fun proposedVoiceEdit(text:String,command:VoiceCommand):String?{
                 context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="application/pdf";putExtra(Intent.EXTRA_STREAM,uri);clipData=android.content.ClipData.newRawUri("Report",uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)},"Share report"))
             }}
             "format"->if(s.editor.isBlank())s.updateTemplate(command.value)else s.reformatQuick(command.value)
-            "copy"->{val clip=context.getSystemService(android.content.ClipboardManager::class.java);clip.setPrimaryClip(android.content.ClipData.newPlainText("WoundCoPilot report",s.editor));status="Report copied."}
+            "copy"->{val clip=context.getSystemService(android.content.ClipboardManager::class.java);clip.setPrimaryClip(android.content.ClipData.newPlainText("Amilya report",s.editor));status="Report copied."}
             "read"->read(s.editor)
             "stop_reading"->{speech?.stop();status="Reading stopped."}
             "duration"->{val sec=RecordingService.state.value.elapsedSeconds;status="${sec/60} minutes ${sec%60} seconds";read(status)}

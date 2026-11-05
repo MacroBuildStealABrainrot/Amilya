@@ -133,7 +133,7 @@ import java.time.format.DateTimeFormatter
     val expires=localTime(transfer.str("expires_at"))
     TransferDialog(transfer.str("url"),transfer.str("code"),if(expires.isBlank())"Expires after 15 minutes. Opens once."else "Expires at $expires. Opens once.",
         onDismiss={s.transfer=null},onShare={
-            try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,"WoundCoPilot report transfer\n${transfer.str("url")}\nOne-time code: ${transfer.str("code")}\nExpires in 15 minutes. Open once in your browser.")},"Open on your work phone"))}
+            try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,"Amilya report transfer\n${transfer.str("url")}\nOne-time code: ${transfer.str("code")}\nExpires in 15 minutes. Open once in your browser.")},"Open on your work phone"))}
             catch(_:Exception){s.error="No sharing app is available. Copy the link and code from this dialog."}
         })
 }

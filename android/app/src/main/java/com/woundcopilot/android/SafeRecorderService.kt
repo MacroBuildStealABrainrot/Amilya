@@ -55,7 +55,7 @@ internal object CrashSafeBackendImpl : CrashSafeBackend {
             )
         } catch (_: Exception) {
             SafeRecorderService.starting = false
-            RecordingService.state.value = RecordingState(error = "Recording could not start. Keep WoundCoPilot open and allow microphone access, then try again.")
+            RecordingService.state.value = RecordingState(error = "Recording could not start. Keep Amilya open and allow microphone access, then try again.")
         }
     }
 
@@ -337,7 +337,7 @@ internal class SafeRecorderService : Service() {
             } else startForeground(NOTIFICATION_ID, first)
         } catch (_: Exception) {
             starting = false
-            RecordingService.state.value = RecordingState(error = "The microphone could not start. Keep WoundCoPilot open and try again.")
+            RecordingService.state.value = RecordingState(error = "The microphone could not start. Keep Amilya open and try again.")
             stopSelf()
             return
         }
@@ -697,7 +697,7 @@ internal class SafeRecorderService : Service() {
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle(if (current.paused) "Recording paused" else "Recording audio")
-            .setContentText("WoundCoPilot · %d:%02d".format(elapsed / 60, elapsed % 60))
+            .setContentText("Amilya · %d:%02d".format(elapsed / 60, elapsed % 60))
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)

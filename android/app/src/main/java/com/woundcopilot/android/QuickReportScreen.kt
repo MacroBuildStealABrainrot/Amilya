@@ -203,7 +203,7 @@ fun VoiceCorrectionScreen(s: AppState) {
 /** Marks clinical wording sensitive so supported Android versions suppress clipboard previews. */
 private fun copySensitiveReport(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("WoundCoPilot report", text)
+    val clip = ClipData.newPlainText("Amilya report", text)
     clip.description.extras = PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
     clipboard.setPrimaryClip(clip)
 }

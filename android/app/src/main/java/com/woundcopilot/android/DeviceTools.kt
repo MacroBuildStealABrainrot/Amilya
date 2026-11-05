@@ -167,7 +167,7 @@ class RecordingService : Service() {
                 startForeground(NOTIFICATION_ID, first)
             }
         } catch (error: Exception) {
-            state.value = RecordingState(error = "The microphone could not start. Keep WoundCoPilot open and try again.")
+            state.value = RecordingState(error = "The microphone could not start. Keep Amilya open and try again.")
             stopSelf()
             return
         }
@@ -338,7 +338,7 @@ class RecordingService : Service() {
         val builder = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle(if (current.paused) "Recording paused" else "Recording audio")
-            .setContentText("WoundCoPilot · $duration")
+            .setContentText("Amilya · $duration")
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setOngoing(true)
@@ -395,7 +395,7 @@ class RecordingService : Service() {
                 context.startForegroundService(Intent(context, RecordingService::class.java).setAction(ACTION_START).putExtra(EXTRA_OWNER, ownerKey))
             } catch (_: Exception) {
                 startRequested = false
-                state.value = RecordingState(error = "Recording could not start. Keep WoundCoPilot open and allow microphone access, then try again.")
+                state.value = RecordingState(error = "Recording could not start. Keep Amilya open and allow microphone access, then try again.")
             }
         }
 
@@ -601,6 +601,6 @@ object ExportTools {
             if (prior.isFile && prior.lastModified() < cutoff && prior.extension in setOf("txt", "pdf")) prior.delete()
         }
         val local=java.time.ZonedDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
-        return File(directory,"WoundCoPilot-$local-${UUID.randomUUID().toString().take(8)}.$extension")
+        return File(directory,"Amilya-$local-${UUID.randomUUID().toString().take(8)}.$extension")
     }
 }

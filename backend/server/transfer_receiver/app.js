@@ -36,7 +36,7 @@
         catch (_) { actionStatus.textContent = 'Copy is unavailable in this browser. Select the report text or download it.'; }
       });
       const save = document.createElement('button'); save.type = 'button'; save.className = 'secondary'; save.textContent = 'Download text';
-      save.addEventListener('click', () => download(report.text, `WoundCoPilot-report-${index + 1}.txt`));
+      save.addEventListener('click', () => download(report.text, `Amilya-report-${index + 1}.txt`));
       actions.append(copy, save); article.append(heading, metadata, text, actions); container.append(article);
     });
     byId('intro').hidden = true; byId('unlock').hidden = true; byId('received').hidden = false;
@@ -68,7 +68,7 @@
   });
   byId('download-all').addEventListener('click', () => {
     const text = documents.length === 1 ? documents[0].text : documents.map(report => report.text).join('\n\n' + '—'.repeat(32) + '\n\n');
-    download(text, 'WoundCoPilot-reports.txt');
+    download(text, 'Amilya-reports.txt');
   });
   byId('print').addEventListener('click', () => window.print());
   function clearPage() {

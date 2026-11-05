@@ -196,8 +196,8 @@ fun AccountScreen(state: AppState) {
                 Text(
                     when {
                         state.demo -> "Preview actions stay separate from your account. No provider inference is requested."
-                        unlimited -> "Your account has unlimited WoundCoPilot credits."
-                        else -> "WoundCoPilot credits available in this workspace."
+                        unlimited -> "Your account has unlimited Amilya credits."
+                        else -> "Amilya credits available in this workspace."
                     },
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -241,7 +241,7 @@ fun AccountScreen(state: AppState) {
         TextButton(onClick = { signOut = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = !state.loading) {
             Text(if (state.demo) "Leave the sample" else "Sign out", color = MaterialTheme.colorScheme.error)
         }
-        Text("WoundCoPilot for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Amilya for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
     }
     if (editProfile) ProfileDialog(state) { editProfile = false }

@@ -32,9 +32,9 @@ internal object UnresolvedRetention {
     fun beforeStarting(freeBytes: Long, unresolvedBytes: Long, unresolvedCount: Int): Verdict = when {
         freeBytes < MIN_FREE_TO_START_BYTES -> Verdict(Level.BLOCK,
             "There is not enough free space on this phone to record safely (about ${megabytes(freeBytes)} MB free). Free some space and try again. " +
-                "Nothing in WoundCoPilot was deleted.")
+                "Nothing in Amilya was deleted.")
         unresolvedBytes >= BLOCK_UNRESOLVED_BYTES -> Verdict(Level.BLOCK,
-            "WoundCoPilot is holding $unresolvedCount recordings (about ${megabytes(unresolvedBytes)} MB) that are not finished yet. " +
+            "Amilya is holding $unresolvedCount recordings (about ${megabytes(unresolvedBytes)} MB) that are not finished yet. " +
                 "Finish or discard some of them before starting a new recording. Nothing is deleted automatically.")
         unresolvedBytes >= WARN_UNRESOLVED_BYTES -> Verdict(Level.WARN,
             "$unresolvedCount unfinished recordings are using about ${megabytes(unresolvedBytes)} MB. Please finish or discard some soon.")
@@ -55,7 +55,7 @@ internal object UnresolvedRetention {
         if (lastReminderAt > 0 && now - lastReminderAt < REMINDER_EVERY_MILLIS) return null
         return Reminder(
             if (count == 1) "A recording is waiting" else "$count recordings are waiting",
-            "Open WoundCoPilot to upload, finish or discard ${if (count == 1) "it" else "them"}. Nothing is deleted automatically.",
+            "Open Amilya to upload, finish or discard ${if (count == 1) "it" else "them"}. Nothing is deleted automatically.",
         )
     }
 
@@ -91,7 +91,7 @@ internal object UnresolvedRetention {
             recordings == 0 -> if (drafts == 1) "An unfinished report is waiting" else "$drafts unfinished reports are waiting"
             else -> "$total unfinished items are waiting"
         }
-        return Reminder(what, "Open WoundCoPilot to finish, save or discard ${if (total == 1) "it" else "them"}. Nothing is deleted automatically.")
+        return Reminder(what, "Open Amilya to finish, save or discard ${if (total == 1) "it" else "them"}. Nothing is deleted automatically.")
     }
 
     class Waiting(val media: File, val sinceMillis: Long, val bytes: Long)
