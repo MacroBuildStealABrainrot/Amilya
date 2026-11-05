@@ -39,8 +39,9 @@
       save.addEventListener('click', () => download(report.text, `Amilya-report-${index + 1}.txt`));
       actions.append(copy, save); article.append(heading, metadata, text, actions); container.append(article);
     });
+    byId('download-all').hidden = documents.length === 1;  // one report already has its own Download button
     byId('intro').hidden = true; byId('unlock').hidden = true; byId('received').hidden = false;
-    byId('download-all').focus();
+    (documents.length === 1 ? byId('print') : byId('download-all')).focus();
   }
   byId('pin-form').addEventListener('submit', async event => {
     event.preventDefault();
