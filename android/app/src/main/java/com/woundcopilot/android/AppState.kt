@@ -507,11 +507,12 @@ class AppState(application:Application):AndroidViewModel(application) {
         if((voiceCorrection || voiceMessage) && kind=="audio"){
             val r=if(demo)obj("text" to if(voiceMessage)"What else would you want to know?"else "Make the report more concise.","warnings" to JSONArray().put("Sample only. No transcription was performed."))else uploadResponse(keyName){api.multipart("/encounters/$encounterId/transcribe-$captureKind",file,mime,mapOf("consent" to "true"),key)}
             require(demo || r.optInt("case_revision")==revision){"Your sources changed. Your recording is saved; review the current conversation before trying again."}
-            if(voiceMessage){updateConsultantDraft(listOf(consultantDraft,r.str("text")).filter{it.isNotBlank()}.joinToString("\n\n"));consultantReset++}
+            if(voiceMessage && voicePhotoNote)updatePhotoNote(listOf(photoNote,r.str("text")).filter{it.isNotBlank()}.joinToString(" "))
+            else if(voiceMessage){updateConsultantDraft(listOf(consultantDraft,r.str("text")).filter{it.isNotBlank()}.joinToString("\n\n"));consultantReset++}
             else voiceInstruction=r.str("text")
             warnings(r);vault.remove(keyName);clearCaptureSelection(captureKind)
             if(file.canonicalFile.parentFile==File(getApplication<Application>().filesDir,"recordings").canonicalFile && file.extension=="m4a")RecordingService.clearPending(getApplication(),file.absolutePath)
-            screen=if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;return
+            screen=if(voicePhotoNote)"photo_assessment" else if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;voicePhotoNote=false;return
         }
         if(demo){val copy=JSONObject(case.toString());val id=UUID.randomUUID().toString();copy.getJSONArray("evidence").put(obj("id" to id,"kind" to kind,"text" to "Synthetic preview: no AI request was sent.","created_at" to now(),"metadata" to obj("filename" to file.name,"mime" to mime,"media_hash" to digest,"raw_media_retained" to false,"photo_review" to photoReview)));copy.getJSONObject("encounter").put("revision",revision+1);case=copy;vault.write(storeKey("source-$id"),file.absolutePath);notice="Capture kept on this device. No provider request was sent."}
         else {
@@ -1026,7 +1027,50 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun cancelVoiceCorrection(){if(RecordingService.state.value.recording)return;voiceCorrection=false;voiceInstruction="";screen="editor";dismissError()}
     fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();autoStartRecording=true;screen="record"}
-    fun recordConsultantMessage(){if(loading)return;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
+    // ---------- Photo assessment: the clinician's own words, and the two-part result (owner request 2026-11-05) ----------
+    /** What the clinician typed or said about the wound. Kept on this phone only; sent once with the note request. */
+    var photoNote by mutableStateOf(""); private set
+    var photoChartNote by mutableStateOf<String?>(null); private set
+    var photoConsultReview by mutableStateOf<String?>(null); private set
+    var photoNoteAlerts by mutableStateOf<List<String>>(emptyList()); private set
+    var photoResultVisit by mutableStateOf<String?>(null); private set
+    private var voicePhotoNote=false
+    fun updatePhotoNote(text:String){photoNote=text.take(4000);runCatching{vault.write(storeKey("photo-note"),photoNote)}}
+    fun loadPhotoNote(){if(photoResultVisit!=encounterId){photoChartNote=null;photoConsultReview=null;photoNoteAlerts=emptyList()};photoNote=runCatching{vault.read(storeKey("photo-note"))}.getOrNull().orEmpty()}
+    fun recordPhotoNote(){if(loading)return;voiceCorrection=false;voiceMessage=true;voicePhotoNote=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
+    /**
+     * Part 1: a charting note from the photo findings plus the clinician's own words (the normal report pipeline, so the
+     * source check runs). Part 2: a consultant review from Ask Consultant. Part 2 is AI suggestions and is never charted.
+     */
+    fun photoNoteAndReview():Unit=runTask("Writing the charting note and consultant review",purpose="report",retry={photoNoteAndReview()}){
+        ensureRemoteDocument()
+        val visit=encounterId;val sourceRevision=revision;val note=photoNote.trim().take(4000)
+        val turns=if(note.isBlank())JSONArray() else JSONArray().put(obj("role" to "user","content" to note))
+        val reportPayload=obj("template" to "nursing","use_ai" to true,"preferred_length" to "concise","consultation" to turns)
+        val reportIntent="photo-note-$sourceRevision-"+hash(note).take(16)
+        val report=if(demo)obj("text" to "Sample charting note. No AI request was sent.","case_revision" to revision)else mutation(reportIntent,"/encounters/$visit/quick-report",reportPayload,keepCodeOnServerError=true)
+        require(encounterId==visit && report.optInt("case_revision")==revision){"Your photos changed. Create the note again."}
+        val text=report.str("text").trim()
+        require(text.isNotBlank()){report.str("ui_message").ifBlank{"A charting note could not be written from these photos. Add your notes and try again."}}
+        photoChartNote=text;photoResultVisit=visit
+        photoNoteAlerts=report.items("ui_alerts").map{it.str("message")}.filter{it.isNotBlank()}
+        if(!demo)acknowledge(reportIntent,reportPayload)
+        val question=("Consultant review of this photo assessment"+(if(note.isNotBlank())", with my notes: "+note else "")+
+            ". Give the likely picture, what it may be concerning for, what to check next, dressing categories that fit, red flags and when to escalate.").take(2000)
+        val consultPayload=obj("message" to question,"history" to JSONArray(),"current_report" to text)
+        val consultIntent="photo-review-$sourceRevision-"+hash(question).take(16)
+        val reply=if(demo)obj("answer" to "Sample consultant review. No AI request was sent.","case_revision" to revision)else mutation(consultIntent,"/encounters/$visit/consult",consultPayload)
+        require(encounterId==visit){"The active visit changed."}
+        photoConsultReview=reply.str("answer").trim().ifBlank{null}
+        if(!demo)acknowledge(consultIntent,consultPayload)
+    }
+    /** Part 1 into the normal report editor, to edit, save or add to the end-of-shift list. Part 2 is never copied in. */
+    fun openPhotoNoteAsReport(){
+        val note=photoChartNote?:return
+        if(loading)return
+        chooseQuickMode("document");editorOwner=storeKey("draft");updateTemplate("nursing");snapshotDraft();editor=note;savedId=null;localRevision++;persistEditor();screen="editor"
+    }
+    fun recordConsultantMessage(){if(loading)return;voicePhotoNote=false;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
     fun cancelVoiceMessage(){if(RecordingService.state.value.recording)return;voiceMessage=false;notice=null;dismissError();screen="consultant"}
     /** Send > Computer: saves the current wording first if needed, then makes a one-time link and code. */
     fun sendToComputer()=runTask("Preparing secure link"){

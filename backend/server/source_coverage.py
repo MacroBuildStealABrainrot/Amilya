@@ -88,6 +88,9 @@ def source_text(context: dict) -> str:
     parts = [str(s.get('text') or '') for s in (context or {}).get('untrusted_sources', [])]
     import json
     parts += [json.dumps(f.get('value'), ensure_ascii=False, default=str) for f in (context or {}).get('case_facts', []) if isinstance(f, dict)]
+    # The clinician's own typed or spoken words sent with a photo or from Ask Consultant are sources too.
+    turns = ((context or {}).get('consultation') or {}).get('turns') or []
+    parts += [str(t.get('text') or '') for t in turns if isinstance(t, dict) and t.get('speaker') == 'clinician_message']
     return '\n'.join(parts)
 
 

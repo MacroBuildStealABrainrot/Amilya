@@ -17,6 +17,8 @@ import org.json.JSONObject
     var deleting by remember{mutableStateOf<String?>(null)}
     var label by remember{mutableStateOf("")}
     var group by remember{mutableStateOf("")}
+    LaunchedEffect(s.encounterId){s.loadPhotoNote()}
+    val twoPart=s.photoChartNote!=null && s.photoResultVisit==s.encounterId
     Page{
         InstrumentTitle("Photo assessment")
         if(s.pendingPhotoFiles().isNotEmpty())TextButton({s.uploadPhotos(s.pendingPhotoFiles())},enabled=!s.loading){Text("Resume photo uploads")}
@@ -59,10 +61,36 @@ import org.json.JSONObject
             val paragraph=findings.filter{it.str("name") !in advisory}.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
                 .map{prettyValue(it.opt("value")).trim().let{t->if(t.isEmpty()||t.last() in ".!?")t else "$t."}}.filter{it.isNotBlank()}.joinToString(" ")
             if(paragraph.isNotBlank()){Text(paragraph);sendParts+=if(groupName.startsWith("Unassigned"))paragraph else "$groupName: $paragraph"}
+            if(twoPart)return@forEachIndexed
             if(interpretation.isNotEmpty()){Text("Possible interpretation (AI suggestion, not charted)",style=MaterialTheme.typography.titleSmall);interpretation.forEach{Text(it)}}
             if(nextSteps.isNotEmpty()){Text("Suggested assessment",style=MaterialTheme.typography.titleSmall);nextSteps.forEach{Text(it)}}
         }
-        SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
+        // The clinician's own words about the wound: what a photo cannot show (side, how long, warmth, pain, odour, history).
+        if(photos.isNotEmpty()){
+            Text("Your notes about this wound (optional)",style=MaterialTheme.typography.titleMedium)
+            OutlinedTextField(s.photoNote,{s.updatePhotoNote(it)},Modifier.fillMaxWidth(),enabled=!s.loading,minLines=2,
+                placeholder={Text("For example: left heel, 3 weeks, warm, odour, diabetic, using Inadine")})
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                TextButton({s.recordPhotoNote()},enabled=!s.loading){Text("Add by voice")}
+                if(s.photoNote.isNotBlank())TextButton({s.updatePhotoNote("")},enabled=!s.loading){Text("Clear")}
+            }
+            WcpButton(if(twoPart)"Update note and review" else "Create charting note and consultant review",{s.photoNoteAndReview()},Modifier.fillMaxWidth(),enabled=!s.loading)
+        }
+        if(twoPart){
+            val chart=s.photoChartNote.orEmpty()
+            Text("Part 1 · Charting note",style=MaterialTheme.typography.titleMedium)
+            s.photoNoteAlerts.forEach{Text(it,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)}
+            Text(chart)
+            SendOptions(chart,"Photo charting note",s.loading,onComputer=null,onMessage={s.notice=it})
+            TextButton({s.openPhotoNoteAsReport()},enabled=!s.loading){Text("Open as report to edit or save")}
+            s.photoConsultReview?.let{review->
+                Text("Part 2 · Consultant review (AI suggestions, not charted)",style=MaterialTheme.typography.titleMedium)
+                Text("For your clinical judgement only. It is not part of the note and is never sent with it.",style=MaterialTheme.typography.bodySmall)
+                Text(review)
+                val clipboard=androidx.compose.ui.platform.LocalClipboardManager.current
+                TextButton({clipboard.setText(androidx.compose.ui.text.AnnotatedString(review));s.notice="Consultant review copied."}){Text("Copy review")}
+            }
+        } else SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
         val shareContext=androidx.compose.ui.platform.LocalContext.current
         val photoFiles=photos.mapNotNull{s.localSource(it.str("id"))}.filter{it.isFile}
         if(photoFiles.isNotEmpty())WcpButton(if(photoFiles.size==1)"Share photo" else "Share photos",{try{

@@ -78,6 +78,22 @@ SCENARIOS = [
      'text': 'Burning on urination 2 days, frequency, no fever, no flank pain. Urine dip positive nitrites and leukocytes. Nitrofurantoin started per guideline, culture sent.',
      'must': [r'(2|two) days', r'frequency', r'nitrite', r'leukocyte', r'nitrofurantoin', r'culture', r'(no|denies).{0,30}fever'],
      'must_not': [r'\d+\s*mg', r'pyelonephritis (is )?(present|confirmed)'], 'max_words': 70},
+    {'id': 'photo_plus_clinician_note', 'specialty': 'wound photo with clinician note', 'profession': 'RPN', 'template': 'nursing',
+     'text': '',
+     'facts': [
+        {'name': 'wound_tissue', 'value': {'text': 'Wound bed with dark brown-black dry eschar at the distal toe tip.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'},
+        {'name': 'periwound', 'value': {'text': 'Surrounding skin with localized redness and mild swelling.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'}],
+     'note': 'Left second toe. Present about 3 weeks. Client reports throbbing pain 5 out of 10. Toe feels warm on assessment. Known diabetes. Dressed with Inadine and dry gauze.',
+     'must': [r'left (2nd|second) toe', r'eschar', r'(red|erythema)', r'(swell|edema)', r'3 weeks', r'5\s*/\s*10', r'warm', r'diabet', r'Inadine'],
+     'must_not': [r'For clinician review', r'osteomyelitis', r'\bright\b', r'no odou?r', r'cellulitis (is )?(present|confirmed)']},
+    {'id': 'photo_without_note', 'specialty': 'wound photo only', 'profession': 'RN', 'template': 'nursing',
+     'text': '',
+     'facts': [
+        {'name': 'wound_tissue', 'value': {'text': 'Moist pink-red granulation tissue centrally with adherent yellow slough.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'},
+        {'name': 'wound_edges', 'value': {'text': 'Irregular edges.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'}],
+     'note': '',
+     'must': [r'granulation', r'slough', r'irregular'],
+     'must_not': [r'\bleft\b|\bright\b', r'\d+\s*(cm|mm)', r'no odou?r', r'pain']},
 ]
 
 
@@ -106,7 +122,8 @@ def _check(scenario, result):
     if scenario.get('max_words') and words > scenario['max_words']: problems.append('too_long')
     return {'passed': not problems and bool(text.strip()), 'problems': problems, 'missing': missing, 'invented': invented, 'words': words,
             'clarify_alerts': [a.get('message') for a in clarify],
-            'coverage_after': coverage_defects(text, {'untrusted_sources': [{'text': scenario['text']}]})}
+            'coverage_after': coverage_defects(text, {'untrusted_sources': [{'text': scenario['text'] + ' ' + scenario.get('note', '')}],
+                                                       'case_facts': scenario.get('facts', [])})}
 
 
 async def run(label):
@@ -134,9 +151,14 @@ async def run(label):
                 title='Made-up evaluation visit', status='open', revision=1, created_by=user.id,
                 draft_data={'retention': 'temporary', 'quick_mode': 'document', 'evaluation': label})
             db.add(encounter); db.commit()
-            context = {'photo_groups_clinician_assigned': [], 'case_facts': [], 'rejected_claims_do_not_reinstate': [],
-                       'untrusted_sources': [{'id': 'eval-source', 'kind': 'audio', 'text': scenario['text'], 'warnings': [],
-                                              'created_at': utcnow().isoformat()}]}
+            sources = [{'id': 'eval-source', 'kind': 'audio', 'text': scenario['text'], 'warnings': [],
+                        'created_at': utcnow().isoformat()}] if scenario['text'] else []
+            context = {'photo_groups_clinician_assigned': [], 'case_facts': scenario.get('facts', []), 'rejected_claims_do_not_reinstate': [],
+                       'untrusted_sources': sources}
+            if scenario.get('note'):
+                # Exactly what the phone sends from the photo screen: the clinician's own words as one clinician message.
+                from .quick_workflows import consultation_context
+                context['consultation'] = consultation_context([SimpleNamespace(role='user', content=scenario['note'])])
             record = {'label': label, 'scenario': scenario['id'], 'specialty': scenario['specialty'],
                       'profession': scenario['profession'], 'template': scenario['template']}
             try:

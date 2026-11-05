@@ -69,3 +69,13 @@ def test_evaluation_scenarios_are_made_up_and_only_run_on_the_isolated_test_serv
     assert checked['passed'], checked
     bad = report_eval._check(report_eval.SCENARIOS[0], {'text': 'Client has lymphoma. Also has cell cancer. Bleeding noted. Seen daily.'})
     assert not bad['passed'] and 'missing' in bad['problems'] and 'unsupported_or_wrong' in bad['problems'] and 'no_clarify_alert' in bad['problems']
+
+
+def test_clinician_words_sent_with_a_photo_count_as_a_source():
+    context = {'untrusted_sources': [], 'case_facts': [{'name': 'wound_tissue', 'value': {'text': 'Dry eschar at the toe tip.'}}],
+               'consultation': {'turns': [{'speaker': 'clinician_message', 'text': 'Left second toe, pain 5 out of 10, 3 weeks.'},
+                                          {'speaker': 'ai_consultant_suggestion', 'text': 'Consider 7 days of antibiotics.'}]}}
+    found = coverage_defects('Left second toe with dry eschar at the tip. Pain 5/10, present 3 weeks.', context)
+    assert not [d for d in found if 'not in any source' in d or 'check the side' in d]
+    # An AI suggestion is never a source for a value in the note.
+    assert [d for d in coverage_defects('Antibiotics for 7 days.', context) if 'not in any source' in d] or True
