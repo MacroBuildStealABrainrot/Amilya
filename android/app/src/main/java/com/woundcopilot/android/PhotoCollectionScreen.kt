@@ -50,12 +50,17 @@ import org.json.JSONObject
                 .distinctBy{it.str("name")+it.opt("value")?.toString().orEmpty()}
             val sourcePhotos=s.case?.items("evidence").orEmpty().filter{it.str("id") in ids}
             sourcePhotos.mapNotNull{it.optJSONObject("metadata")?.optJSONObject("photo_quality")}.filter{it.optBoolean("retake_required")}.forEach{Text(it.str("message"))}
-            if(findings.isEmpty())Text("No assessable findings. Review or retake these photos.")
+            if(findings.isEmpty())Text("Nothing could be assessed in this photo. Retake it with the area uncovered if safe.")
             // One chart-ready paragraph: wound bed, edges, periwound, then exudate.
             val order=listOf("wound_tissue","wound_edges","periwound","exudate")
-            val paragraph=findings.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
+            val advisory=setOf("photo_interpretation","photo_next_steps")
+            val interpretation=findings.filter{it.str("name")=="photo_interpretation"}.map{prettyValue(it.opt("value")).trim()}.filter{it.isNotBlank()}
+            val nextSteps=findings.filter{it.str("name")=="photo_next_steps"}.map{prettyValue(it.opt("value")).trim()}.filter{it.isNotBlank()}
+            val paragraph=findings.filter{it.str("name") !in advisory}.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
                 .map{prettyValue(it.opt("value")).trim().let{t->if(t.isEmpty()||t.last() in ".!?")t else "$t."}}.filter{it.isNotBlank()}.joinToString(" ")
             if(paragraph.isNotBlank()){Text(paragraph);sendParts+=if(groupName.startsWith("Unassigned"))paragraph else "$groupName: $paragraph"}
+            if(interpretation.isNotEmpty()){Text("Possible interpretation (AI suggestion, not charted)",style=MaterialTheme.typography.titleSmall);interpretation.forEach{Text(it)}}
+            if(nextSteps.isNotEmpty()){Text("Suggested assessment",style=MaterialTheme.typography.titleSmall);nextSteps.forEach{Text(it)}}
         }
         SendOptions(sendParts.joinToString("\n\n"),"Photo assessment",s.loading,onComputer=null,onMessage={s.notice=it})
         val shareContext=androidx.compose.ui.platform.LocalContext.current

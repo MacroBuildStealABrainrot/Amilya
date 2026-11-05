@@ -142,7 +142,8 @@ def _order_visit_parts(sources, rows):
 
 def source_context(db: Session, encounter: Encounter):
     all_facts = clinical.case_facts(db, encounter)
-    facts = [fact for fact in all_facts if fact['confirmation_state'] != 'rejected']
+    facts = [fact for fact in all_facts if fact['confirmation_state'] != 'rejected'
+             and fact['name'] not in clinical.PHOTO_ADVISORY_FIELDS]
     rejected = [fact for fact in all_facts if fact['confirmation_state'] == 'rejected']
     rows = list(db.scalars(select(Evidence).where(Evidence.workspace_id == encounter.workspace_id,
         Evidence.encounter_id == encounter.id).order_by(Evidence.created_at, Evidence.id)))
