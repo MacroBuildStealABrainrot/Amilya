@@ -91,3 +91,21 @@ def test_second_handoff_rules_reach_generation():
 
 def test_consultant_knows_abi_can_mislead():
     assert 'non-compressible arteries' in providers.prompt('consult')
+
+
+def test_wound_detail_checks_reach_photo_assessment():
+    prompt = providers.prompt('image')
+    for phrase in ('Lifting surface eschar is not edge separation', 'a flap needs a loose or displaced segment', 'never "pale" or "white maceration"',
+                   'shine may be cleanser', 'do not miss an eschar-covered ulcer beside a nail', 'belong only in the photo_interpretation entry'):
+        assert phrase in prompt, phrase
+
+
+def test_flow_sheet_codes_reach_nurse_reports():
+    token = layers.select(SimpleNamespace(profile={'profession': 'RPN'}), 'nursing')
+    try:
+        prompt = providers.prompt('quick_draft')
+        for phrase in ('LAYS loosely adherent yellow slough', 'AHB firmly adherent hard black eschar', 'is not a finding and never a negative',
+                       'never turn them into "no signs of infection"', 'Never invent a BWAT score'):
+            assert phrase in prompt, phrase
+    finally:
+        layers.selection.reset(token)
