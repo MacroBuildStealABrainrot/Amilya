@@ -45,7 +45,7 @@ SCENARIOS = [
              "climbing stairs, orthopnea two pillows, no chest pain. BP 142 over 86, heart rate 96, sats 93 percent room air. Crackles at both bases, "
              "pitting edema to the knees. I'm increasing furosemide from 40 mg to 80 mg daily, checking electrolytes and creatinine in 3 days, "
              "and see him back in one week.",
-     'must': [r'heart failure', r'30\s*%|30 percent', r'3\s*(kg|kilo)', r'142\s*/\s*86', r'96', r'93\s*%', r'crackles', r'edema',
+     'must': [r'heart failure', r'30\s*%|30 percent', r'3\s*(kg|kilo)', r'142\s*/\s*86', r'96', r'93\s*(%|percent)', r'crackles', r'edema',
               r'furosemide.{0,40}80\s*mg|80\s*mg.{0,40}furosemide', r'40\s*mg', r'electrolytes|creatinine', r'(one|1) week'],
      'must_not': [r'chest pain (is )?present', r'spironolactone', r'BNP']},
     {'id': 'surgery_post_op', 'specialty': 'general surgery', 'profession': 'Surgeon', 'template': 'nursing',
@@ -66,7 +66,7 @@ SCENARIOS = [
     {'id': 'palliative_symptom', 'specialty': 'palliative care', 'profession': 'RPN', 'template': 'nursing',
      'text': "Palliative client with metastatic lung cancer. Daughter reports more breathless overnight. Pain 8 out of 10 in the chest. "
              "Gave hydromorphone 1 mg subcut at 14:00 as per order. Will reassess in 30 minutes. Goals of care comfort at home.",
-     'must': [r'metasta', r'daughter.{0,30}(report|state)', r'8\s*/\s*10', r'hydromorphone.{0,20}1\s*mg', r'(subcut|SC|subcutaneous)', r'14:00|1400',
+     'must': [r'metasta', r'daughter.{0,30}(report|state)', r'8\s*(/|out of)\s*10', r'hydromorphone.{0,20}1\s*mg', r'(subcut|SC|subcutaneous)', r'14:00|1400',
               r'30 minutes', r'comfort'],
      'must_not': [r'(pain|symptoms?) (improved|relieved|decreased)|good effect|effective', r'PPS\s*\d', r'ESAS']},
     {'id': 'physician_update_toe', 'specialty': 'wound care letter', 'profession': 'RPN', 'template': 'physician_update',
