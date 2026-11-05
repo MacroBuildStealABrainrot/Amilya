@@ -31,7 +31,14 @@ internal data class ShiftSummaryPlan(
     val finished: List<Pair<ShiftVisit, ShiftReport>>,
     val unfinished: List<ShiftVisit>,
     val unavailable: List<ShiftVisit>,
-)
+) {
+    /** Visits whose newest report was never signed but has text. Only ever sent if the clinician ticks them, and always stamped. */
+    val drafts: List<Pair<ShiftVisit, ShiftReport>>
+        get() = unfinished.mapNotNull { visit ->
+            visit.reports.maxWithOrNull(compareBy<ShiftReport> { it.version }.thenBy { it.id })
+                ?.takeIf { it.status != "signed" && it.text.isNotBlank() }?.let { visit to it }
+        }
+}
 
 /** Never invent today's date for an undated visit. The caller must stop if all three are missing. */
 internal fun shiftVisitStart(createdAt: String, rememberedStart: Instant?, updatedAt: String): Instant? =
@@ -59,16 +66,18 @@ internal fun shiftVisitHeading(visit: ShiftVisit, zone: ZoneId): String =
     "${visit.startedAt.atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm"))} — ${visit.label.ifBlank { "Visit" }}\nVisit reference: ${visit.id}"
 
 /** Append report text verbatim; the wrappers and warnings never edit or summarise a report. */
-internal fun renderShiftSummary(plan: ShiftSummaryPlan, selectedVisitIds: Set<String>): String = buildString {
+internal fun renderShiftSummary(plan: ShiftSummaryPlan, selectedVisitIds: Set<String>, draftIds: Set<String> = emptySet(), compactEmpty: Boolean = false): String = buildString {
     append("End-of-shift summary — ${plan.date}\n")
     append("Phone time zone: ${plan.zone.id}\n")
     append("Only visits already available on this phone are listed. No AI check was run for this summary.\n\n")
     append("No finished report\n")
     if (plan.unfinished.isEmpty()) append("None among the visits available on this phone.\n")
-    plan.unfinished.forEach {
+    val emptyHidden = if (compactEmpty) plan.unfinished.count { it.reports.isEmpty() } else 0
+    plan.unfinished.filter { it.id !in draftIds && !(compactEmpty && it.reports.isEmpty()) }.forEach {
         append(shiftVisitHeading(it, plan.zone)).append('\n')
         append(if (it.reports.isEmpty()) "No report is saved.\n" else "Only an unfinished report is saved. Review and sign it when ready.\n")
     }
+    if (emptyHidden > 0) append("$emptyHidden other visit(s) today have no report saved (for example a failed or consultant-only visit).\n")
     if (plan.unavailable.isNotEmpty()) {
         append("\nReport not available on this phone\n")
         append("The phone cannot confirm whether these visits have a finished report. Open each visit while online, then return here.\n")
@@ -93,5 +102,17 @@ internal fun renderShiftSummary(plan: ShiftSummaryPlan, selectedVisitIds: Set<St
         append("\n--- Saved report text (unchanged) ---\n")
         append(report.text)
         append("\n--- End of report for visit reference: ${visit.id} ---\n")
+    }
+    val chosenDrafts = plan.drafts.filter { it.first.id in draftIds }
+    if (chosenDrafts.isNotEmpty()) append("\nUnsigned drafts included by your choice: ${chosenDrafts.size}\n")
+    chosenDrafts.forEachIndexed { index, (visit, report) ->
+        append("\n==================================================\n")
+        append("UNSIGNED DRAFT ${index + 1} — NOT REVIEWED OR SIGNED BY A CLINICIAN. Not a finished report.\n").append(shiftVisitHeading(visit, plan.zone)).append('\n')
+        append("Draft version ${report.version}\n")
+        if (!report.notice.isNullOrBlank()) append("\nSaved report warning:\n").append(report.notice).append('\n')
+        report.alerts.forEach { append(it).append('\n') }
+        append("\n--- Saved draft text (unchanged) ---\n")
+        append(report.text)
+        append("\n--- End of UNSIGNED DRAFT for visit reference: ${visit.id} ---\n")
     }
 }

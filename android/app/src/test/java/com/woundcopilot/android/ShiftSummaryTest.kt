@@ -129,4 +129,22 @@ class ShiftSummaryTest {
         assertEquals(yesterday, shiftVisitStart("", yesterday, "2026-11-01T15:00:00Z"))
         assertNull(shiftVisitStart("", null, "not a date"))
     }
+
+    @Test fun unsignedDraftsAreOnlySentWhenTickedAndAreStampedAndUnchanged() {
+        val p = plan(visit("draft", reports = listOf(report("draft", "DRAFT WORDING 3 cm", "draft"))), visit("ready"), visit("empty", reports = emptyList()))
+        assertEquals(listOf("draft"), p.drafts.map { it.first.id })
+        assertFalse(renderShiftSummary(p, setOf("ready"), emptySet()).contains("DRAFT WORDING"))
+        val text = renderShiftSummary(p, setOf("ready"), setOf("draft"))
+        assertTrue(text.contains("UNSIGNED DRAFT 1 — NOT REVIEWED OR SIGNED BY A CLINICIAN"))
+        assertTrue(text.contains("DRAFT WORDING 3 cm")); assertTrue(text.contains("Right heel: dressing changed."))
+        assertFalse(text.contains("Only an unfinished report is saved."))   // listed once, as a draft, not twice
+    }
+
+    @Test fun visitsWithNoReportCanBeCollapsedToOneCountLine() {
+        val p = plan(visit("e1", reports = emptyList()), visit("e2", reports = emptyList()), visit("ready"))
+        val text = renderShiftSummary(p, setOf("ready"), emptySet(), compactEmpty = true)
+        assertTrue(text.contains("2 other visit(s) today have no report saved"))
+        assertFalse(text.contains("Visit reference: e1"))
+        assertTrue(renderShiftSummary(p, setOf("ready")).contains("Visit reference: e1"))   // default keeps the full list
+    }
 }

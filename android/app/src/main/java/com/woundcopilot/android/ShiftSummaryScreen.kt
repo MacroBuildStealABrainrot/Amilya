@@ -3,6 +3,7 @@ package com.woundcopilot.android
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.PersistableBundle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
@@ -19,7 +20,7 @@ import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** Read-only local screen. No runTask, API, diagnostics, sending, upload, AI or billing path. */
+/** Local screen. No runTask, API, diagnostics, upload, AI or billing path. Share only opens the phone's own share menu. */
 @Composable
 fun ShiftSummaryScreen(s: AppState) {
     val context = LocalContext.current
@@ -35,7 +36,8 @@ fun ShiftSummaryScreen(s: AppState) {
     val plan = remember(owner, clock, refresh) { s.shiftSummarySnapshot(clock.first, clock.second) }
     var selected by remember(owner, plan) { mutableStateOf(plan?.finished?.map { it.first.id }?.toSet().orEmpty()) }
     var feedback by remember(owner) { mutableStateOf<String?>(null) }
-    val combined = remember(plan, selected) { plan?.let { renderShiftSummary(it, selected) } }
+    var chosenDrafts by remember(owner, plan) { mutableStateOf(emptySet<String>()) }
+    val combined = remember(plan, selected, chosenDrafts) { plan?.let { renderShiftSummary(it, selected, chosenDrafts, compactEmpty = true) } }
 
     Page {
         InstrumentTitle("End-of-shift summary")
@@ -48,9 +50,27 @@ fun ShiftSummaryScreen(s: AppState) {
             // These are part of the document, not fading notifications.
             Text("No finished report", style = MaterialTheme.typography.titleMedium)
             if (plan.unfinished.isEmpty()) Text("None among the visits available on this phone.")
-            plan.unfinished.forEach {
+            val noReport = plan.unfinished.count { it.reports.isEmpty() }
+            if (noReport > 0) Text("$noReport visit(s) today have no report saved (for example a failed or consultant-only visit).")
+            plan.unfinished.filter { it.reports.isNotEmpty() }.forEach {
                 Text(shiftVisitHeading(it, plan.zone))
-                Text(if (it.reports.isEmpty()) "No report is saved." else "Only an unfinished report is saved. Review and sign it when ready.")
+                Text("Only an unfinished report is saved. Review and sign it when ready.")
+            }
+            if (plan.drafts.isNotEmpty()) {
+                Text("Unsigned drafts (optional)", style = MaterialTheme.typography.titleMedium)
+                Text("Only tick these if you want to send them. Each one is stamped UNSIGNED DRAFT in the document.")
+                plan.drafts.forEach { (visit, report) ->
+                    val checked = visit.id in chosenDrafts
+                    Row(Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Checkbox, onValueChange = { include ->
+                        chosenDrafts = if (include) chosenDrafts + visit.id else chosenDrafts - visit.id
+                    }).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = checked, onCheckedChange = null)
+                        Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                            Text(shiftVisitHeading(visit, plan.zone))
+                            Text("Unsigned draft · version ${report.version}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
             if (plan.unavailable.isNotEmpty()) {
                 Text("Report not available on this phone", style = MaterialTheme.typography.titleMedium)
@@ -88,6 +108,14 @@ fun ShiftSummaryScreen(s: AppState) {
                     feedback = "The document could not be copied. Nothing was sent. Try Copy again."
                 }
             }, modifier = Modifier.fillMaxWidth()) { Text("Copy") }
+            OutlinedButton(onClick = {
+                // You choose where it goes in the phone's own share sheet; Amilya sends nothing by itself.
+                runCatching {
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "End-of-shift summary ${clock.first}"); putExtra(Intent.EXTRA_TEXT, combined.orEmpty())
+                    }, "Share end-of-shift summary").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.onFailure { feedback = "The share menu could not open. Use Copy instead." }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Share") }
             feedback?.let { Text(it); TextButton(onClick = { feedback = null }) { Text("Dismiss") } }
             SelectionContainer { Text(combined.orEmpty()) }
         }
