@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio,logging,sys,time,uuid
+import asyncio,logging,os,sys,time,uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI,Request
@@ -14,6 +14,7 @@ from server import identity,audit,providers,transfer_models
 from server.performance import job_id as performance_job
 from server import diagnostics
 from server import isolation
+from server import sentry_relay
 
 logger=logging.getLogger('woundcopilot')
 # Cloud Run ingests one JSON object per line as structured logs. This dedicated
@@ -28,11 +29,19 @@ async def lifespan(app):
     settings.validate_runtime()
     if settings.auto_create_schema:
         Base.metadata.create_all(engine)
+    if os.environ.get('AMILYA_SENTRY_SELF_TEST')=='true':sentry_relay.self_test()
     yield
 
 
 app=FastAPI(title='WoundCoPilot',version='6.0.0',lifespan=lifespan,docs_url='/docs' if settings.environment!='production' else None,redoc_url=None)
 app.add_middleware(TrustedHostMiddleware,allowed_hosts=[h.strip() for h in settings.trusted_hosts.split(',')])
+
+
+def _route_template(request):
+    """The route PATTERN (for example /api/v1/quick/{encounter_id}/audio-parts), never the real path with IDs."""
+    route=request.scope.get('route')
+    path=getattr(route,'path',None)
+    return path if isinstance(path,str) else 'unmatched'
 
 
 @app.middleware('http')
@@ -47,6 +56,7 @@ async def boundary(request:Request,call_next):
     except ValueError:oversize=True
     operation_key=request.headers.get('idempotency-key')
     invalid_key=operation_key is not None and (not operation_key.strip() or len(operation_key)>128)
+    exception_reported=False
     operation_token=providers.request_operation.set(operation_key if not invalid_key and operation_key is not None else request_id)
     try:
         # Safety boundary: a request from the isolated test app is refused here, before its body is read,
@@ -67,8 +77,13 @@ async def boundary(request:Request,call_next):
             error_class = 'OtherError'
         logger.error('request_failed request_id=%s method=%s error_class=%s',
                      request_id,request.method,error_class)
+        exception_reported=sentry_relay.server_exception(exc,_route_template(request))
         response=JSONResponse({'detail':'The request could not be completed. Refresh the case to check its current state.','request_id':request_id},status_code=500)
     finally:providers.request_operation.reset(operation_token);performance_job.reset(performance_token)
+    if not exception_reported:
+        _context=diagnostics.active.get() or {}
+        _error=response.headers.get('X-WCP-Error')
+        sentry_relay.http_status(response.status_code,_route_template(request),_error if _error and sentry_relay._SAFE.match(_error) else None,_context.get('failure_stage') or (_context.get('task') if _context.get('task')!='unknown' else None))
     diagnostics.finish(response.status_code)
     diagnostics.active.reset(diagnostic_token)
     response.headers.update({

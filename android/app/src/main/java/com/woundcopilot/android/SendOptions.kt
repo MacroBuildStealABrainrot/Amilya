@@ -79,6 +79,7 @@ fun SendOptions(
                             } catch (_: ActivityNotFoundException) {
                                 problem = "No app on this phone can receive it. Use Copy instead."
                             } catch (_: Exception) {
+                                DeveloperDiagnostics.shareFailed()
                                 problem = "The file could not be prepared. Use Copy instead."
                             }
                         }

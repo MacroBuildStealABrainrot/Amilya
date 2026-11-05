@@ -22,6 +22,8 @@ internal fun isDiagnosticStorageName(name:String)=name.startsWith("diagnostic-ou
 object DeveloperDiagnostics {
     private data class Binding(val vault:Vault,val owner:String,val job:String,val recording:File?)
     @Volatile private var binding:Binding?=null
+    /** App-wide binding (not tied to a visit) for crashes, freezes and network failures outside a visit. */
+    @Volatile private var session:Binding?=null
     private val writer=Executors.newSingleThreadExecutor()
     private val mutex=kotlinx.coroutines.sync.Mutex()
     private var lastRetry=0L
@@ -46,8 +48,8 @@ object DeveloperDiagnostics {
     fun record(stage:String,start:Long,status:String,job:String="session",requestId:String?=null){
         if(job!="session" && binding?.job!=job)return
         val name=stages[stage]?:return
-        val b=binding?:return
-        emitBinding(b,name,start,if(status=="ok")"success"else "failed",requestId)
+        val b=binding?:session?:return
+        emitBinding(b,name,start,if(status=="ok")"success"else "failed",requestId,failureCode=status.takeIf{it!="ok" && it in failureCodes})
     }
     @Synchronized fun retry(){val job=binding?.job?:return;val now=Performance.now();if(lastRetryJob==job && now-lastRetry<250_000_000)return;lastRetry=now;lastRetryJob=job;emit("retry")}
     fun emit(stage:String,start:Long=Performance.now(),status:String="success"){
@@ -59,9 +61,15 @@ object DeveloperDiagnostics {
         val id=vault.read("diagnostic-job-${parts[0]}-${parts[1]}")?:return
         emitBinding(Binding(vault,parts[0],id,file),"cleanup",Performance.now(),if(deleted)"success"else "failed")
     }}
-    private fun emitBinding(b:Binding,stage:String,start:Long,status:String,requestId:String?=null,flowType:String?=null,wearError:String?=null,photo:File?=null){
+    private val monitoringStages=setOf("app_crash","app_not_responding","app_restart","monitoring_test","report_share")
+    private val failureCodes=setOf("PROCESSING_IN_PROGRESS","TRANSCRIPTION_TIMEOUT","REPORT_GENERATION_TIMEOUT","NETWORK_TIMEOUT","NETWORK_UNAVAILABLE","TRANSCRIPTION_FAILED","REPORT_GENERATION_FAILED","BACKEND_FAILED","REQUEST_FAILED","RESPONSE_PARSE_FAILED")
+    private fun emitBinding(b:Binding,stage:String,start:Long,status:String,requestId:String?=null,flowType:String?=null,wearError:String?=null,photo:File?=null,failureCode:String?=null,crash:CrashDetails?=null,exitReason:String?=null){
         // The server does not accept technical events: do not collect any more on this phone.
         if(serverUnsupported)return
+        // Error-monitoring stages and fields are understood only by the isolated test server for now. Other servers
+        // would reject the whole batch, so other builds never create them.
+        if(!BuildConfig.ISOLATED_TEST && stage in monitoringStages)return
+        val monitored=BuildConfig.ISOLATED_TEST
         val duration=((Performance.now()-start)/1_000_000.0).coerceAtLeast(0.0)
         val finish=Instant.now()
         val exists=b.recording?.let{it.isFile && it.length()>128}
@@ -71,6 +79,12 @@ object DeveloperDiagnostics {
         if(requestId!=null)row.put("client_request_id",requestId)
         if(flowType!=null)row.put("flow_type",flowType)
         if(wearError!=null)row.put("wear_error",wearError)
+        if(monitored){
+            if(failureCode!=null)row.put("failure_code",failureCode)
+            if(exitReason!=null)row.put("exit_reason",exitReason)
+            if(crash!=null){row.put("crash_type",crash.type);if(crash.frames.isNotEmpty())row.put("crash_frames",JSONArray(crash.frames))}
+            appVersion()?.let{row.put("app_version",it)}
+        }
         writer.execute{runCatching{
             synchronized(this){
                 val key="diagnostic-outbox-${b.owner}"
@@ -81,7 +95,8 @@ object DeveloperDiagnostics {
     }
     /**
      * WHERE THEY GO: only to this app's own server, POST /api/v1/diagnostics/events, stored in its diagnostic_events table
-     * and visible only to an administrator (Developer diagnostics screen). Nowhere else (no Sentry or other service).
+     * and visible only to an administrator (Developer diagnostics screen). The isolated TEST server additionally forwards
+     * failures and crashes, as technical categories only, to Sentry (see backend/server/sentry_relay.py). Nowhere else.
      * A server that answers 404/405 does not accept them. That answer is remembered on the phone for that server and this
      * app version, so the phone stops sending AND stops collecting new events. A new app version checks once more.
      */
@@ -112,6 +127,61 @@ object DeveloperDiagnostics {
         synchronized(this){names.forEach{runCatching{vault.remove(it)}}}
         return count
     }
+    // ---------- Crashes, freezes and unexpected restarts (technical details only) ----------
+    /** Exception CLASS and code locations only ("package.Class.method:line"). Never the message, which may hold patient text. */
+    data class CrashDetails(val type:String,val frames:List<String>)
+    private val safeName=Regex("^[A-Za-z0-9_.$]{1,120}$")
+    private val safeFrame=Regex("^[A-Za-z0-9_.$<>]{1,190}:[0-9]{1,6}$")
+    fun appVersion():String?=BuildConfig.VERSION_NAME.takeIf{it.matches(Regex("^[A-Za-z0-9_.\\-]{1,40}$"))}
+    fun crashDetails(error:Throwable):CrashDetails{
+        var root=error;var depth=0
+        while(root.cause!=null && root.cause!==root && depth<5){root=root.cause!!;depth++}
+        val type=root.javaClass.name.takeIf{it.matches(safeName)}?:"UnknownError"
+        val frames=root.stackTrace.asSequence().map{"${it.className}.${it.methodName}:${it.lineNumber.coerceAtLeast(0)}"}.filter{it.matches(safeFrame)}.take(30).toList()
+        return CrashDetails(type,frames)
+    }
+    @Volatile private var crashCaptureInstalled=false
+    /** Remember a crash on the phone (technical details only) so it is reported after the next sign-in. */
+    fun installCrashCapture(context:android.content.Context){
+        if(crashCaptureInstalled)return;crashCaptureInstalled=true
+        val prefs=context.applicationContext.getSharedPreferences("amilya_crash",android.content.Context.MODE_PRIVATE)
+        val previous=Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler{thread,error->
+            runCatching{val d=crashDetails(error);prefs.edit().putString("type",d.type).putString("frames",d.frames.joinToString("\n")).commit()}
+            if(previous!=null)previous.uncaughtException(thread,error)else kotlin.system.exitProcess(10)
+        }
+    }
+    private val exitReasons=mapOf(6 to ("app_not_responding" to "ANR"),5 to ("app_restart" to "CRASH_NATIVE"),3 to ("app_restart" to "LOW_MEMORY"),9 to ("app_restart" to "EXCESSIVE_RESOURCE_USAGE"),7 to ("app_restart" to "INITIALIZATION_FAILURE"))
+    /** Called once a signed-in account is known. Reports a crash, freeze or forced restart from an earlier run. */
+    @Synchronized fun startSession(context:android.content.Context,vault:Vault,owner:String){
+        if(session?.owner==owner)return
+        val b=Binding(vault,owner,job(vault,owner,"app-session"),null);session=b
+        runCatching{
+            val prefs=context.applicationContext.getSharedPreferences("amilya_crash",android.content.Context.MODE_PRIVATE)
+            prefs.getString("type",null)?.let{type->
+                val frames=prefs.getString("frames","").orEmpty().split("\n").filter{it.matches(safeFrame)}
+                emitBinding(b,"app_crash",Performance.now(),"failed",crash=CrashDetails(type.takeIf{it.matches(safeName)}?:"UnknownError",frames))
+                prefs.edit().remove("type").remove("frames").apply()
+            }
+            if(android.os.Build.VERSION.SDK_INT>=30){
+                val manager=context.getSystemService(android.app.ActivityManager::class.java)
+                val seen=prefs.getLong("exit_seen",0L)
+                val exits=manager.getHistoricalProcessExitReasons(context.packageName,0,5)
+                exits.filter{it.timestamp>seen}.forEach{exit->exitReasons[exit.reason]?.let{(stage,reason)->emitBinding(b,stage,Performance.now(),"failed",exitReason=reason)}}
+                exits.maxOfOrNull{it.timestamp}?.let{prefs.edit().putLong("exit_seen",maxOf(it,seen)).apply()}
+            }
+        }
+    }
+    private fun testCrash():Nothing=throw IllegalStateException("Amilya monitoring test")
+    /** Account screen test: makes a real exception and reports it through the same crash path, without closing the app. */
+    fun sendMonitoringTest():Boolean{
+        val b=binding?:session?:return false
+        val details=try{testCrash()}catch(e:IllegalStateException){crashDetails(e)}
+        emitBinding(b,"monitoring_test",Performance.now(),"failed",crash=details.copy(type="com.woundcopilot.android.ControlledTestCrash"))
+        return true
+    }
+    /** A report could not be shared or sent from the phone (no content is recorded). */
+    fun shareFailed(){runCatching{(binding?:session)?.let{emitBinding(it,"report_share",Performance.now(),"failed")}}}
     /** Whether the server does not accept technical events at all (no such address). */
     val sendingStopped get()=serverUnsupported
 }
@@ -199,10 +269,12 @@ object DeveloperDiagnostics {
         Text("Technical events on this phone",style=MaterialTheme.typography.titleSmall)
         Text("Step names, times and success or failure only. No audio, text, photos or names. Kept up to 7 days. "+
             (if(DeveloperDiagnostics.sendingStopped)"This server does not accept them, so the app no longer sends or collects them."
+             else if(BuildConfig.ISOLATED_TEST)"Sent to the test server, which forwards failures and crashes (technical details only) to Sentry error monitoring."
              else "Sent only to this app's own server for troubleshooting.")+" Stored now: $count.",
             style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton({val removed=runCatching{DeveloperDiagnostics.clearStored(s.vault)}.getOrDefault(-1);count=runCatching{DeveloperDiagnostics.storedCount(s.vault)}.getOrDefault(0)
             message=if(removed<0)"They could not be cleared. Try again." else "Cleared $removed technical events."},enabled=count>0){Text("Clear technical events")}
+        if(BuildConfig.ISOLATED_TEST)TextButton({message=if(DeveloperDiagnostics.sendMonitoringTest())"Test error saved. It is sent within about 15 seconds." else "Sign in first, then try again.";count=runCatching{DeveloperDiagnostics.storedCount(s.vault)}.getOrDefault(0)}){Text("Send test error to monitoring")}
         message?.let{Text(it,style=MaterialTheme.typography.bodySmall)}
     }
 }

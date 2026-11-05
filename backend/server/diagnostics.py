@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio, contextvars, json, logging, math, time, uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import JSON, DateTime, String, Float, select, delete, exists, cast, create_engine
@@ -95,6 +95,9 @@ def event(data,event_id=None):
     c=active.get()
     if not c or not c['user']:return
     if data.get('status')=='failed':c['failure_stage']=data.get('stage')
+    if data.get('source')=='server':
+        from . import sentry_relay
+        sentry_relay.server_stage(data)
     # Callers construct a closed technical schema. Never accept external dicts here.
     persist(lambda db:db.add(DiagnosticEvent(id=event_id or str(uuid.uuid4()),request_id=c['id'],job_id=c['job_id'],workspace_id=c['user'][0],user_id=c['user'][1],data=data)))
 
@@ -147,6 +150,8 @@ def cloud_event(data):
     if 'failure_reason' in data:
         record['error_category']=photo_error_headers(data)['X-WCP-Error']
     provider_log.info(json.dumps(record,sort_keys=True,separators=(',',':')))
+    from . import sentry_relay
+    sentry_relay.provider_failure(record)
 
 @contextmanager
 def measure(stage):
@@ -221,7 +226,7 @@ def outcome(stage,model,provider,success,usage,normalized,billed):
 def faithfulness(passed,count,phase):
     event({'source':'server','stage':'source_faithfulness_'+phase,'status':'success' if passed else 'failed','finished_at':timestamp(),'defect_count':count,'error_code':None if passed else 'SOURCE_FAITHFULNESS_FAILED'})
 
-ClientStage=Literal['photo_source','photo_request','photo_retained','photo_state','recording_captured','recording_stopped','local_save','upload_pending','upload','transcription_request','transcript_assembly','generation_request','report_state','report_display','report_save','retry','recording_retained','recording_unavailable','cleanup','audio_preparation','processing_total','external_started','external_returned','external_cancelled','external_saved','external_failed','app_background','app_foreground','lock_suppressed_trusted_flow','lock_required_device','lock_required_background','lock_required_timeout','watch_start_requested','watch_start_confirmed','watch_stop_requested','watch_stop_confirmed','watch_cancel_requested','watch_open_phone','watch_status_sync','watch_command_failed','watch_connected','watch_disconnected']
+ClientStage=Literal['photo_source','photo_request','photo_retained','photo_state','recording_captured','recording_stopped','local_save','upload_pending','upload','transcription_request','transcript_assembly','generation_request','report_state','report_display','report_save','retry','recording_retained','recording_unavailable','cleanup','audio_preparation','processing_total','external_started','external_returned','external_cancelled','external_saved','external_failed','app_background','app_foreground','lock_suppressed_trusted_flow','lock_required_device','lock_required_background','lock_required_timeout','watch_start_requested','watch_start_confirmed','watch_stop_requested','watch_stop_confirmed','watch_cancel_requested','watch_open_phone','watch_status_sync','watch_command_failed','watch_connected','watch_disconnected','app_crash','app_not_responding','app_restart','network_failure','report_share','monitoring_test']
 class ClientEvent(BaseModel):
     model_config=ConfigDict(extra='forbid')
     id:uuid.UUID
@@ -239,6 +244,12 @@ class ClientEvent(BaseModel):
     recording_exists:bool|None=None
     storage:Literal['app_private','encrypted_verified','unknown']='unknown'
     retry_count:int=Field(default=0,ge=0,le=1000)
+    # Technical crash details only: exception CLASS name and code locations "package.Class.method:line". Never messages.
+    crash_type:str|None=Field(default=None,max_length=120,pattern=r'^[A-Za-z0-9_.$]{1,120}$')
+    crash_frames:list[Annotated[str,Field(max_length=200,pattern=r'^[A-Za-z0-9_.$<>]{1,190}:[0-9]{1,6}$')]]|None=Field(default=None,max_length=30)
+    exit_reason:Literal['CRASH','CRASH_NATIVE','ANR','LOW_MEMORY','EXCESSIVE_RESOURCE_USAGE','INITIALIZATION_FAILURE','SIGNALED','OTHER']|None=None
+    failure_code:Literal['PROCESSING_IN_PROGRESS','TRANSCRIPTION_TIMEOUT','REPORT_GENERATION_TIMEOUT','NETWORK_TIMEOUT','NETWORK_UNAVAILABLE','TRANSCRIPTION_FAILED','REPORT_GENERATION_FAILED','BACKEND_FAILED','REQUEST_FAILED','RESPONSE_PARSE_FAILED']|None=None
+    app_version:str|None=Field(default=None,max_length=40,pattern=r'^[A-Za-z0-9_.\-]{1,40}$')
 
 class ClientBatch(BaseModel):
     model_config=ConfigDict(extra='forbid')
@@ -265,6 +276,8 @@ def upload_events(payload:ClientBatch,user:User=Depends(current_user)):
             db.execute(insert(DiagnosticEvent).values(id=str(item.id),request_id=None,job_id=str(item.job_id),workspace_id=user.workspace_id,user_id=user.id,data={**data,'source':'device_reported',**({'origin':'WEAR_OS'} if item.flow_type=='WEAR_OS' else {})}).on_conflict_do_nothing(index_elements=['id']))
             admitted=db.get(DiagnosticEvent,str(item.id))
             if admitted.user_id!=user.id:raise HTTPException(409,'Diagnostic identity conflict')
+            from . import sentry_relay
+            sentry_relay.client_event(item)
             offline_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'diagnostic-device:'+user.id+':'+str(item.job_id)))
             db.execute(insert(DiagnosticRequest).values(id=offline_id,job_id=str(item.job_id),workspace_id=user.workspace_id,user_id=user.id,task='photo_assessment' if item.stage.startswith('photo_') else 'wear_control' if item.flow_type=='WEAR_OS' else 'external_flow' if item.flow_type else 'recording',data={}).on_conflict_do_nothing(index_elements=['id']))
             row=db.scalar(select(DiagnosticRequest).where(DiagnosticRequest.id==offline_id).with_for_update())

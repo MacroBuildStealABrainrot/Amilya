@@ -291,7 +291,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         }
     }
     init {
-        viewModelScope.launch{while(isActive){delay(15000);val owner=user?.str("id");if(owner!=null&&!demo)DeveloperDiagnostics.flush(api,vault,owner)}}
+        viewModelScope.launch{while(isActive){delay(15000);val owner=user?.str("id");if(owner!=null&&!demo){runCatching{DeveloperDiagnostics.startSession(getApplication(),vault,owner)};DeveloperDiagnostics.flush(api,vault,owner)}}}
         // Processing follows capture state, including while the Activity is locked/backgrounded.
         // A fresh process never auto-submits an interrupted or previously completed recording.
         viewModelScope.launch {

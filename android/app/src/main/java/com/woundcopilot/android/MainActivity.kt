@@ -63,6 +63,7 @@ class MainActivity:ComponentActivity(){
     private fun deviceLocked()=getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked || !getSystemService(android.os.PowerManager::class.java).isInteractive
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
+        DeveloperDiagnostics.installCrashCapture(this)
         state.wearBridge
         state.externalCapture.operationId?.let{id->state.externalCapture.kind?.let{registerCapture(it,id)}}
         if(!BuildConfig.DEBUG && !BuildConfig.ALLOW_SCREEN_CAPTURE)window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
