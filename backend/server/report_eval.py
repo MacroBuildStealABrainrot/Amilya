@@ -23,8 +23,8 @@ SCENARIOS = [
              "It's bleeding today, she says it hurts, pain about 6 out of 10. It's getting bigger and there's more drainage than last week, "
              "serous, moderate amount. She cannot change her own dressing so we're seeing her daily. I cleansed with saline and applied Mepilex. "
              "High risk for infection. She has surgery scheduled November 6th.",
-     'must': [r'lymphoma', r'immuno-?\s?compromised|immune[- ]compromised', r'left thigh', r'bleed', r'6\s*/\s*10|6 out of 10',
-              r'(increas|bigger|larger)\w*.{0,40}size|size.{0,40}increas', r'drainage', r'daily', r'(unable|cannot|can.t).{0,30}(change|manage).{0,20}dressing',
+     'must': [r'cancer', r'lymphoma', r'immuno-?\s?compromised|immune[- ]compromised', r'left thigh', r'bleed', r'6\s*/\s*10|6 out of 10',
+              r'increas\w*.{0,40}size|size.{0,40}increas|bigger|larger|enlarg', r'drainage', r'daily', r'(unable|cannot|can.t).{0,30}(change|manage).{0,20}dressing',
               r'Mepilex', r'November 6', r'saline|NS\b'],
      'must_not': [r'squamous|basal|melanoma', r'\bcell cancer\b', r'physician (was )?(notified|informed)', r'no signs of infection'],
      'clarify': True},
