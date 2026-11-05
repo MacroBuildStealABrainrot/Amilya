@@ -27,4 +27,6 @@ def instructions():
         (ROOT/'roles'/f'{role.lower()}_v1.md').read_text(encoding='utf-8'),
         (ROOT/'formats'/f'{report}_v1.md').read_text(encoding='utf-8'),
         (ROOT/'community_nursing_v1.md').read_text(encoding='utf-8') if role in {'NURSE','OTHER_CLINICIAN'} else (ROOT/'clinical_style_v1.md').read_text(encoding='utf-8'),
+        (ROOT/'clinical_reasoning_v1.md').read_text(encoding='utf-8'),
+        *([examples.read_text(encoding='utf-8')] if (examples:=ROOT/'examples'/f'{report}_v1.md').is_file() else []),
     ])
