@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from server import clinical, providers, quick_workflows as quick
 from server.report_errors import TerminalReportError
-from server.clinical_models import Encounter, Evidence, Patient, TimelineEvent
+from server.clinical_models import ClinicalDocument, Encounter, Evidence, Patient, TimelineEvent
 from test_clinical import clinical_api
 from test_providers import completion, gateway
 
@@ -150,6 +150,32 @@ def test_consult_starts_without_evidence_and_keeps_history_as_data(quick_api, mo
         event = db.scalar(select(TimelineEvent).where(TimelineEvent.action == 'clinical.consult'))
         assert payload['message'] not in json.dumps(event.detail)
         assert 'Unverified prior' not in json.dumps(event.detail)
+
+
+def test_consult_reviews_the_report_on_screen_then_the_newest_saved_version(quick_api, monkeypatch):
+    case = start(quick_api, 'consultant')
+    encounter_id = case['encounter']['id']
+    seen = []
+    async def consultant(context, message, history, **kwargs):
+        seen.append(context)
+        return {'answer': 'Plan is clear.', 'considerations': [], 'usage': {}}
+    monkeypatch.setattr(providers, 'wound_consultant', consultant)
+    url = f"/api/v1/encounters/{encounter_id}/consult"
+    assert quick_api.client.post(url, json={'message': 'Review my report'}).status_code == 200
+    assert 'clinician_current_report' not in seen[-1]
+    with quick_api.sessions() as db:
+        encounter = db.get(Encounter, encounter_id)
+        for version, text in ((1, 'OLD SAVED REPORT'), (2, 'NEWEST SAVED REPORT')):
+            db.add(ClinicalDocument(workspace_id=encounter.workspace_id, encounter_id=encounter_id, text=text, template='nursing',
+                content_hash='x' * 64, version=version, case_revision=encounter.revision, fact_snapshot=[], request_hash='y' * 64,
+                created_by=encounter.created_by))
+        db.commit()
+    assert quick_api.client.post(url, json={'message': 'Review my report'}).status_code == 200
+    assert seen[-1]['clinician_current_report']['text'] == 'NEWEST SAVED REPORT'
+    response = quick_api.client.post(url, json={'message': 'Review my report again', 'current_report': 'MY UNSAVED EDIT'})
+    assert response.status_code == 200, response.text
+    assert seen[-1]['clinician_current_report']['text'] == 'MY UNSAVED EDIT'
+    assert quick_api.client.post(url, json={'message': 'x', 'current_report': 'y' * 60001}).status_code == 422
 
 
 @pytest.mark.parametrize('confirm_after_edit', [False, True])

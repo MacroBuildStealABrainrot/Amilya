@@ -715,7 +715,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         return try {
             rememberShiftMetadata();rememberShiftCase()
             if(shiftStorageProblem)return null
-            planShiftSummary(shiftCache.today(owner,today,zone),today,zone)
+            if(case!=null)persistEditor()
+            val visits=shiftCache.today(owner,today,zone)
+            // The clinician's own newer edits kept on this phone (not yet saved to the server) are the report as written.
+            val edits=visits.mapNotNull{v->vault.read("draft-$owner-${v.id}")?.let{runCatching{JSONObject(it).str("text")}.getOrNull()}?.takeIf{it.isNotBlank()}?.let{v.id to it}}.toMap()
+            planShiftSummary(applyPhoneEdits(visits,edits),today,zone)
         } catch (_:Exception) { null }
     }
     fun isSavedWork(row:JSONObject)=row.str("storage_state")=="saved" || row.optJSONObject("draft_data")?.str("retention")=="saved"
@@ -871,7 +875,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         val pending=consultantMessages.lastOrNull()?.let{it.str("role")=="user"&&it.str("content")==text}==true
         val history=if(pending)consultantMessages.dropLast(1)else consultantMessages
         if(!pending){consultantMessages=consultantMessages+obj("id" to UUID.randomUUID().toString(),"role" to "user","content" to text);vault.write(storeKey("consult-chat"),JSONArray(consultantMessages).toString())}
+        // Send the report exactly as it is on screen (including unsaved edits) so a review never checks an older version.
+        if(editorOwner==storeKey("draft"))persistEditor()
+        val onScreen=editor.takeIf{editorOwner==storeKey("draft") && it.isNotBlank() && it.length<=60000}
         val payload=obj("message" to text,"history" to JSONArray(boundedConsultHistory(history).map{obj("role" to it.str("role"),"content" to it.str("content"))}))
+        if(onScreen!=null)payload.put("current_report",onScreen)
         val sourceRevision=revision;val intent="consult-$sourceRevision"
         val reply=if(demo)obj("answer" to "This is the local sample. In a connected visit, Ask Consultant can start with your question and the information you choose to add. No model was called.","case_revision" to revision)else mutation(intent,"/encounters/$encounterId/consult",payload)
         require(reply.optInt("case_revision")==revision){"Your sources changed. Ask again using the current sources."}

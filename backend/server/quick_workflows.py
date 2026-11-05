@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from server import clinical, providers, documentation
-from server.clinical_models import Encounter, Evidence, Patient, TimelineEvent
+from server.clinical_models import ClinicalDocument, Encounter, Evidence, Patient, TimelineEvent
 from server.core import settings
 from server.db import get_db
 from server.identity import User, check_rate, current_user, require_csrf
@@ -58,6 +58,8 @@ QuickReport.model_rebuild()
 class ConsultRequest(StrictModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
     history: list[ConversationTurn] = Field(default_factory=list, max_length=20)
+    # The report exactly as it is on the clinician's screen right now, including edits not yet saved. Optional for older apps.
+    current_report: Annotated[str, StringConstraints(max_length=60000)] | None = None
 
     @model_validator(mode='after')
     def bounded_history(self):
@@ -161,6 +163,17 @@ def source_context(db: Session, encounter: Encounter):
     return context
 
 
+def current_report_context(db: Session, encounter: Encounter, on_screen: str | None):
+    """The report Ask Consultant reviews: the text on the clinician's screen if sent, else the newest saved version. Never regenerated."""
+    if on_screen and on_screen.strip():
+        return {'clinician_current_report': {'text': on_screen, 'version': 'as currently shown on the clinician\'s screen, including any unsaved edits'}}
+    latest = db.scalar(select(ClinicalDocument).where(ClinicalDocument.workspace_id == encounter.workspace_id,
+        ClinicalDocument.encounter_id == encounter.id).order_by(ClinicalDocument.version.desc()).limit(1))
+    if latest is None:
+        return {}
+    return {'clinician_current_report': {'text': latest.text, 'version': f'latest saved version {latest.version}'}}
+
+
 def consultation_context(turns):
     """Clinician messages are the clinician's own statements; consultant replies are AI suggestions, never findings."""
     return {
@@ -218,7 +231,7 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
 async def consult(encounter_id: str, payload: ConsultRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
     encounter = clinical.owned(db, Encounter, encounter_id, user)
     expected = encounter.revision
-    context = source_context(db, encounter)
+    context = {**source_context(db, encounter), **current_report_context(db, encounter, payload.current_report)}
     check_rate(f'clinical-assistant:{user.id}', limit=20)
     result = await providers.wound_consultant(context, payload.message,
         [turn.model_dump() for turn in payload.history], user=user, encounter_id=encounter_id)

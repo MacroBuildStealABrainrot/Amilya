@@ -111,6 +111,12 @@ PHOTO_RETAKE_MESSAGES = {
     'no_wound': 'Nothing clear is visible in this photo. Retake the photo.',
     'uncertain': "Photo isn't clear enough for assessment. Retake the photo.",
 }
+# Reasons where only PART of the area is hidden: visible findings are still kept, with this note instead of a retake.
+PHOTO_PARTIAL_VIEW_MESSAGES = {
+    'obstruction': 'Part of the area is covered. Only the visible part was assessed.',
+    'framing': 'Part of the area is outside the photo. Only the visible part was assessed.',
+    'distance': 'Photo taken from a distance. Only what is clearly visible was assessed; a closer photo would show more.',
+}
 MAX_RATE_LIMIT_ATTEMPTS = 2
 MAX_RATE_LIMIT_WAIT_SECONDS = 4.0
 REPORT_STAGE_TIMEOUT_SECONDS = 60
@@ -307,10 +313,16 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
         quality = photo_quality(data.get('quality')) if task == 'image' else None
         extra = data.get('warnings', [])
         if not isinstance(extra, list) or any(not isinstance(x, str) or len(x) > 1000 for x in extra): raise ValueError('Invalid warnings')
+        limited = None
         if quality and quality['retake_required']:
-            # Insufficient visual evidence cannot create findings, even if a model
-            # contradicts its own quality decision with plausible-looking facts.
-            return {'facts': [], 'warnings': [quality['message'], *extra[:15]], 'quality': quality}
+            if quality['reason'] not in PHOTO_PARTIAL_VIEW_MESSAGES or not data['facts']:
+                # Insufficient visual evidence cannot create findings, even if a model
+                # contradicts its own quality decision with plausible-looking facts.
+                return {'facts': [], 'warnings': [quality['message'], *extra[:15]], 'quality': quality}
+            # Part of the area is covered or out of view, yet visible findings were reported (for example a red toe beside a
+            # dressing). Keep the findings that pass every check below and say plainly that only the visible part was assessed.
+            limited, quality = quality, {**photo_quality({'status': 'sufficient', 'reason': 'none'}),
+                                         'limited_view': quality['reason'], 'message': PHOTO_PARTIAL_VIEW_MESSAGES[quality['reason']]}
         facts, warnings = [], []
         invalid_photo_count = 0
         for item in data['facts']:
@@ -338,12 +350,14 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
                 diagnostics.event({'source':'server','stage':'photo_finding_validation','status':'failed','error_code':'INVALID_PHOTO_FINDING'})
         result = {'facts': facts, 'warnings': warnings + extra[:16]}
         if quality:
-            if not facts and invalid_photo_count:
+            if not facts and invalid_photo_count and not limited:
                 raise ValueError('No valid visual findings after candidate validation')
             # A "sufficient" image that yielded no assessable observations must
             # not be shown as a completed wound assessment.
             if not facts:
-                quality = photo_quality({'status': 'insufficient', 'reason': 'uncertain'})
+                quality = limited or photo_quality({'status': 'insufficient', 'reason': 'uncertain'})
+                result['warnings'].insert(0, quality['message'])
+            elif limited:
                 result['warnings'].insert(0, quality['message'])
             result['quality'] = quality
         return result
@@ -1154,9 +1168,7 @@ async def refine_quick_documentation(context, text, instruction, template, *, cu
 async def wound_consultant(context, message, history, *, user, encounter_id):
     scope_guard(message)
     if not 1 <= len(message.strip()) <= 2000:
-        raise HTTPException(422, 'Ask a brief wound-care question')
-    if re.search(r'(?i)\b(poem|song|recipe|vacation|holiday|stock price|investment|video game|javascript|python code|sports score)\b', message):
-        raise HTTPException(422, 'Wound Consultant supports wound-care questions and clinical documentation')
+        raise HTTPException(422, 'Ask a clinical question of up to 2,000 characters')
     return await routed('consult', json.dumps({**context, 'untrusted_question': message,
         'untrusted_conversation_history': history}, ensure_ascii=False, default=str),
         user=user, encounter_id=encounter_id)
