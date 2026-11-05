@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.woundcopilot.android.ui.*
 
 val quickFormats = linkedMapOf(
-    "nursing" to "Nursing Note",
+    "nursing" to "Note",
     "soap" to "SOAP Note",
     "sbar" to "SBAR",
     "physician_update" to "Physician Update",

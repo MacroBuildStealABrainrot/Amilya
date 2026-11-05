@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 
 DOCUMENT_TYPES = {
-    'nursing': 'Nursing Note', 'soap': 'SOAP Note',
+    'nursing': 'Note', 'soap': 'SOAP Note',
     'physician_update': 'Physician Update', 'referral_letter': 'Referral Letter',
     'sbar': 'SBAR', 'handoff': 'Handoff Report',
     'diagnostics': 'Diagnostics Summary', 'medical_order': 'Order Draft',
