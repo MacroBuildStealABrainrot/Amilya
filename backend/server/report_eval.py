@@ -78,6 +78,17 @@ SCENARIOS = [
      'text': 'Burning on urination 2 days, frequency, no fever, no flank pain. Urine dip positive nitrites and leukocytes. Nitrofurantoin started per guideline, culture sent.',
      'must': [r'(2|two) days', r'frequency', r'nitrite', r'leukocyte', r'nitrofurantoin', r'culture', r'(no|denies).{0,30}fever'],
      'must_not': [r'\d+\s*mg', r'pyelonephritis (is )?(present|confirmed)'], 'max_words': 70},
+    {'id': 'word_fixes_and_location_correction', 'specialty': 'community nursing / infusion', 'profession': 'RPN', 'template': 'nursing',
+     'text': "Client on IV Piptaza through the PICC, dose given as ordered. Also on laces 40 in the morning. Wound on the right heel, sorry no, "
+             "right lateral ankle, cleansed with sailing and Biatine foam applied. SP catheter draining clear yellow urine.",
+     'must': [r'piperacillin|tazobactam|Piptazo', r'PICC', r'Lasix|furosemide', r'right lateral ankle', r'saline|NS\b', r'Biatain', r'suprapubic'],
+     'must_not': [r'heel', r'Piptaza\b', r'\blaces\b', r'sailing', r'Biatine', r'blood return', r'site (clean|intact|unremarkable)']},
+    {'id': 'questions_to_history_no_invented_exam', 'specialty': 'post-hospital follow-up', 'profession': 'RN', 'template': 'nursing',
+     'text': "Any fever? No. Chills? No. Any chest pain? No. Daughter says he seems more tired today. I listened to his lungs. "
+             "BP 100 over 60, heart rate 82, resp rate 18, temp 36.2. Family doctor notified about the fatigue.",
+     'must': [r'denies.{0,40}fever', r'chills', r'chest pain', r'daughter.{0,30}(report|state|said)', r'100\s*/\s*60', r'82', r'18', r'36\.2',
+              r'(family (doctor|physician)|FD|physician).{0,30}(notified|informed|aware)'],
+     'must_not': [r'lungs? (are |were )?clear|clear to auscultation|air entry|\bcrackles\b|\bwheez', r'client is (lethargic|fatigued)', r'Any fever\?']},
 ]
 
 

@@ -63,3 +63,15 @@ def test_connected_writing_and_unclear_terms_rules_reach_generation_and_qa(task)
 def test_nursing_examples_lead_with_a_connected_complex_note():
     text = (ROOT / 'examples' / 'nursing_v1.md').read_text()
     assert text.index('Complex or changing visit') < text.index('truly routine visit')
+
+
+@pytest.mark.parametrize('profession', ['RPN', 'MD'])
+def test_handoff_rules_reach_every_profession(profession):
+    token = layers.select(SimpleNamespace(profile={'profession': profession}), 'nursing')
+    try:
+        prompt = providers.prompt('quick_draft')
+        assert 'Client denies fever, chills or pain' in prompt and 'never reproduce the questions' in prompt
+        assert 'Piptaza or Piptazo = piperacillin/tazobactam' in prompt and 'SP catheter = suprapubic catheter' in prompt
+        assert 'HISTORY, PHYSICAL EXAMINATION, ASSESSMENT and OUTCOME / PLAN' in prompt and 'Otherwise keep the chosen format' in prompt
+    finally:
+        layers.selection.reset(token)
