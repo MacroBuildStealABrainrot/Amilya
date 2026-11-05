@@ -106,7 +106,7 @@ PHOTO_RETAKE_MESSAGES = {
     'lighting': 'Improve the lighting and retake the photo.',
     'distance': 'Move closer and retake the photo.',
     'framing': 'Retake the photo with everything in the frame.',
-    'obstruction': 'Something is blocking the view. Retake the photo.',
+    'obstruction': 'A dressing or object is covering the area. Remove or move it if safe, then retake the photo.',
     'no_wound': 'Nothing clear is visible in this photo. Retake the photo.',
     'uncertain': "Photo isn't clear enough for assessment. Retake the photo.",
 }
