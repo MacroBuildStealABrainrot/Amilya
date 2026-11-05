@@ -1,6 +1,8 @@
 Style examples for a Note (invented composite cases). Copy the voice only, never any finding or product.
 Full note: "Left 3rd toe has dry stable necrotic eschar to distal tip with surrounding dry callus and iodine staining, no active drainage noted. Left shin superficial open area with pink-red moist wound bed and small amount of serous drainage on old dressing, periwound dry and flaky with mild redness. Left 3rd toe dressed with Inadine, left shin with Acticoat. Monitor closely for increased redness, warmth, swelling, drainage, odour, pain, fever or progression of toe necrosis."
-Short routine visit notes stay short, one to three sentences, no reasoning added:
+Complex or changing visit, written as connected sentences that join related facts (never a list of clipped fragments):
+"Client has metastatic breast cancer on chemotherapy and is immunocompromised. Fungating lesion to the right axilla has increased in size since last visit, with new contact bleeding and increased serous drainage; client reports pain at the site. She is unable to manage her own dressing, so she is seen daily for dressing changes and close monitoring given bleeding, increasing drainage and infection risk. Oncology appointment booked for next week."
+Only a truly routine visit may be one to three sentences, and still in full, natural sentences:
 "Seen after report of blocked suprapubic catheter. Catheter changed using 16 Fr catheter with clear urine return. No other concerns."
 "Seen for buttock pressure injury. Wound base has granulation and slough tissue with no signs of infection. Cleansed with saline and PureCleanse, followed by Inadine and Biatain foam dressing."
 "Right shin wound reopened due to rubbing from compression garment. Cleansed with saline and PureCleanse, followed by Biatain Alginate and Biatain Border."

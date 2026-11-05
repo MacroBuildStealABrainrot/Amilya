@@ -44,3 +44,22 @@ def test_charting_rules_reach_generation_and_qa():
             assert 'charting_rules_v1' in prompt and 'lungs clear' in prompt and 'EMS activated' in prompt
     finally:
         layers.selection.reset(token)
+
+
+@pytest.mark.parametrize('task', ['quick_draft', 'quick_qa'])
+def test_connected_writing_and_unclear_terms_rules_reach_generation_and_qa(task):
+    token = layers.select(SimpleNamespace(profile={'profession': 'RPN'}), 'nursing')
+    try:
+        prompt = providers.prompt(task)
+        assert 'not a list of clipped fragments' in prompt or 'disconnected clipped fragments' in prompt
+        assert 'cell cancer' in prompt
+        if task == 'quick_draft':
+            assert 'Shorter is not better' in prompt
+            assert 'seen daily because client cannot change her own dressing' in prompt
+    finally:
+        layers.selection.reset(token)
+
+
+def test_nursing_examples_lead_with_a_connected_complex_note():
+    text = (ROOT / 'examples' / 'nursing_v1.md').read_text()
+    assert text.index('Complex or changing visit') < text.index('truly routine visit')
