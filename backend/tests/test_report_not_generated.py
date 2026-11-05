@@ -53,3 +53,19 @@ def test_a_reply_that_needs_more_than_the_old_2400_limit_now_finishes(gateway):
     context = {'case_facts': [], 'untrusted_sources': [{'kind': 'audio', 'text': 'Client reports burning. Dressing changed.'}], 'rejected_claims_do_not_reinstate': []}
     result = asyncio.run(providers.quick_documentation(context, 'nursing', 'concise', user=gateway.user, encounter_id='long'))
     assert result['text'] == 'Synthetic long note.'
+
+
+def test_case_review_in_ask_consultant_has_room_for_a_long_answer(gateway):
+    """2026-11-04: 'Give a full review of this case' hit the output limit in Ask Consultant (reply cut off, nothing accepted)."""
+    seen = []
+    def provider(request):
+        budget = request['json'].get('max_tokens') or request['json'].get('max_completion_tokens')
+        seen.append(budget)
+        return completion({'answer': 'Synthetic long review.', 'sources': []}, finish='stop' if budget >= 5000 else 'length')
+    gateway.http.responses = [provider]
+    context = {'case_facts': [], 'untrusted_sources': [{'kind': 'audio', 'text': 'Client reports burning. Dressing changed.'}]}
+    try:
+        asyncio.run(providers.wound_consultant(context, 'Give a full review of this case.', [], user=gateway.user, encounter_id='review'))
+    except Exception:
+        pass
+    assert seen and seen[0] >= 8000

@@ -906,7 +906,7 @@ async def routed(task, content, model=None, **kwargs):
     minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
     if task in {'extract', 'document'}:
         minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
-    elif task in {'quick_draft', 'quick_refine'}:
+    elif task in {'quick_draft', 'quick_refine', 'consult'}:
         minimum = max(minimum, 8000)
     elif task == 'image':
         # High-effort specialist reasoning also uses this allowance; leave room for the answer.
