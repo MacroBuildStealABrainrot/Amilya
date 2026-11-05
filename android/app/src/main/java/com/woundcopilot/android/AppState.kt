@@ -646,6 +646,16 @@ class AppState(application:Application):AndroidViewModel(application) {
         screen=quickDestination()
     }
     var deleteWorkId by mutableStateOf<String?>(null)
+    /** Own name for a saved visit. Kept only on this phone (encrypted vault), never sent to the server or into diagnostics. */
+    var renameWorkId by mutableStateOf<String?>(null)
+    private var visitNameTick by mutableStateOf(0)
+    private fun visitNameKey(id:String)="visit-name-${user?.str("id") ?: "sample"}-$id"
+    fun visitName(id:String):String{visitNameTick;return runCatching{vault.read(visitNameKey(id)).orEmpty()}.getOrDefault("")}
+    fun renameVisit(id:String,name:String){
+        val clean=name.trim().take(60)
+        runCatching{if(clean.isBlank())vault.remove(visitNameKey(id)) else vault.write(visitNameKey(id),clean)}
+        visitNameTick++;renameWorkId=null
+    }
     var closeWorkPrompt by mutableStateOf(false)
     // End-of-shift reads only local copies. These hooks observe data already returned by existing routes.
     private val shiftCache by lazy { ShiftSummaryCache(vaultStore) { vault.names() } }
@@ -710,6 +720,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun isSavedWork(row:JSONObject)=row.str("storage_state")=="saved" || row.optJSONObject("draft_data")?.str("retention")=="saved"
     private fun eraseLocalWork(id:String){
+        runCatching{vault.remove(visitNameKey(id))}
         forgetShiftVisit(id)
         recordingRecovery.complete(id,user?.str("id")?:"sample");refreshRecordingJobs()
         val context=getApplication<Application>();val owner="${user?.str("id")}:$id"

@@ -244,11 +244,12 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             val type=when(mode.lowercase()){
                 "photo","photo_assessment","image"->"Photo assessment"
                 "consultant","wound_consultant","ask_consultant"->"Ask Consultant"
-                "document","report","nursing"->"Nursing visit"
+                "document","report","nursing"->"Visit"
                 else->"Visit"
             }
             // Keep patient-entered titles out of Saved Work previews.
-            val name="$type, ${localTime(e.str("updated_at"))}"
+            val custom=s.visitName(e.str("id"))
+            val name=if(custom.isNotBlank())custom else "$type, ${localTime(e.str("updated_at"))}"
             GlassPanel(Modifier.fillMaxWidth().clickable(role=Role.Button){s.openEncounter(e.str("id"))}){
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
                     Box(Modifier.size(45.dp).background(c.primaryContainer,CircleShape),contentAlignment=Alignment.Center){Text(name.split(' ').mapNotNull{it.firstOrNull()}.take(2).joinToString(""),style=MaterialTheme.typography.titleMedium,color=c.onPrimaryContainer)}
@@ -263,7 +264,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     }
                     InstrumentIcon("arrow",tint=c.primary)
                 }
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){TextButton({s.deleteWorkId=e.str("id")}){Text("Delete")};Spacer(Modifier.weight(1f));Text(localTime(e.str("updated_at")),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){TextButton({s.deleteWorkId=e.str("id")}){Text("Delete")};TextButton({s.renameWorkId=e.str("id")}){Text("Rename")};Spacer(Modifier.weight(1f));Text(localTime(e.str("updated_at")),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
             }
         }
     }

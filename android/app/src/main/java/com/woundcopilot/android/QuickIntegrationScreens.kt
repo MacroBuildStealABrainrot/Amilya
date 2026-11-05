@@ -43,12 +43,13 @@ import java.time.format.DateTimeFormatter
             val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().lowercase()
             val type=when(mode){
                 "photo","photo_assessment","image"->"Photo assessment"
-                "consultant","wound_consultant","ask_consultant"->"Wound consultant"
-                "document","report","nursing"->"Nursing visit"
+                "consultant","wound_consultant","ask_consultant"->"Ask Consultant"
+                "document","report","nursing"->"Visit"
                 else->"Visit"
             }
             val rawTitle=e.str("title").trim()
-            val title=if(rawTitle.isNotBlank() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
+            val custom=s.visitName(e.str("id"))
+            val title=if(custom.isNotBlank())custom else if(rawTitle.isNotBlank() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
                 rawTitle else type
             SimpleSavedWork(e.str("id"),title,localTime(e.str("updated_at")))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},

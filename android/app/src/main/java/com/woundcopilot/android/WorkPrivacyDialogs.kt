@@ -12,6 +12,13 @@ import androidx.compose.foundation.layout.Column
             TextButton({s.closeTemporaryWork()},enabled=!s.loading){Text("Finish without saving")}
             TextButton({s.closeWorkPrompt=false}){Text("Keep working")}
         }})
+    s.renameWorkId?.let{id->
+        var text by androidx.compose.runtime.remember(id){androidx.compose.runtime.mutableStateOf(s.visitName(id))}
+        AlertDialog(onDismissRequest={s.renameWorkId=null},title={Text("Rename this visit")},
+            text={Column{Text("Use a name that helps you find it. It stays on this phone only. Avoid patient names or identifiers.")
+                OutlinedTextField(value=text,onValueChange={text=it.take(60)},singleLine=true,label={Text("Name")})}},
+            confirmButton={TextButton({s.renameVisit(id,text)}){Text("Save")}},
+            dismissButton={TextButton({s.renameWorkId=null}){Text("Cancel")}})}
     s.deleteWorkId?.let{id->AlertDialog(onDismissRequest={s.deleteWorkId=null},title={Text(if(id=="all-saved")"Delete all saved work?"else "Delete this work?")},
         text={Text("This removes reports, assessments and sources from active app storage and clears local copies. Outstanding transfer links are revoked. Previously exported copies and existing backups cannot be recalled. This cannot be undone.")},
         confirmButton={TextButton({s.deleteWork(id)},enabled=!s.loading){Text("Permanently delete")}},
