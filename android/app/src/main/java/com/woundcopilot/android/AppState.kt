@@ -512,7 +512,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             else voiceInstruction=r.str("text")
             warnings(r);vault.remove(keyName);clearCaptureSelection(captureKind)
             if(file.canonicalFile.parentFile==File(getApplication<Application>().filesDir,"recordings").canonicalFile && file.extension=="m4a")RecordingService.clearPending(getApplication(),file.absolutePath)
-            screen=if(voicePhotoNote)"photo_assessment" else if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;voicePhotoNote=false;return
+            screen=if(voicePhotoNote)photoNoteReturn else if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;voicePhotoNote=false;return
         }
         if(demo){val copy=JSONObject(case.toString());val id=UUID.randomUUID().toString();copy.getJSONArray("evidence").put(obj("id" to id,"kind" to kind,"text" to "Synthetic preview: no AI request was sent.","created_at" to now(),"metadata" to obj("filename" to file.name,"mime" to mime,"media_hash" to digest,"raw_media_retained" to false,"photo_review" to photoReview)));copy.getJSONObject("encounter").put("revision",revision+1);case=copy;vault.write(storeKey("source-$id"),file.absolutePath);notice="Capture kept on this device. No provider request was sent."}
         else {
@@ -527,7 +527,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 uploadResponse(keyName){
                     if(kind=="audio" && file.extension.lowercase() in listOf("m4a","mp4"))
                         AudioChunks(api,vault).transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
-                    else api.upload(encounterId,file,mime,kind,key,photoReview)
+                    else api.upload(encounterId,file,mime,kind,key,photoReview,if(kind=="photo")photoNote else null)
                 }.also { if(kind=="photo")requireValidPhotoUpload(it) }
             }catch(e:Exception){
                 photoEvent("photo_retained",if(file.isFile && file.length()>0)"success"else "failed")
@@ -1035,9 +1035,18 @@ class AppState(application:Application):AndroidViewModel(application) {
     var photoNoteAlerts by mutableStateOf<List<String>>(emptyList()); private set
     var photoResultVisit by mutableStateOf<String?>(null); private set
     private var voicePhotoNote=false
-    fun updatePhotoNote(text:String){photoNote=text.take(4000);runCatching{vault.write(storeKey("photo-note"),photoNote)}}
-    fun loadPhotoNote(){if(photoResultVisit!=encounterId){photoChartNote=null;photoConsultReview=null;photoNoteAlerts=emptyList()};photoNote=runCatching{vault.read(storeKey("photo-note"))}.getOrNull().orEmpty()}
-    fun recordPhotoNote(){if(loading)return;voiceCorrection=false;voiceMessage=true;voicePhotoNote=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
+    private var photoNoteReturn="photo_assessment"
+    private var photoNoteVisit:String?=null
+    fun updatePhotoNote(text:String){photoNote=text.take(4000);photoNoteVisit=encounterId;runCatching{vault.write(storeKey("photo-note"),photoNote)}}
+    fun loadPhotoNote(){
+        if(photoResultVisit!=encounterId){photoChartNote=null;photoConsultReview=null;photoNoteAlerts=emptyList()}
+        val saved=runCatching{vault.read(storeKey("photo-note"))}.getOrNull()
+        // A note typed before the first photo belongs to the visit that photo starts (its address changes once it is sent).
+        val carried=photoNoteVisit?.let{it==encounterId || it.startsWith("local-")}==true
+        photoNote=saved ?: if(carried)photoNote else ""
+        if(saved==null && carried && photoNote.isNotBlank())updatePhotoNote(photoNote)
+    }
+    fun recordPhotoNote(){if(loading)return;photoNoteReturn=if(screen=="photo")"photo" else "photo_assessment";voiceCorrection=false;voiceMessage=true;voicePhotoNote=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
     /**
      * Part 1: a charting note from the photo findings plus the clinician's own words (the normal report pipeline, so the
      * source check runs). Part 2: a consultant review from Ask Consultant. Part 2 is AI suggestions and is never charted.

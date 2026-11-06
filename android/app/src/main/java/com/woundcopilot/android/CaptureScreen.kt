@@ -212,6 +212,18 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                     InstrumentIcon("camera",Modifier.size(48.dp),tint)
                 }
             }
+            // The clinician's own words go with the photo, so the AI assesses the image knowing the site, side and history.
+            if (photo && selectedFile == null) {
+                LaunchedEffect(s.encounterId) { s.loadPhotoNote() }
+                Text("Your notes about this wound (optional)", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(s.photoNote, { s.updatePhotoNote(it) }, Modifier.fillMaxWidth(), enabled = idle, minLines = 2,
+                    placeholder = { Text("For example: left heel, 3 weeks, warm, odour, diabetic, using Inadine") })
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton({ s.recordPhotoNote() }, enabled = idle) { Text("Add by voice") }
+                    if (s.photoNote.isNotBlank()) TextButton({ s.updatePhotoNote("") }, enabled = idle) { Text("Clear") }
+                }
+                Text("Sent with the photo so the assessment, the charting note and the consultant review can use it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (photo) WcpButton(if (selectedFile == null) "Take photograph" else "Retake", {
                 launchExternal(ExternalKind.CAMERA)
             }, Modifier.fillMaxWidth(), enabled = idle)

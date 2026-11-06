@@ -626,7 +626,7 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
                           consent: bool = Form(False), duration_seconds: float | None = Form(None),
                           wound_id: str | None = Form(None), photo_review: str | None = Form(None),
                           consent_method: str | None = Form(None), consent_confirmed_at: str | None = Form(None),
-                          consent_wording: str | None = Form(None),
+                          consent_wording: str | None = Form(None), clinician_note: str | None = Form(None, max_length=4000),
                           user: User = Depends(current_user), db: Session = Depends(get_db)):
     from . import diagnostics
     diagnostics.bind(user)
@@ -684,7 +684,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
         candidates, validation_warnings = validate_candidates(result.get('facts', []), text, 'document')
         warnings.extend(validation_warnings)
     else:
-        result = await providers.analyze_media(data, mime, kind, user=user, db=db, encounter_id=encounter_id)
+        result = await providers.analyze_media(data, mime, kind, user=user, db=db, encounter_id=encounter_id,
+                                               clinician_note=(clinician_note or '').strip()[:4000] if kind == 'photo' else '')
         if kind == 'photo':
             automatic_quality = result.get('quality')
         if kind == 'document':
