@@ -502,6 +502,12 @@ class AppState(application:Application):AndroidViewModel(application) {
         }
         val captureKind=if(kind=="audio" && voiceMessage)"message"else if(kind=="audio" && voiceCorrection)"correction"else if(kind=="document")"file"else kind
         val identity=obj("file" to file.name,"hash" to digest,"mime" to mime,"kind" to kind,"photo_review" to photoReview)
+        // The note and wound details are part of the photo request: an unchanged retry reuses the same request (no
+        // second charge), while changed entries make a new request.
+        val sentNote=if(kind=="photo")photoNote.trim().take(4000) else ""
+        val sentDetails=if(kind=="photo" && !photoDetails.isEmpty())photoDetails.toJson() else null
+        if(sentNote.isNotBlank())identity.put("clinician_note",sentNote)
+        if(sentDetails!=null)identity.put("clinician_findings",sentDetails)
         if(captureKind in listOf("message","correction"))identity.put("purpose",captureKind)
         val keyName=storeKey("upload-"+hash(canonical(identity)));val key=vault.read(keyName) ?: UUID.randomUUID().toString().also{vault.write(keyName,it)}
         if((voiceCorrection || voiceMessage) && kind=="audio"){
@@ -527,7 +533,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 uploadResponse(keyName){
                     if(kind=="audio" && file.extension.lowercase() in listOf("m4a","mp4"))
                         AudioChunks(api,vault).transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
-                    else api.upload(encounterId,file,mime,kind,key,photoReview,if(kind=="photo")photoNote else null)
+                    else api.upload(encounterId,file,mime,kind,key,photoReview,sentNote.ifBlank{null},sentDetails)
                 }.also { if(kind=="photo")requireValidPhotoUpload(it) }
             }catch(e:Exception){
                 photoEvent("photo_retained",if(file.isFile && file.length()>0)"success"else "failed")
@@ -537,6 +543,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             if(kind=="photo" && (uploadOwner!=user?.str("id") || uploadEncounter!=encounterId))
                 throw ApiException(409,"The active visit changed. Reopen the original visit to see its photo assessment.")
             photoEvent("photo_request","success")
+            if(kind=="photo")photoEntriesSent=hash(sentNote+"|"+(sentDetails?.toString()?:""))
             r.optJSONObject("evidence")?.str("id")?.let{vault.write(storeKey("source-$it"),file.absolutePath)}
             mergeSource(r);warnings(r);screen="encounter"
             if(visitParts.size>1)visitParts.drop(position+1).forEachIndexed{index,part->transcribeVisitPart(part,mime,VisitPosition(position+index+2,visitParts.size,visitId))}
@@ -1034,6 +1041,10 @@ class AppState(application:Application):AndroidViewModel(application) {
     var photoConsultReview by mutableStateOf<String?>(null); private set
     var photoNoteAlerts by mutableStateOf<List<String>>(emptyList()); private set
     var photoResultVisit by mutableStateOf<String?>(null); private set
+    var photoDetails by mutableStateOf(PhotoDetails()); private set
+    /** Fingerprint of the note and details that already went to the server with a photo of this visit. */
+    private var photoEntriesSent:String?=null
+    fun updatePhotoDetails(details:PhotoDetails){photoDetails=details;photoNoteVisit=encounterId;runCatching{vault.write(storeKey("photo-details"),details.toStored())}}
     private var voicePhotoNote=false
     private var photoNoteReturn="photo_assessment"
     private var photoNoteVisit:String?=null
@@ -1044,7 +1055,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         // A note typed before the first photo belongs to the visit that photo starts (its address changes once it is sent).
         val carried=photoNoteVisit?.let{it==encounterId || it.startsWith("local-")}==true
         photoNote=saved ?: if(carried)photoNote else ""
+        val savedDetails=runCatching{vault.read(storeKey("photo-details"))}.getOrNull()
+        photoDetails=if(savedDetails!=null)PhotoDetails.fromStored(savedDetails) else if(carried)photoDetails else PhotoDetails()
         if(saved==null && carried && photoNote.isNotBlank())updatePhotoNote(photoNote)
+        if(savedDetails==null && carried && !photoDetails.isEmpty())updatePhotoDetails(photoDetails)
+        if(!carried && saved==null)photoEntriesSent=null
     }
     fun recordPhotoNote(){if(loading)return;photoNoteReturn=if(screen=="photo")"photo" else "photo_assessment";voiceCorrection=false;voiceMessage=true;voicePhotoNote=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
     /**
@@ -1054,7 +1069,9 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun photoNoteAndReview():Unit=runTask("Writing the charting note and consultant review",purpose="report",retry={photoNoteAndReview()}){
         ensureRemoteDocument()
         val visit=encounterId;val sourceRevision=revision;val note=photoNote.trim().take(4000)
-        val turns=if(note.isBlank())JSONArray() else JSONArray().put(obj("role" to "user","content" to note))
+        // Entries already sent with a photo are stored with that photo on the server and reach the note from there.
+        val alreadySent=photoEntriesSent==hash(note+"|"+(if(photoDetails.isEmpty())"" else photoDetails.toJson().toString()))
+        val turns=if(note.isBlank() || alreadySent)JSONArray() else JSONArray().put(obj("role" to "user","content" to note))
         val reportPayload=obj("template" to "nursing","use_ai" to true,"preferred_length" to "concise","consultation" to turns)
         val reportIntent="photo-note-$sourceRevision-"+hash(note).take(16)
         val report=if(demo)obj("text" to "Sample charting note. No AI request was sent.","case_revision" to revision)else mutation(reportIntent,"/encounters/$visit/quick-report",reportPayload,keepCodeOnServerError=true)

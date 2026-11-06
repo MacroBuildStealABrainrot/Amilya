@@ -287,7 +287,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
     }
 
-    suspend fun upload(encounter:String,file:File,mime:String,kind:String,key:String,photoReview:JSONObject?=null,clinicianNote:String?=null):JSONObject {
+    suspend fun upload(encounter:String,file:File,mime:String,kind:String,key:String,photoReview:JSONObject?=null,clinicianNote:String?=null,clinicianFindings:JSONObject?=null):JSONObject {
 
         val fields=mutableMapOf("kind" to kind)
 
@@ -297,6 +297,8 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
         // The clinician's own words about the wound go WITH the photo, so the photo assessment can use them.
         if(kind=="photo" && !clinicianNote.isNullOrBlank())fields["clinician_note"]=clinicianNote.trim().take(4000)
+
+        if(kind=="photo" && clinicianFindings!=null && clinicianFindings.length()>0)fields["clinician_findings"]=clinicianFindings.toString()
 
         return multipart("/encounters/$encounter/upload",file,mime,fields,key)
 

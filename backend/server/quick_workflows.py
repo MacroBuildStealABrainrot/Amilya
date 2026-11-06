@@ -142,6 +142,19 @@ def _order_visit_parts(sources, rows):
     return ordered
 
 
+def _photo_entries_text(row):
+    """What the clinician typed, said or picked with a photo, as the clinician's own words (never as something seen)."""
+    entries = (row.metadata_json or {}).get('clinician_entries') if row.kind == 'photo' and isinstance(row.metadata_json, dict) else None
+    if not isinstance(entries, dict):
+        return None
+    parts = []
+    if entries.get('note'):
+        parts.append('Clinician note sent with this photo: ' + str(entries['note']))
+    if entries.get('findings_text'):
+        parts.append('Clinician-recorded findings on assessment: ' + str(entries['findings_text']) + '.')
+    return ' '.join(parts) or None
+
+
 def source_context(db: Session, encounter: Encounter):
     all_facts = clinical.case_facts(db, encounter)
     facts = [fact for fact in all_facts if fact['confirmation_state'] != 'rejected'
@@ -149,7 +162,7 @@ def source_context(db: Session, encounter: Encounter):
     rejected = [fact for fact in all_facts if fact['confirmation_state'] == 'rejected']
     rows = list(db.scalars(select(Evidence).where(Evidence.workspace_id == encounter.workspace_id,
         Evidence.encounter_id == encounter.id).order_by(Evidence.created_at, Evidence.id)))
-    sources = [{'id': row.id, 'kind': row.kind, 'text': row.text,
+    sources = [{'id': row.id, 'kind': row.kind, 'text': row.text if row.text is not None else _photo_entries_text(row),
                 'warnings': row.warnings, 'created_at': clinical.iso(row.created_at),
                 # A long visit recorded in parts: every part is one source; label them so they read as one visit, in order.
                 **({'recording_part': f"Part {row.metadata_json['visit_part']} of {row.metadata_json['visit_parts']} of the same visit recording"}

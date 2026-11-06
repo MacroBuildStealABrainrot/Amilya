@@ -17,6 +17,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -64,10 +69,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
         if (newlySelected) s.vault.remove("$key-review")
         path = file.absolutePath
         mime = selectedMime
-        val currentOwner = "${s.user?.str("id")}:${s.encounterId}${if (purpose in listOf("message", "correction")) ":$purpose" else ""}"
-        if (photo && submitNewPhoto && newlySelected && currentOwner == ownerKey && !s.loading) {
-            s.upload(file, selectedMime, "photo")
-        }
+
+        // Photos are never sent on selection: the review screen sends photo, note and details together on "Assess photo".
     }
 
     LaunchedEffect(key,s.externalCapture.revision) {
@@ -212,19 +215,7 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                     InstrumentIcon("camera",Modifier.size(48.dp),tint)
                 }
             }
-            // The clinician's own words go with the photo, so the AI assesses the image knowing the site, side and history.
-            if (photo && selectedFile == null) {
-                LaunchedEffect(s.encounterId) { s.loadPhotoNote() }
-                Text("Your notes about this wound (optional)", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(s.photoNote, { s.updatePhotoNote(it) }, Modifier.fillMaxWidth(), enabled = idle, minLines = 2,
-                    placeholder = { Text("For example: left heel, 3 weeks, warm, odour, diabetic, using Inadine") })
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton({ s.recordPhotoNote() }, enabled = idle) { Text("Add by voice") }
-                    if (s.photoNote.isNotBlank()) TextButton({ s.updatePhotoNote("") }, enabled = idle) { Text("Clear") }
-                }
-                Text("Sent with the photo so the assessment, the charting note and the consultant review can use it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (photo) WcpButton(if (selectedFile == null) "Take photograph" else "Retake", {
+            if (photo && selectedFile == null) WcpButton("Take photograph", {
                 launchExternal(ExternalKind.CAMERA)
             }, Modifier.fillMaxWidth(), enabled = idle)
             if (!(photo && selectedFile != null)) {
@@ -236,7 +227,14 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
         }
         if (importBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if(s.externalCapture.canDiscard)TextButton({s.externalCapture.discard()}){Text("Cancel pending selection")}
-        if (selectedFile != null && (!audio || !rec.recording)) {
+        if (photo && selectedFile != null) {
+            PhotoReviewPanel(s, selectedFile, idle, sizeValid,
+                onRetake = { launchExternal(ExternalKind.CAMERA) },
+                onAssess = {
+                    val batch = s.pendingPhotoFiles()
+                    if (batch.isNotEmpty()) s.uploadPhotos(batch) else s.upload(selectedFile, mime, kind)
+                })
+        } else if (selectedFile != null && (!audio || !rec.recording)) {
             LocalMediaPreview(selectedFile, kind)
             if (kind != "document" && selectedFile.isFile && !(audio && rec.recording)) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val shareMime = if (photo) "image/jpeg" else "audio/mp4"
@@ -388,3 +386,86 @@ private fun captureMimeFromExtension(path: String, kind: String) = when (File(pa
     "csv" -> "text/csv"; "txt" -> "text/plain"; "pdf" -> "application/pdf"
     else -> if (kind == "audio") "audio/mp4" else if (kind == "photo") "image/jpeg" else "application/pdf"
 }
+
+
+/**
+ * After a photo: one simple review screen. Photo with a small Retake, an optional note (type or dictate), optional
+ * wound details folded away, and one large "Assess photo". Nothing is sent until that button is tapped.
+ */
+@Composable
+private fun PhotoReviewPanel(s: AppState, file: File, idle: Boolean, sizeValid: Boolean, onRetake: () -> Unit, onAssess: () -> Unit) {
+    LaunchedEffect(s.encounterId) { s.loadPhotoNote() }
+    var open by rememberSaveable(s.encounterId) { mutableStateOf(false) }
+    val details = s.photoDetails
+    Box(Modifier.fillMaxWidth()) {
+        LocalMediaPreview(file, "photo")
+        OutlinedButton(onRetake, Modifier.align(Alignment.BottomEnd).padding(12.dp), enabled = idle,
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Black.copy(alpha = 0.45f), contentColor = Color.White)) {
+            Text("↻  Retake")
+        }
+    }
+    if (!sizeValid) Text("This file is too large to process. Choose another file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Add a note — optional", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    OutlinedTextField(s.photoNote, { s.updatePhotoNote(it) }, Modifier.fillMaxWidth(), enabled = idle, minLines = 3,
+        placeholder = { Text("Type or speak a quick note…") },
+        trailingIcon = {
+            FilledIconButton({ s.recordPhotoNote() }, enabled = idle, modifier = Modifier.size(52.dp)) {
+                InstrumentIcon("voice", Modifier.size(26.dp), MaterialTheme.colorScheme.onPrimary)
+            }
+        })
+    OutlinedButton({ open = !open }, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = idle) {
+        Text("+", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.width(12.dp))
+        Text(if (details.selectedCount() > 0) "Wound details — ${details.selectedCount()} added" else "Add wound details — optional",
+            Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        Text(if (open) "⌃" else "⌄", style = MaterialTheme.typography.titleLarge)
+    }
+    if (!open) Text("Wound bed, surrounding skin, drainage, size", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp))
+    if (open) WoundDetailsChoices(details, idle) { s.updatePhotoDetails(it) }
+    WcpButton("Assess photo", onAssess, Modifier.fillMaxWidth().heightIn(min = 60.dp), enabled = idle && sizeValid && !details.hasInvalidMeasurement())
+    Text("Add details only if they help.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChange: (PhotoDetails) -> Unit) {
+    @Composable fun Group(title: String, content: @Composable () -> Unit) {
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+    }
+    Group("Wound bed (choose any)") {
+        PhotoDetails.WOUND_BED.forEach { (key, label) ->
+            FilterChip(key in details.woundBed, { onChange(details.copy(woundBed = details.woundBed.toggle(key))) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Surrounding skin (choose any)") {
+        PhotoDetails.SURROUNDING_SKIN.forEach { (key, label) ->
+            FilterChip(key in details.surroundingSkin, { onChange(details.copy(surroundingSkin = details.surroundingSkin.toggle(key))) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Drainage type") {
+        PhotoDetails.DRAINAGE_TYPE.forEach { (key, label) ->
+            FilterChip(details.drainageType == key, { onChange(details.copy(drainageType = if (details.drainageType == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Drainage amount") {
+        PhotoDetails.DRAINAGE_AMOUNT.forEach { (key, label) ->
+            FilterChip(details.drainageAmount == key, { onChange(details.copy(drainageAmount = if (details.drainageAmount == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Text("Measured size in cm (leave blank if not measured)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(Triple("Length", details.lengthCm) { v: String -> details.copy(lengthCm = v) },
+               Triple("Width", details.widthCm) { v: String -> details.copy(widthCm = v) },
+               Triple("Depth", details.depthCm) { v: String -> details.copy(depthCm = v) }).forEach { (label, value, update) ->
+            OutlinedTextField(value, { onChange(update(it.take(6))) }, Modifier.weight(1f), enabled = enabled, singleLine = true,
+                label = { Text(label) }, isError = details.invalidMeasurement(value),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        }
+    }
+    if (details.hasInvalidMeasurement()) Text("Enter a size above 0 and up to 100 cm, or leave it blank.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+}
+
+private fun Set<String>.toggle(key: String) = if (key in this) this - key else this + key

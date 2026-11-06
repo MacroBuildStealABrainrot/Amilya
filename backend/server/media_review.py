@@ -49,3 +49,51 @@ def parse_photo_review(raw: str | None, kind: str):
     except (ValueError, TypeError, ValidationError) as error:
         raise HTTPException(422, 'Photo review metadata has an invalid structure') from error
     return {**review, 'client_reported': True, 'clinical_assessment': False}
+
+
+# ---------- Clinician-recorded wound details sent with a photo (owner request 2026-11-05) ----------
+WOUND_BED = Literal['granulation', 'slough', 'eschar', 'epithelial', 'hypergranulation', 'necrotic']
+SURROUNDING_SKIN = Literal['intact', 'erythema', 'maceration', 'edema', 'induration', 'dry_flaky', 'callus', 'fragile']
+DRAINAGE_TYPE = Literal['none', 'serous', 'serosanguineous', 'sanguineous', 'purulent']
+DRAINAGE_AMOUNT = Literal['none', 'scant', 'small', 'moderate', 'large']
+Centimetres = Annotated[float, Field(gt=0, le=100, strict=False)]
+
+
+class ClinicianFindings(StrictModel):
+    """Optional quick choices the clinician picked. Absent or empty means unknown; nothing is ever assumed or zero."""
+    wound_bed: list[WOUND_BED] = Field(default_factory=list, max_length=6)
+    surrounding_skin: list[SURROUNDING_SKIN] = Field(default_factory=list, max_length=8)
+    drainage_type: DRAINAGE_TYPE | None = None
+    drainage_amount: DRAINAGE_AMOUNT | None = None
+    length_cm: Centimetres | None = None
+    width_cm: Centimetres | None = None
+    depth_cm: Centimetres | None = None
+
+    def is_empty(self) -> bool:
+        return not any([self.wound_bed, self.surrounding_skin, self.drainage_type, self.drainage_amount,
+                        self.length_cm, self.width_cm, self.depth_cm])
+
+    def as_text(self) -> str:
+        """Plain clinical wording of exactly what was entered; unknown items are simply left out."""
+        parts = []
+        if self.wound_bed: parts.append('wound bed: ' + ', '.join(self.wound_bed))
+        if self.surrounding_skin: parts.append('surrounding skin: ' + ', '.join(item.replace('_', '/') for item in self.surrounding_skin))
+        drainage = ' '.join(item for item in (self.drainage_amount, self.drainage_type) if item)
+        if drainage: parts.append('drainage: ' + drainage)
+        size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
+        if size: parts.append('measured ' + ', '.join(size))
+        return '; '.join(parts)
+
+
+def parse_clinician_findings(raw: str | None, kind: str):
+    if raw in (None, ''):
+        return None
+    if kind != 'photo':
+        raise HTTPException(422, 'Wound details are accepted only with a photo')
+    if len(raw) > 2000:
+        raise HTTPException(422, 'Wound details are too long')
+    try:
+        findings = ClinicianFindings.model_validate(json.loads(raw))
+    except (ValueError, ValidationError):
+        raise HTTPException(422, 'Wound details are not in the expected format')
+    return None if findings.is_empty() else findings
