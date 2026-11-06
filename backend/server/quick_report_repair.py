@@ -40,7 +40,10 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     from . import diagnostics
     diagnostics.faithfulness(checked.get('passed') is True and checked.get('discrepancies')==[] and not quality_defects(repaired['text'],context),len(checked.get('discrepancies',[])),'after_repair')
     if checked.get('passed') is not True or checked.get('discrepancies') != [] or quality_defects(repaired['text'], context):
-        raise TerminalReportError(502, REVIEW_FAILURE)
+        failure = TerminalReportError(502, REVIEW_FAILURE)
+        # Kept on the error object only (never sent to the phone): lets the made-up-visit evaluation explain a rejection.
+        failure.check_discrepancies = [str(item)[:300] for item in (checked.get('discrepancies') or [])][:10]
+        raise failure
     # The repaired generation is the top-level usage entry. Include the initial
     # draft and both checks so all four stages remain visible to cost accounting.
     repaired.setdefault('usage', {})['stages'] = [

@@ -119,8 +119,9 @@ async def run(label):
             logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'skipped': 'already run for this label'}))
             return
         summary, planted_results = [], []
+        only = {item for item in os.environ.get('AMILYA_REPORT_EVAL_ONLY', '').split(',') if item}
         for index, scenario in enumerate(SCENARIOS[:MAX_CASES]):
-            if index < done:
+            if index < done or (only and scenario['id'] not in only):
                 continue
             from .db import uid
             encounter = Encounter(id=uid(), workspace_id=user.workspace_id, patient_id=patient_id, wound_id=None,
@@ -155,8 +156,10 @@ async def run(label):
                     by_marker = bool((await mark(scenario, planted['text'], user, encounter.id)).get('accuracy'))
                     planted_results.append({'scenario': scenario['id'], 'mistake': planted['mistake'],
                                             'caught_by_patterns': by_patterns, 'caught_by_marker': by_marker})
+                    logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'planted': planted_results[-1]}, ensure_ascii=False))
             except TerminalReportError as error:
-                record.update({'passed': False, 'problems': ['report_not_generated'], 'error': str(error.detail)[:200]})
+                record.update({'passed': False, 'problems': ['report_not_generated'], 'error': str(error.detail)[:200],
+                               'check_discrepancies': getattr(error, 'check_discrepancies', None)})
             except Exception as error:  # evaluation must never affect the server
                 record.update({'passed': False, 'problems': ['error'], 'error': type(error).__name__})
             finally:
@@ -170,8 +173,6 @@ async def run(label):
                 container = db.get(Patient, patient_id); container.external_ref = f'eval:{label}:{index + 1}'[:200]; db.commit()
             except Exception:
                 db.rollback()
-        for item in planted_results:
-            logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'planted': item}, ensure_ascii=False))
         logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'summary': summary,
             'passed': sum(1 for _, ok in summary if ok), 'total': len(summary),
             'accuracy_failures': [case for case, ok in summary if not ok],
