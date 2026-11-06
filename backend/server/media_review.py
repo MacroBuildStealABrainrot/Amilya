@@ -74,6 +74,7 @@ class ClinicianFindings(StrictModel):
     depth_cm: Centimetres | None = None
     infection_signs: list[INFECTION_SIGNS] = Field(default_factory=list, max_length=9)
     # Optional healing progress: an earlier length x width (and how many weeks ago) to compare with today's size.
+    pain_score: Annotated[int, Field(ge=0, le=10, strict=False)] | None = None
     previous_length_cm: Centimetres | None = None
     previous_width_cm: Centimetres | None = None
     previous_weeks_ago: Annotated[int, Field(ge=1, le=104, strict=False)] | None = None
@@ -114,7 +115,7 @@ class ClinicianFindings(StrictModel):
         return f'healing progress: {trend} (area {now}, earlier {before}{when})'
 
     def is_empty(self) -> bool:
-        return not any([self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs,
+        return not any([self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs, self.pain_score is not None,
                         self.length_cm, self.width_cm, self.depth_cm])
 
     def as_text(self) -> str:
@@ -129,6 +130,7 @@ class ClinicianFindings(StrictModel):
         if drainage: parts.append('drainage: ' + drainage)
         if self.infection_signs == ['none']: parts.append('no local signs of infection')
         elif self.infection_signs: parts.append('local signs of infection: ' + ', '.join(item.replace('_', ' ') for item in self.infection_signs))
+        if self.pain_score is not None: parts.append(f'pain {self.pain_score}/10')
         size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
         if size: parts.append('measured ' + ', '.join(size))
         progress = self.healing_progress()

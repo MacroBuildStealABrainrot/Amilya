@@ -79,4 +79,13 @@ class PhotoDetailsTest {
         assertTrue(half.progressIncomplete()); assertTrue(half.hasInvalidMeasurement()); assertFalse(half.toJson().has("previous_length_cm"))
         assertFalse(PhotoDetails(lengthCm = "2", widthCm = "1").hasInvalidMeasurement())
     }
+
+    @Test fun painZeroIsSentAndBlankIsNot() {
+        assertEquals(0, PhotoDetails(painScore = 0).toJson().getInt("pain_score"))
+        assertFalse(PhotoDetails(painScore = 0).isEmpty())
+        assertFalse(PhotoDetails().toJson().has("pain_score"))
+        val d = PhotoDetails(painScore = 6)
+        assertEquals(d, PhotoDetails.fromStored(d.toStored()))
+        assertEquals(PhotoDetails(), PhotoDetails.fromStored(PhotoDetails().toStored()))
+    }
 }

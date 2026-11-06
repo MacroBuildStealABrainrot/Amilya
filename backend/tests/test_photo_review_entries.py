@@ -245,3 +245,15 @@ def test_intact_periwound_against_erythema_or_maceration_is_flagged():
     assert PERIWOUND_DIFFERENCE in selection_differences(ClinicianFindings(surrounding_skin=['intact']), facts)
     calm = [{'name': 'periwound', 'value': {'text': 'Periwound intact, no erythema.'}}]
     assert selection_differences(ClinicianFindings(surrounding_skin=['intact']), calm) == []
+
+
+def test_pain_score_zero_to_ten_and_infection_judged_from_clinician_entries():
+    assert 'pain 0/10' in ClinicianFindings(pain_score=0).as_text()  # 0 is a real answer, never "blank"
+    assert 'pain 7/10' in ClinicianFindings(pain_score=7).as_text()
+    assert not ClinicianFindings(pain_score=0).is_empty() and ClinicianFindings().is_empty()
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ClinicianFindings(pain_score=11)
+    consultant = providers.prompt('consult')
+    assert 'never from the photo appearance alone' in consultant

@@ -1018,7 +1018,9 @@ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id, clinic
                   'Never copy a recorded measurement, drainage amount or tissue into a visual finding unless the photo itself shows it. '
                   'When the photo clearly contradicts a recorded finding (for example recorded no slough but yellow slough is plainly visible), '
                   'add one warnings entry that starts with "Conflict:" naming both, without choosing one. A possible diagnosis belongs only in photo_interpretation, '
-                  'labelled as a possibility.'})
+                  'labelled as a possibility. Infection (owner rule 2026-11-06): judge it ONLY from what the clinician recorded (local signs of infection, '
+                  'pain, fever or chills in the note), never from the photo. If the clinician recorded no local signs of infection, or recorded none, '
+                  'do not suggest infection in photo_interpretation; redness or maceration in the photo is described, not called infection.'})
         try:
             try:
                 return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id, replay_invalid_failure=True)

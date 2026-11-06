@@ -17,11 +17,13 @@ data class PhotoDetails(
     val widthCm: String = "",
     val depthCm: String = "",
     val infectionSigns: Set<String> = emptySet(),
+    /** Pain 0 to 10. Null means not asked; 0 is a real answer. */
+    val painScore: Int? = null,
     val previousLengthCm: String = "",
     val previousWidthCm: String = "",
     val previousWeeksAgo: String = "",
 ) {
-    fun isEmpty() = woundBed.isEmpty() && woundEdges.isEmpty() && infectionSigns.isEmpty() && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
+    fun isEmpty() = woundBed.isEmpty() && woundEdges.isEmpty() && infectionSigns.isEmpty() && painScore == null && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
         centimetres(lengthCm) == null && centimetres(widthCm) == null && centimetres(depthCm) == null
 
     /** A typed value that is not a positive number up to 100 cm. Shown under the box; never sent. */
@@ -52,6 +54,7 @@ data class PhotoDetails(
         if (infectionSigns.isNotEmpty()) put("infection_signs", JSONArray(INFECTION_SIGNS.keys.filter { it in infectionSigns }))
         if (surroundingSkin.isNotEmpty()) put("surrounding_skin", JSONArray(SURROUNDING_SKIN.keys.filter { it in surroundingSkin }))
         drainageType?.let { put("drainage_type", it) }
+        painScore?.takeIf { it in 0..10 }?.let { put("pain_score", it) }
         drainageAmount?.let { put("drainage_amount", it) }
         centimetres(lengthCm)?.let { put("length_cm", it) }
         centimetres(widthCm)?.let { put("width_cm", it) }
@@ -68,10 +71,10 @@ data class PhotoDetails(
         put("drainage_type", drainageType ?: JSONObject.NULL); put("drainage_amount", drainageAmount ?: JSONObject.NULL)
         put("length", lengthCm); put("width", widthCm); put("depth", depthCm)
         put("wound_edges", JSONArray(woundEdges.toList())); put("infection_signs", JSONArray(infectionSigns.toList()))
-        put("previous_length", previousLengthCm); put("previous_width", previousWidthCm); put("previous_weeks", previousWeeksAgo)
+        put("pain", painScore ?: JSONObject.NULL); put("previous_length", previousLengthCm); put("previous_width", previousWidthCm); put("previous_weeks", previousWeeksAgo)
     }.toString()
 
-    fun selectedCount() = woundBed.size + infectionSigns.size + woundEdges.size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
+    fun selectedCount() = woundBed.size + infectionSigns.size + woundEdges.size + listOfNotNull(painScore).size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
         listOf(lengthCm, widthCm, depthCm).count { centimetres(it) != null } + (if (areaChangePercent() != null) 1 else 0)
 
     companion object {
@@ -121,7 +124,8 @@ data class PhotoDetails(
                 surroundingSkin = set("surrounding_skin", SURROUNDING_SKIN), drainageType = one("drainage_type", DRAINAGE_TYPE),
                 drainageAmount = one("drainage_amount", DRAINAGE_AMOUNT), lengthCm = o.optString("length").take(6),
                 widthCm = o.optString("width").take(6), depthCm = o.optString("depth").take(6),
-                infectionSigns = set("infection_signs", INFECTION_SIGNS), previousLengthCm = o.optString("previous_length").take(6),
+                infectionSigns = set("infection_signs", INFECTION_SIGNS), painScore = if (o.isNull("pain")) null else o.optInt("pain", -1).takeIf { it in 0..10 },
+                previousLengthCm = o.optString("previous_length").take(6),
                 previousWidthCm = o.optString("previous_width").take(6), previousWeeksAgo = o.optString("previous_weeks").take(3))
         }.getOrDefault(PhotoDetails())
     }

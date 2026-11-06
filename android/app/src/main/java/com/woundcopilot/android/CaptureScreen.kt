@@ -462,6 +462,11 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
             FilterChip(key in details.infectionSigns, { onChange(details.copy(infectionSigns = PhotoDetails.toggleInfection(details.infectionSigns, key))) }, { Text(label) }, enabled = enabled)
         }
     }
+    Group("Pain (0–10)") {
+        (0..10).forEach { score ->
+            FilterChip(details.painScore == score, { onChange(details.copy(painScore = if (details.painScore == score) null else score)) }, { Text("$score") }, enabled = enabled)
+        }
+    }
     Text("Size (cm)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(Triple("Length", details.lengthCm) { v: String -> details.copy(lengthCm = v) },
