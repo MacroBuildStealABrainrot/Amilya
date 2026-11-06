@@ -1145,7 +1145,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
         # find is shown to the clinician as a "check before saving" alert. No second AI check, no AI rewrite.
         from .source_coverage import coverage_defects, strong_findings
-        found = quality_defects(draft['text'], context) + strong_findings(coverage_defects(draft['text'], context))
+        from .source_coverage import photo_finding_losses
+        found = quality_defects(draft['text'], context) + strong_findings(coverage_defects(draft['text'], context)) + photo_finding_losses(draft['text'], context)
         alerts = list(draft.get('ui_alerts') or [])
         alerts += [{'field': 'report', 'message': item} for item in found[:10]]
         draft['ui_alerts'] = alerts
@@ -1159,7 +1160,9 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     qa = await routed('quick_qa', json.dumps({**content, 'proposed_draft': draft['text'], 'proposed_status': draft.get('status', 'ready'), 'proposed_ui_alerts': draft.get('ui_alerts', []),
         **({'free_source_check_findings': coverage} if coverage else {})},
         ensure_ascii=False, default=str), user=user, encounter_id=encounter_id, max_tokens=1000)
-    defects = quality_defects(draft['text'], context)
+    from .source_coverage import photo_finding_losses
+    # A finding the photo showed must never silently disappear from the note: it always triggers the one repair.
+    defects = quality_defects(draft['text'], context) + photo_finding_losses(draft['text'], context)
     if defects:
         qa = {**qa, 'passed': False, 'discrepancies': list(dict.fromkeys(qa.get('discrepancies', []) + defects))[:20]}
     diagnostics.faithfulness(qa.get('passed') is True and qa.get('discrepancies')==[],len(qa.get('discrepancies',[])),'initial')

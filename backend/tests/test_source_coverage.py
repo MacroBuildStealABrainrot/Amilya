@@ -79,3 +79,15 @@ def test_clinician_words_sent_with_a_photo_count_as_a_source():
     assert not [d for d in found if 'not in any source' in d or 'check the side' in d]
     # An AI suggestion is never a source for a value in the note.
     assert [d for d in coverage_defects('Antibiotics for 7 days.', context) if 'not in any source' in d] or True
+
+
+def test_photo_findings_must_reach_the_note():
+    from server.source_coverage import photo_finding_losses
+    context = {'case_facts': [
+        {'name': 'wound_tissue', 'value': {'text': 'Dry dark eschar at the toe tip.'}, 'confirmation_state': 'unconfirmed'},
+        {'name': 'periwound', 'value': {'text': 'Localized redness and mild swelling.'}, 'confirmation_state': 'unconfirmed'},
+        {'name': 'photo_interpretation', 'value': {'text': 'For clinician review: possible ischemia, slough unlikely.'}, 'confirmation_state': 'unconfirmed'}]}
+    lost = ' '.join(photo_finding_losses('Left second toe, 3 weeks, pain 5/10, Inadine applied.', context))
+    assert 'eschar' in lost and 'redness' in lost and 'swelling' in lost and 'slough' not in lost
+    assert photo_finding_losses('Dry eschar at the tip with erythema and edema around it.', context) == []
+    assert photo_finding_losses('Anything.', {'case_facts': []}) == []

@@ -51,6 +51,7 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     repaired['qa'] = {'passed': True, 'discrepancies': []}
     # The free source comparison is a heuristic: after the AI recheck passes, anything it still sees becomes at most
     # three short "please check" notes for the clinician. It never blocks or discards a checked report.
-    from .source_coverage import coverage_defects, strong_findings, clarify_alerts
-    repaired['ui_alerts'] = list(repaired.get('ui_alerts') or []) + clarify_alerts(strong_findings(coverage_defects(repaired['text'], context)))
+    from .source_coverage import coverage_defects, strong_findings, clarify_alerts, photo_finding_losses
+    repaired['ui_alerts'] = list(repaired.get('ui_alerts') or []) + clarify_alerts(
+        photo_finding_losses(repaired['text'], context) + strong_findings(coverage_defects(repaired['text'], context)))
     return repaired

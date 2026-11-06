@@ -135,3 +135,26 @@ def strong_findings(defects: list[str]) -> list[str]:
 
 def clarify_alerts(findings: list[str]) -> list[dict]:
     return [{'field': 'clarify', 'message': 'Please check: ' + item} for item in findings[:3]]
+
+
+# ---------- Photo findings must reach the note (found by the evaluation suite: a note dropped every photo finding) ----------
+PHOTO_FACT_NAMES = {'wound_tissue', 'wound_edges', 'periwound', 'exudate', 'visible_finding'}
+PHOTO_TERMS = {
+    'eschar': (r'eschar',), 'slough': (r'slough',), 'granulation tissue': (r'granulat',), 'necrotic tissue': (r'necro',),
+    'redness': (r'\bred', r'erythem'), 'swelling': (r'swell', r'o?edema'), 'maceration': (r'macerat',),
+    'callus': (r'callus', r'hyperkerat'), 'purulent drainage': (r'purulen', r'\bpus\b'), 'bleeding': (r'bleed', r'\bblood'),
+}
+
+
+def photo_finding_losses(report: str, context: dict) -> list[str]:
+    """A tissue or skin finding the photo showed that the note leaves out. Interpretation fields are not checked."""
+    seen = ' '.join(str((f.get('value') or {}).get('text', '')) for f in (context or {}).get('case_facts', [])
+                    if isinstance(f, dict) and f.get('name') in PHOTO_FACT_NAMES and f.get('confirmation_state') != 'rejected')
+    if not seen.strip() or not (report or '').strip():
+        return []
+    losses = []
+    for label, patterns in PHOTO_TERMS.items():
+        in_photo = any(re.search(p, seen, re.I) for p in patterns)
+        if in_photo and not any(re.search(p, report, re.I) for p in patterns):
+            losses.append(f'The photo assessment found {label}, but the note leaves it out; add it as a photo finding.')
+    return losses
