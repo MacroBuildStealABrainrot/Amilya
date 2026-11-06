@@ -33,3 +33,9 @@ def test_review_file_lists_every_case():
     text = eval_cases.review_markdown()
     for case in eval_cases.CASES:
         assert case['id'] in text
+
+
+def test_noisy_recordings_rule_is_given_to_every_report():
+    from server import providers
+    rules = providers.prompt('quick_draft')
+    assert 'Noisy recordings' in rules and 'Thanks for watching' in rules and 'not separate clients' in rules

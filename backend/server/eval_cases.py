@@ -74,6 +74,26 @@ CASES = [
                   'throbbing pain 5/10 (client)', 'warm on assessment (clinician)', 'diabetes', 'Inadine and dry gauze'],
      'must': [r'left (2nd|second) toe', r'eschar', r'(red|erythema)', r'(swell|edema)', r'3 weeks', r'5\s*(/|out of)\s*10', r'warm', r'diabet', r'Inadine'],
      'must_not': [r'For clinician review', r'osteomyelitis', r'\bright\b', r'no odou?r', r'cellulitis (is )?(present|confirmed)']},
+    {'id': 'noisy_home_visit', 'area': 'Whole-visit recording with TV and filler', 'profession': 'RPN', 'template': 'nursing',
+     'pattern': 'Long home-visit recording: TV dialogue, phone call, made-up filler; only a few clinical exchanges are real',
+     'text': ('Thank you. thud Thank you. sounds of water Thank you. Hello, how are you today? Not great, tired. '
+              '[TV] Captain, the engines are failing! We need to land this ship now! [TV] Not on my watch, sergeant. '
+              'Thank you. Any pain today? No. No pain at all? No. Any fever or chills? No. '
+              'doorbell Okay. Thank you. Hi, yes, the nurse is here, I will call you back. Bye. Thank you. '
+              'Cough or shortness of breath? No. Did you eat today? A little toast this morning. '
+              'Blood pressure is 118 over 72. Thank you. ♪ music ♪ Thanks for watching! '
+              'Sleeping okay? I wake up about every hour to pee. And the colour, is it dark? No, light. '
+              'So chemo starts Monday? Yes, Monday. My daughter will keep helping with my drinks. '
+              'Okay, keep up the fluids, about a litre a day. the line on the... pump ... uh. Thank you. you click Thank you. Bye.'),
+     'note': '', 'facts': [],
+     'expected': ['tired', 'denies pain', 'denies fever and chills', 'denies cough and shortness of breath', 'ate a little toast',
+                  'BP 118/72', 'wakes about hourly to urinate, urine light', 'chemotherapy starts Monday', 'daughter helps with fluids',
+                  'encouraged about 1 L fluids a day', 'unclear line/pump part as a please-confirm alert, not in the note',
+                  'no TV, phone call or filler in the note'],
+     'must': [r'118\s*/\s*72', r'(deni\w*|no)\s+(any\s+)?pain', r'fever', r'chills', r'toast', r'chemo', r'daughter|family', r'(1|one)\s*(l|litre|liter)'],
+     'must_not': [r'engine', r'captain', r'sergeant', r'ship', r'thanks for watching', r'call you back', r'\bpump\b(?![^.]*confirm)'],
+     'clarify': True,
+     'planted': [{'mistake': 'Background TV dialogue charted as the client speaking', 'text': 'Client tired. Client states the engines are failing and they need to land. Denies pain, fever and chills. BP 118/72. Chemotherapy starts Monday.'}]},
     {'id': 'photo_selection_vs_image', 'area': 'Wound photo + clinician selections', 'profession': 'RPN', 'template': 'nursing',
      'pattern': 'Clinician selections outrank an uncertain photo reading (granulation selected, photo said likely eschar)',
      'text': 'Clinician-recorded findings on assessment: wound bed: granulation; drainage: small serosanguineous.', 'note': 'Lt plantar wound, pt sees foot specialist.',

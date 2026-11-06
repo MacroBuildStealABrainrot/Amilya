@@ -4,7 +4,7 @@
   "files": {
     "00_healthcare_boundary.system.md": "13ffeb5b1c74b1fa90c0edb0ee42f0d7d60b873003b9b923fd24b5144735e9b0",
     "05_scope_guard.system.md": "df4a627ef978be02e0b30da22e32d3f600cac9696d911b5ec7e7b99ff1b8f229",
-    "06_documentation_rules.system.md": "89390ed45b36c4858e3e03f22ca255d1aa352cc2580c89f03441220f52337804",
+    "06_documentation_rules.system.md": "6b9933d681b2f3958a9ff17003b619b6fece542550e255515913d0ac9705de46",
     "10_task_router.system.md": "464da884526eef6827b806a8ecaa49c3cd5d57c711ea75b1f070894e41ab0345",
     "20_clinical_fact_extraction.system.md": "9a4b7b73697d168997bacc4b54d329da1b3c629d486b6a3549df862c73cceca3",
     "25_document_extraction.system.md": "8b6409698bdd73952094dd9da5a3f61ffcb8f476d99974b78e8b3813908666a7",
