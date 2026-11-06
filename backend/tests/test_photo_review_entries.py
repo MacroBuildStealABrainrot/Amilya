@@ -257,3 +257,10 @@ def test_pain_score_zero_to_ten_and_infection_judged_from_clinician_entries():
         ClinicianFindings(pain_score=11)
     consultant = providers.prompt('consult')
     assert 'never from the photo appearance alone' in consultant
+
+
+def test_photo_clinical_review_is_a_senior_wound_consultant_review():
+    rules = providers.prompt('image')
+    for item in ('senior advanced wound care consultant', 'probe to bone', 'tendon integrity', 'ABI/TBI', '- Urgent review if',
+                 'never a repeat of what is visible'):
+        assert item in rules, item
