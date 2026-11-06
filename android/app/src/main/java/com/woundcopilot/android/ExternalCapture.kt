@@ -145,7 +145,7 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
                 event("external_saved",p)
             }catch(e:Exception){
                 if(e is CancellationException)throw e
-                if(s.user?.str("id")==p.str("owner"))s.error="The selected file could not be prepared. The original was not changed. Try selecting it again."
+                if(s.user?.str("id")==p.str("owner"))s.error=importProblem(e)
                 event("external_failed",p)
             }finally{revision++;busy=false;if(!awaitingForeground)clear();resumeDeferredPhoto()}
         }
@@ -154,7 +154,8 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
 
 /** Existing import validation, moved out of a disposable Compose callback. */
 internal fun importCapture(context:Context,uri:Uri,kind:String):Pair<File,String> {
-    val limit=when(kind){"photo"->12;"audio"->25;else->20}
+    // A gallery photo may be larger than the 12 MB sent to the server; it is shrunk below (the original is never changed).
+    val limit=when(kind){"photo"->60;"audio"->25;else->20}
     val resolver=context.contentResolver
     val mime=resolver.getType(uri)?.lowercase(java.util.Locale.ROOT)?:"application/octet-stream"
     val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)?:""else ""}.orEmpty()
@@ -166,8 +167,35 @@ internal fun importCapture(context:Context,uri:Uri,kind:String):Pair<File,String
             while(true){val n=input.read(buffer);if(n<0)break;total+=n;require(total<=limit.toLong()*1024*1024);output.write(buffer,0,n)}
             require(total>0)
         }}?:error("File unavailable")
-        val detected=identifyCapture(temporary,kind,mime,name)
+        val detected=try{identifyCapture(temporary,kind,mime,name).also{if(kind=="photo")require(temporary.length()<=12L*1024*1024)}}
+            catch(e:Exception){if(kind!="photo")throw e;null}
+        if(detected==null){
+            // HEIC, a very large photo, or one above 25 megapixels (Samsung 50 MP mode): a shrunk JPEG copy is made.
+            val converted=File(directory,"photo-${UUID.randomUUID()}.jpg")
+            try{convertPhoto(temporary,converted)}catch(e:Exception){converted.delete();throw e}
+            return converted to "image/jpeg"
+        }
         val file=File(directory,"$kind-${UUID.randomUUID()}.${captureExtension(detected)}")
         check(temporary.renameTo(file));return file to detected
     }finally{temporary.delete()}
+}
+
+/** The clinician sees the real reason a chosen file was refused, not a vague message. */
+internal fun importProblem(e:Exception):String {
+    val own=(e as? IllegalArgumentException ?: e as? IllegalStateException)?.message
+    if(own!=null && own.length>25 && !own.startsWith("Failed requirement") && !own.startsWith("Check failed"))return own
+    return "This file could not be opened. If it is stored in the cloud, open it in Gallery first so it downloads to the phone, then choose it again."
+}
+
+/** A shrunk JPEG copy (longest side up to 4096 pixels, upright, no location data). The original in Gallery is not changed. */
+internal fun convertPhoto(source:File,target:File) {
+    val bitmap=try{
+        android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(source)){decoder,info,_->
+            val w=info.size.width;val h=info.size.height;val longest=maxOf(w,h)
+            if(longest>4096){val f=4096.0/longest;decoder.setTargetSize((w*f).toInt().coerceAtLeast(1),(h*f).toInt().coerceAtLeast(1))}
+            decoder.allocator=android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }catch(e:Exception){throw IllegalArgumentException("This photo could not be opened. Choose a JPEG, PNG, WebP or HEIC photo.")}
+    try{target.outputStream().use{check(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,92,it))}}finally{bitmap.recycle()}
+    require(target.length() in 1..12L*1024*1024){"This photo is too large even after shrinking it. Choose another photo."}
 }
