@@ -53,5 +53,5 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     # three short "please check" notes for the clinician. It never blocks or discards a checked report.
     from .source_coverage import coverage_defects, strong_findings, clarify_alerts, photo_finding_losses
     repaired['ui_alerts'] = list(repaired.get('ui_alerts') or []) + clarify_alerts(
-        photo_finding_losses(repaired['text'], context) + strong_findings(coverage_defects(repaired['text'], context)))
+        photo_finding_losses(repaired['text'], context, repaired.get('ui_alerts')) + strong_findings(coverage_defects(repaired['text'], context)))
     return repaired

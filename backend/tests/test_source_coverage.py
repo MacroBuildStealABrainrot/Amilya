@@ -91,3 +91,11 @@ def test_photo_findings_must_reach_the_note():
     assert 'eschar' in lost and 'redness' in lost and 'swelling' in lost and 'slough' not in lost
     assert photo_finding_losses('Dry eschar at the tip with erythema and edema around it.', context) == []
     assert photo_finding_losses('Anything.', {'case_facts': []}) == []
+
+
+def test_a_conflict_flagged_in_an_alert_is_not_a_lost_photo_finding():
+    from server.source_coverage import photo_finding_losses
+    context = {'case_facts': [{'name': 'wound_tissue', 'value': {'text': 'Central dry eschar with slough.'}, 'confirmation_state': 'unconfirmed'}]}
+    alert = [{'field': 'clarify', 'message': 'You recorded granulation; the photo assessment found eschar and slough. Please confirm.'}]
+    assert photo_finding_losses('Left plantar ulcer, granulation recorded.', context, alert) == []
+    assert photo_finding_losses('Left plantar ulcer, granulation recorded.', context)

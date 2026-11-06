@@ -146,8 +146,10 @@ PHOTO_TERMS = {
 }
 
 
-def photo_finding_losses(report: str, context: dict) -> list[str]:
-    """A tissue or skin finding the photo showed that the note leaves out. Interpretation fields are not checked."""
+def photo_finding_losses(report: str, context: dict, alerts=None) -> list[str]:
+    """A tissue or skin finding the photo showed that the note leaves out. Interpretation fields are not checked.
+    A finding named in a "please confirm" alert (a conflict with what the clinician recorded) is handled, not lost."""
+    alert_text = ' '.join(str(a.get('message', '')) for a in (alerts or []) if isinstance(a, dict))
     seen = ' '.join(str((f.get('value') or {}).get('text', '')) for f in (context or {}).get('case_facts', [])
                     if isinstance(f, dict) and f.get('name') in PHOTO_FACT_NAMES and f.get('confirmation_state') != 'rejected')
     if not seen.strip() or not (report or '').strip():
@@ -155,6 +157,6 @@ def photo_finding_losses(report: str, context: dict) -> list[str]:
     losses = []
     for label, patterns in PHOTO_TERMS.items():
         in_photo = any(re.search(p, seen, re.I) for p in patterns)
-        if in_photo and not any(re.search(p, report, re.I) for p in patterns):
+        if in_photo and not any(re.search(p, report, re.I) or re.search(p, alert_text, re.I) for p in patterns):
             losses.append(f'The photo assessment found {label}, but the note leaves it out; add it as a photo finding.')
     return losses
