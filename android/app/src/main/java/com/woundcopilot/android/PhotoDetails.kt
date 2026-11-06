@@ -9,14 +9,16 @@ import org.json.JSONObject
  */
 data class PhotoDetails(
     val woundBed: Set<String> = emptySet(),
+    val woundEdge: String? = null,
     val surroundingSkin: Set<String> = emptySet(),
     val drainageType: String? = null,
     val drainageAmount: String? = null,
     val lengthCm: String = "",
     val widthCm: String = "",
     val depthCm: String = "",
+    val infectionSigns: Set<String> = emptySet(),
 ) {
-    fun isEmpty() = woundBed.isEmpty() && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
+    fun isEmpty() = woundBed.isEmpty() && woundEdge == null && infectionSigns.isEmpty() && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
         centimetres(lengthCm) == null && centimetres(widthCm) == null && centimetres(depthCm) == null
 
     /** A typed value that is not a positive number up to 100 cm. Shown under the box; never sent. */
@@ -27,6 +29,8 @@ data class PhotoDetails(
     /** Exactly what the server accepts. Unknown items are left out entirely (never empty strings or zero). */
     fun toJson(): JSONObject = JSONObject().apply {
         if (woundBed.isNotEmpty()) put("wound_bed", JSONArray(WOUND_BED.keys.filter { it in woundBed }))
+        woundEdge?.let { put("wound_edges", it) }
+        if (infectionSigns.isNotEmpty()) put("infection_signs", JSONArray(INFECTION_SIGNS.keys.filter { it in infectionSigns }))
         if (surroundingSkin.isNotEmpty()) put("surrounding_skin", JSONArray(SURROUNDING_SKIN.keys.filter { it in surroundingSkin }))
         drainageType?.let { put("drainage_type", it) }
         drainageAmount?.let { put("drainage_amount", it) }
@@ -40,18 +44,31 @@ data class PhotoDetails(
         put("wound_bed", JSONArray(woundBed.toList())); put("surrounding_skin", JSONArray(surroundingSkin.toList()))
         put("drainage_type", drainageType ?: JSONObject.NULL); put("drainage_amount", drainageAmount ?: JSONObject.NULL)
         put("length", lengthCm); put("width", widthCm); put("depth", depthCm)
+        put("wound_edges", woundEdge ?: JSONObject.NULL); put("infection_signs", JSONArray(infectionSigns.toList()))
     }.toString()
 
-    fun selectedCount() = woundBed.size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
+    fun selectedCount() = woundBed.size + infectionSigns.size + listOfNotNull(woundEdge).size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
         listOf(lengthCm, widthCm, depthCm).count { centimetres(it) != null }
 
     companion object {
-        val WOUND_BED = linkedMapOf("granulation" to "Granulation", "slough" to "Slough", "eschar" to "Eschar",
-            "epithelial" to "Epithelial", "hypergranulation" to "Hypergranulation", "necrotic" to "Necrotic")
-        val SURROUNDING_SKIN = linkedMapOf("intact" to "Intact", "erythema" to "Redness", "maceration" to "Maceration",
-            "edema" to "Swelling", "induration" to "Induration", "dry_flaky" to "Dry/flaky", "callus" to "Callus", "fragile" to "Fragile")
+        val WOUND_BED = linkedMapOf("granulation" to "Granulation", "hypergranulation" to "Hypergranulation", "slough" to "Slough",
+            "eschar" to "Eschar", "necrotic" to "Necrotic", "epithelial" to "Epithelial", "bone" to "Bone", "tendon" to "Tendon")
+        val WOUND_EDGES = linkedMapOf("attached" to "Attached", "unattached" to "Unattached")
+        /** Periwound. The saved key stays "surrounding_skin" so earlier visits still open. */
+        val SURROUNDING_SKIN = linkedMapOf("intact" to "Intact", "erythema" to "Erythema", "maceration" to "Maceration",
+            "edema" to "Edema", "induration" to "Induration", "dry_flaky" to "Dry/flaky", "callus" to "Callus", "fragile" to "Fragile")
+        val INFECTION_SIGNS = linkedMapOf("none" to "None", "warmth" to "Warmth", "increased_pain" to "Increased pain", "odour" to "Odour",
+            "spreading_erythema" to "Spreading erythema", "friable_tissue" to "Friable tissue", "increased_drainage" to "Increased drainage",
+            "wound_breakdown" to "Wound breakdown", "delayed_healing" to "Delayed healing")
+
+        /** "None" stands alone: picking it clears the signs, and picking a sign clears "None". */
+        fun toggleInfection(current: Set<String>, key: String): Set<String> = when {
+            key in current -> current - key
+            key == "none" -> setOf("none")
+            else -> current - "none" + key
+        }
         val DRAINAGE_TYPE = linkedMapOf("none" to "None", "serous" to "Serous", "serosanguineous" to "Serosanguineous",
-            "sanguineous" to "Bloody", "purulent" to "Purulent")
+            "sanguineous" to "Sanguineous", "purulent" to "Purulent")
         val DRAINAGE_AMOUNT = linkedMapOf("none" to "None", "scant" to "Scant", "small" to "Small", "moderate" to "Moderate", "large" to "Large")
 
         fun centimetres(value: String): Double? {
@@ -65,8 +82,11 @@ data class PhotoDetails(
             fun set(name: String, allowed: Map<String, String>) = (0 until (o.optJSONArray(name)?.length() ?: 0))
                 .map { o.getJSONArray(name).getString(it) }.filter { it in allowed }.toSet()
             fun one(name: String, allowed: Map<String, String>) = o.optString(name).takeIf { !o.isNull(name) && it in allowed }
-            PhotoDetails(set("wound_bed", WOUND_BED), set("surrounding_skin", SURROUNDING_SKIN), one("drainage_type", DRAINAGE_TYPE),
-                one("drainage_amount", DRAINAGE_AMOUNT), o.optString("length").take(6), o.optString("width").take(6), o.optString("depth").take(6))
+            PhotoDetails(woundBed = set("wound_bed", WOUND_BED), woundEdge = one("wound_edges", WOUND_EDGES),
+                surroundingSkin = set("surrounding_skin", SURROUNDING_SKIN), drainageType = one("drainage_type", DRAINAGE_TYPE),
+                drainageAmount = one("drainage_amount", DRAINAGE_AMOUNT), lengthCm = o.optString("length").take(6),
+                widthCm = o.optString("width").take(6), depthCm = o.optString("depth").take(6),
+                infectionSigns = set("infection_signs", INFECTION_SIGNS))
         }.getOrDefault(PhotoDetails())
     }
 }

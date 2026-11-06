@@ -46,4 +46,20 @@ class PhotoDetailsTest {
         assertEquals(PhotoDetails(), PhotoDetails.fromStored("not json"))
         assertEquals(PhotoDetails(), PhotoDetails.fromStored("""{"wound_bed":["osteomyelitis"]}"""))
     }
+
+    @Test fun edgesInfectionSignsAndDeeperStructuresAreSentAndSaved() {
+        val details = PhotoDetails(woundBed = setOf("bone", "tendon"), woundEdge = "unattached", infectionSigns = setOf("warmth", "odour"))
+        val json = details.toJson()
+        assertEquals("unattached", json.getString("wound_edges"))
+        assertEquals("warmth", json.getJSONArray("infection_signs").getString(0))
+        assertEquals("bone", json.getJSONArray("wound_bed").getString(0))
+        assertEquals(5, details.selectedCount())
+        assertEquals(details, PhotoDetails.fromStored(details.toStored()))
+    }
+
+    @Test fun noInfectionSignsStandsAlone() {
+        assertEquals(setOf("none"), PhotoDetails.toggleInfection(setOf("warmth", "odour"), "none"))
+        assertEquals(setOf("warmth"), PhotoDetails.toggleInfection(setOf("none"), "warmth"))
+        assertEquals(emptySet<String>(), PhotoDetails.toggleInfection(setOf("none"), "none"))
+    }
 }

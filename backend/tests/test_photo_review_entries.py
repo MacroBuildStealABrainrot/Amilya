@@ -60,7 +60,7 @@ def test_photo_with_note_and_selected_findings_goes_in_the_same_request(quick_ap
     assert len(calls) == 1
     assert calls[0]['clinician_note'] == 'Left heel, 3 weeks, warm on assessment.'
     text = calls[0]['clinician_findings']
-    assert 'wound bed: granulation, slough' in text and 'surrounding skin: erythema, maceration' in text
+    assert 'wound bed: granulation, slough' in text and 'periwound: erythema, maceration' in text
     assert 'drainage: small serous' in text and 'measured length 3.2 cm, width 2.1 cm' in text
     with api.sessions() as db:
         context = quick_workflows.source_context(db, db.get(Encounter, visit))
@@ -191,7 +191,7 @@ def test_samsung_case_keeps_selections_and_sends_the_confirm_message(quick_api, 
     with api.sessions() as db:
         context = quick_workflows.source_context(db, db.get(Encounter, visit))
     text = ' '.join(s['text'] or '' for s in context['untrusted_sources'] if s['kind'] == 'photo')
-    for kept in ('wound bed: granulation', 'surrounding skin: callus', 'drainage: small serosanguineous', 'length 0.5 cm, width 0.5 cm, depth 0.3 cm'):
+    for kept in ('wound bed: granulation', 'periwound: callus', 'drainage: small serosanguineous', 'length 0.5 cm, width 0.5 cm, depth 0.3 cm'):
         assert kept in text
     from server.source_coverage import selection_difference_alerts
     alerts = selection_difference_alerts(context)
@@ -199,3 +199,21 @@ def test_samsung_case_keeps_selections_and_sends_the_confirm_message(quick_api, 
                                              'Please confirm drainage. Your selection and the image assessment may differ.']
     assert all(a['field'] == 'clarify' for a in alerts)
     assert selection_difference_alerts(context, alerts) == []  # never added twice
+
+
+def test_edges_deeper_structures_and_local_infection_signs():
+    picked = ClinicianFindings(wound_bed=['bone', 'tendon', 'hypergranulation'], wound_edges='unattached', surrounding_skin=['callus'],
+                               infection_signs=['warmth', 'odour', 'spreading_erythema'])
+    text = picked.as_text()
+    assert 'wound bed: bone, tendon, hypergranulation' in text and 'wound edges: unattached' in text and 'periwound: callus' in text
+    assert 'local signs of infection: warmth, odour, spreading erythema' in text
+    assert 'no local signs of infection' in ClinicianFindings(infection_signs=['none']).as_text()
+    assert not ClinicianFindings(wound_edges='attached').is_empty()
+
+
+def test_infection_none_cannot_be_combined_and_unknown_edge_is_refused(quick_api, monkeypatch):
+    api = quick_api; visit = start(api, 'photo')['encounter']['id']; capture(monkeypatch)
+    assert upload(api, visit, 'mix', clinician_findings=json.dumps({'infection_signs': ['none', 'warmth']})).status_code == 422
+    assert upload(api, visit, 'edge', clinician_findings=json.dumps({'wound_edges': 'rolled'})).status_code == 422
+    ok = upload(api, visit, 'fine', clinician_findings=json.dumps({'wound_edges': 'attached', 'infection_signs': ['none']}))
+    assert ok.status_code == 201, ok.text

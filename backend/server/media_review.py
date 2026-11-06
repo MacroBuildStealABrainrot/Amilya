@@ -53,7 +53,9 @@ def parse_photo_review(raw: str | None, kind: str):
 
 
 # ---------- Clinician-recorded wound details sent with a photo (owner request 2026-11-05) ----------
-WOUND_BED = Literal['granulation', 'slough', 'eschar', 'epithelial', 'hypergranulation', 'necrotic']
+WOUND_BED = Literal['granulation', 'slough', 'eschar', 'epithelial', 'hypergranulation', 'necrotic', 'bone', 'tendon']
+WOUND_EDGES = Literal['attached', 'unattached']
+INFECTION_SIGNS = Literal['none', 'warmth', 'increased_pain', 'odour', 'spreading_erythema', 'friable_tissue', 'increased_drainage', 'wound_breakdown', 'delayed_healing']
 SURROUNDING_SKIN = Literal['intact', 'erythema', 'maceration', 'edema', 'induration', 'dry_flaky', 'callus', 'fragile']
 DRAINAGE_TYPE = Literal['none', 'serous', 'serosanguineous', 'sanguineous', 'purulent']
 DRAINAGE_AMOUNT = Literal['none', 'scant', 'small', 'moderate', 'large']
@@ -62,25 +64,36 @@ Centimetres = Annotated[float, Field(gt=0, le=100, strict=False)]
 
 class ClinicianFindings(StrictModel):
     """Optional quick choices the clinician picked. Absent or empty means unknown; nothing is ever assumed or zero."""
-    wound_bed: list[WOUND_BED] = Field(default_factory=list, max_length=6)
+    wound_bed: list[WOUND_BED] = Field(default_factory=list, max_length=8)
+    wound_edges: WOUND_EDGES | None = None
     surrounding_skin: list[SURROUNDING_SKIN] = Field(default_factory=list, max_length=8)
     drainage_type: DRAINAGE_TYPE | None = None
     drainage_amount: DRAINAGE_AMOUNT | None = None
     length_cm: Centimetres | None = None
     width_cm: Centimetres | None = None
     depth_cm: Centimetres | None = None
+    infection_signs: list[INFECTION_SIGNS] = Field(default_factory=list, max_length=9)
+
+    @model_validator(mode='after')
+    def _none_stands_alone(self):
+        if 'none' in self.infection_signs and len(self.infection_signs) > 1:
+            raise ValueError('No local signs of infection cannot be combined with a sign')
+        return self
 
     def is_empty(self) -> bool:
-        return not any([self.wound_bed, self.surrounding_skin, self.drainage_type, self.drainage_amount,
+        return not any([self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs,
                         self.length_cm, self.width_cm, self.depth_cm])
 
     def as_text(self) -> str:
         """Plain clinical wording of exactly what was entered; unknown items are simply left out."""
         parts = []
         if self.wound_bed: parts.append('wound bed: ' + ', '.join(self.wound_bed))
-        if self.surrounding_skin: parts.append('surrounding skin: ' + ', '.join(item.replace('_', '/') for item in self.surrounding_skin))
+        if self.wound_edges: parts.append('wound edges: ' + self.wound_edges)
+        if self.surrounding_skin: parts.append('periwound: ' + ', '.join(item.replace('_', '/') for item in self.surrounding_skin))
         drainage = ' '.join(item for item in (self.drainage_amount, self.drainage_type) if item)
         if drainage: parts.append('drainage: ' + drainage)
+        if self.infection_signs == ['none']: parts.append('no local signs of infection')
+        elif self.infection_signs: parts.append('local signs of infection: ' + ', '.join(item.replace('_', ' ') for item in self.infection_signs))
         size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
         if size: parts.append('measured ' + ', '.join(size))
         return '; '.join(parts)

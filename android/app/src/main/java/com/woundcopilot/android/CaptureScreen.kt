@@ -437,7 +437,12 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
             FilterChip(key in details.woundBed, { onChange(details.copy(woundBed = details.woundBed.toggle(key))) }, { Text(label) }, enabled = enabled)
         }
     }
-    Group("Surrounding skin") {
+    Group("Wound edges") {
+        PhotoDetails.WOUND_EDGES.forEach { (key, label) ->
+            FilterChip(details.woundEdge == key, { onChange(details.copy(woundEdge = if (details.woundEdge == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Periwound") {
         PhotoDetails.SURROUNDING_SKIN.forEach { (key, label) ->
             FilterChip(key in details.surroundingSkin, { onChange(details.copy(surroundingSkin = details.surroundingSkin.toggle(key))) }, { Text(label) }, enabled = enabled)
         }
@@ -450,6 +455,11 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
     Group("Drainage amount") {
         PhotoDetails.DRAINAGE_AMOUNT.forEach { (key, label) ->
             FilterChip(details.drainageAmount == key, { onChange(details.copy(drainageAmount = if (details.drainageAmount == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Local signs of infection") {
+        PhotoDetails.INFECTION_SIGNS.forEach { (key, label) ->
+            FilterChip(key in details.infectionSigns, { onChange(details.copy(infectionSigns = PhotoDetails.toggleInfection(details.infectionSigns, key))) }, { Text(label) }, enabled = enabled)
         }
     }
     Text("Size (cm)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
