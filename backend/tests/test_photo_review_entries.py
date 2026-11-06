@@ -116,3 +116,37 @@ def test_findings_reach_the_photo_model_marked_as_the_clinicians(monkeypatch):
         encounter_id='e', clinician_note='', clinician_findings='wound bed: slough'))
     text = json.dumps(sent[0])
     assert 'CLINICIAN_RECORDED_FINDINGS' in text and 'Conflict:' in text and 'wound bed: slough' in text
+
+
+def test_photo_ai_suggestions_never_reach_the_charting_note_sources(quick_api, monkeypatch):
+    api = quick_api; visit = start(api, 'photo')['encounter']['id']
+
+    async def analyze(data, mime, kind, **kwargs):
+        return {'facts': [{'name': 'wound_tissue', 'value': {'text': 'Moist granulation tissue.'}, 'quote': ''},
+                          {'name': 'photo_interpretation', 'value': {'text': 'For clinician review: possible eschar.'}, 'quote': ''},
+                          {'name': 'photo_next_steps', 'value': {'text': 'Check: probe depth.'}, 'quote': ''}], 'warnings': []}
+    monkeypatch.setattr(providers, 'analyze_media', analyze)
+    assert upload(api, visit, 'advisory', clinician_findings=json.dumps({'wound_bed': ['granulation'], 'drainage_type': 'serosanguineous', 'drainage_amount': 'small'})).status_code == 201
+    with api.sessions() as db:
+        context = quick_workflows.source_context(db, db.get(Encounter, visit))
+    names = {fact['name'] for fact in context['case_facts']}
+    assert 'photo_interpretation' not in names and 'photo_next_steps' not in names
+    photo_text = ' '.join(s['text'] or '' for s in context['untrusted_sources'] if s['kind'] == 'photo')
+    # The clinician's selections reach the note exactly, as the clinician's own findings.
+    assert 'wound bed: granulation' in photo_text and 'drainage: small serosanguineous' in photo_text
+
+
+def test_rules_give_the_clinician_priority_flag_differences_and_keep_uncertainty():
+    from types import SimpleNamespace
+    from server import documentation_layers as layers
+    token = layers.select(SimpleNamespace(profile={'profession': 'RPN'}), 'nursing')
+    try:
+        note_rules = providers.prompt('quick_draft')
+    finally:
+        layers.selection.reset(token)
+    assert "clinician's own bedside findings" in note_rules and 'take priority' in note_rules
+    assert 'Please confirm wound-bed tissue. Your selection and the image assessment may differ.' in note_rules
+    assert 'stays out of the note' in note_rules and 'can coexist' in note_rules
+    assert 'recorded as' in note_rules and 'upper-left' in note_rules
+    consultant = providers.prompt('consult')
+    assert 'never restate it as a fact' in consultant

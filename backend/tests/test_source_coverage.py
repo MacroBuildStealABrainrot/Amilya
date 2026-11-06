@@ -99,3 +99,19 @@ def test_a_conflict_flagged_in_an_alert_is_not_a_lost_photo_finding():
     alert = [{'field': 'clarify', 'message': 'You recorded granulation; the photo assessment found eschar and slough. Please confirm.'}]
     assert photo_finding_losses('Left plantar ulcer, granulation recorded.', context, alert) == []
     assert photo_finding_losses('Left plantar ulcer, granulation recorded.', context)
+
+
+def test_uncertain_photo_findings_are_not_forced_into_the_note():
+    from server.source_coverage import photo_finding_losses
+    context = {'case_facts': [
+        {'name': 'wound_tissue', 'value': {'text': 'Central dark crusted tissue, likely eschar.'}, 'confirmation_state': 'unconfirmed'},
+        {'name': 'periwound', 'value': {'text': 'Mild erythema at the wound margin.'}, 'confirmation_state': 'unconfirmed'}]}
+    lost = ' '.join(photo_finding_losses('Left plantar ulcer with granulation.', context))
+    assert 'eschar' not in lost and 'redness' in lost
+
+
+def test_the_clinicians_wound_bed_selection_outranks_the_photo():
+    from server.source_coverage import photo_finding_losses
+    context = {'untrusted_sources': [{'kind': 'photo', 'text': 'Clinician-recorded findings on assessment: wound bed: granulation; drainage: small serosanguineous.'}],
+               'case_facts': [{'name': 'wound_tissue', 'value': {'text': 'Adherent yellow slough over the base.'}, 'confirmation_state': 'unconfirmed'}]}
+    assert photo_finding_losses('Left plantar ulcer with granulation. Small serosanguineous drainage.', context) == []

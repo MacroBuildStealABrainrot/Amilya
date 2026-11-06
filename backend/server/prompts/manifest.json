@@ -23,7 +23,7 @@
     "85_documentation_qa.system.md": "53ae3731f8dd4e0f4d3a134ba54335707bed1c3f50883fede777d10b8c6633d9",
     "86_quick_documentation_qa.system.md": "31d8689ee799a9f8e6c355c57dfdc603544483f49969f5ff72d35e01478d65ee",
     "90_contextual_clinical_assistant.system.md": "0a05553d5ff7c4e402b5daccde44856c5e4e96a2672d2ac0538e739d8e1901f6",
-    "91_wound_consultant.system.md": "9409dcf167a04ea605d9927da20f6108bff673b0ccfb6b3d02a9cac582932d18",
+    "91_wound_consultant.system.md": "28f0be2e0f09ac17a654e22b839234308cf0f237101e9d437cc0219da082223d",
     "92_improve_assessment.system.md": "0f5cc446b895826b239f072efe9cce0d4edcd25e76a3de6b29a7ca3c01201314",
     "documentation/clinical_style_v1.md": "732830c158171a3852b3dfbf1e01f9e10a4306d958b0e80202731db20b19115e",
     "documentation/community_nursing_v1.md": "7b1f8b814ccd8dd61bc5548a1d2714cef82ee3d08a82ccdfe85398aaac2da6a2",
@@ -46,7 +46,7 @@
     "documentation/examples/physician_update_v1.md": "de4a7a22b08cf713da429dd15852e9eb3841202cc48a64234ec8be48b232b135",
     "documentation/examples/referral_letter_v1.md": "de4a7a22b08cf713da429dd15852e9eb3841202cc48a64234ec8be48b232b135",
     "documentation/examples/soap_v1.md": "6dfdadf46d2aab0844c812b0a55c40f4d6ef8d2e61687ec12a2d4a37f8227107",
-    "documentation/charting_rules_v1.md": "b22b9ea699f52709ed2fb70d53d494cef15acf1cc449aa4baa7f0b7dba97e887",
+    "documentation/charting_rules_v1.md": "ca78b3fed28e26c4d17de0d1fcdbe420aa1f70ccd141a31818444e1297970971",
     "95_evaluation_marker.system.md": "cd67d92a51d158593599521f3ce97275d7ae6932a6a5f4020488ca01322761df"
   }
 }

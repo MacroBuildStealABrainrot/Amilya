@@ -146,6 +146,9 @@ PHOTO_TERMS = {
 }
 
 
+WOUND_BED_TERMS = {'eschar', 'slough', 'granulation tissue', 'necrotic tissue'}
+
+
 def photo_finding_losses(report: str, context: dict, alerts=None) -> list[str]:
     """A tissue or skin finding the photo showed that the note leaves out. Interpretation fields are not checked.
     A finding named in a "please confirm" alert (a conflict with what the clinician recorded) is handled, not lost."""
@@ -154,9 +157,17 @@ def photo_finding_losses(report: str, context: dict, alerts=None) -> list[str]:
                     if isinstance(f, dict) and f.get('name') in PHOTO_FACT_NAMES and f.get('confirmation_state') != 'rejected')
     if not seen.strip() or not (report or '').strip():
         return []
+    # The clinician's own wound-bed selection outranks the photo: then photo tissue types are not required in the note.
+    sources = ' '.join(str(src.get('text') or '') for src in (context or {}).get('untrusted_sources', []) if isinstance(src, dict))
+    clinician_bed = re.search(r'Clinician-recorded findings on assessment:[^.]*wound bed:', sources, re.I) is not None
+    hedge = re.compile(r'\b(likely|possible|possibly|probable|probably|suggest\w*|may be|might be|appears?|consistent with|query)\b', re.I)
     losses = []
     for label, patterns in PHOTO_TERMS.items():
-        in_photo = any(re.search(p, seen, re.I) for p in patterns)
+        if clinician_bed and label in WOUND_BED_TERMS:
+            continue
+        # Only a finding stated plainly must reach the note; one the photo marked uncertain belongs to the review.
+        plain = [sentence for sentence in re.split(r'(?<=[.;])\s+', seen) if not hedge.search(sentence)]
+        in_photo = any(re.search(p, sentence, re.I) for sentence in plain for p in patterns)
         if in_photo and not any(re.search(p, report, re.I) or re.search(p, alert_text, re.I) for p in patterns):
             losses.append(f'The photo assessment found {label}, but the note leaves it out; add it as a photo finding.')
     return losses
