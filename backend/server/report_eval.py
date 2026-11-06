@@ -50,15 +50,33 @@ def _check(scenario, result):
                                                        'case_facts': scenario.get('facts', [])})}
 
 
-async def mark(scenario, report, user, encounter_id):
+PAUSE_SECONDS = 6
+
+
+async def _paced(call):
+    """One AI step at a time, with a pause, and patient retries when the AI service says 'too many requests'."""
+    from fastapi import HTTPException
+    for attempt in range(4):
+        await asyncio.sleep(PAUSE_SECONDS)
+        try:
+            return await call()
+        except HTTPException as error:
+            if error.status_code not in {429, 503} or attempt == 3:
+                raise
+            await asyncio.sleep(30 * (attempt + 1))
+
+
+async def mark(scenario, report, user, encounter_id, alerts=None):
     """Independent AI marker (Claude Haiku via the normal route). Accuracy problems are kept apart from style notes."""
     from . import providers
     payload = {'sources': {'clinician_said': scenario.get('text', ''), 'clinician_note_with_photo': scenario.get('note', ''),
                            'photo_findings': [f['value']['text'] for f in scenario.get('facts', [])]},
                'profession': scenario['profession'], 'report_format': scenario['template'],
-               'expected_key_facts': scenario.get('expected', []), 'candidate_report': report}
+               'expected_key_facts': scenario.get('expected', []), 'candidate_report': report,
+               'alerts_shown_outside_the_note': [a.get('message') for a in (alerts or []) if isinstance(a, dict)]}
     try:
-        verdict = await providers.routed('eval_marker', json.dumps(payload, ensure_ascii=False), user=user, encounter_id=encounter_id, max_tokens=1200)
+        verdict = await _paced(lambda: providers.routed('eval_marker', json.dumps(payload, ensure_ascii=False), user=user,
+                                                       encounter_id=encounter_id, max_tokens=1200))
     except Exception as error:
         return {'error': type(error).__name__, 'accuracy': [], 'style': []}
     items = [str(item) for item in verdict.get('discrepancies') or []]
@@ -83,9 +101,15 @@ async def run(label):
             logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'error': 'no test user'}))
             return
         patient_id = f'eval-{user.workspace_id}'[:36]
-        if db.get(Patient, patient_id) is None:
-            db.add(Patient(id=patient_id, workspace_id=user.workspace_id, display_name='Made-up evaluation container', external_ref=None))
-            db.commit()
+        container = db.get(Patient, patient_id)
+        if container is None:
+            container = Patient(id=patient_id, workspace_id=user.workspace_id, display_name='Made-up evaluation container', external_ref=None)
+            db.add(container); db.commit()
+        # Once per label: the free test server restarts often, and a restart must never repeat (and pay for) a run.
+        if container.external_ref == f'eval-done:{label}'[:120]:
+            logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'skipped': 'already run for this label'}))
+            return
+        container.external_ref = f'eval-done:{label}'[:120]; db.commit()
         summary, planted_results = [], []
         for scenario in SCENARIOS[:MAX_CASES]:
             from .db import uid
@@ -104,12 +128,12 @@ async def run(label):
             record = {'label': label, 'scenario': scenario['id'], 'specialty': scenario['area'],
                       'profession': scenario['profession'], 'template': scenario['template']}
             try:
-                result = await providers.quick_documentation(context, scenario['template'], 'concise',
-                    user=_ProfessionUser(user, scenario['profession']), encounter_id=encounter.id)
+                result = await _paced(lambda: providers.quick_documentation(context, scenario['template'], 'concise',
+                    user=_ProfessionUser(user, scenario['profession']), encounter_id=encounter.id))
                 result = documentation.visible_result(result)
                 record.update(_check(scenario, result))
                 record.update({'qa': result.get('qa'), 'text': result.get('text'), 'alerts': result.get('ui_alerts')})
-                marked = await mark(scenario, result.get('text') or '', user, encounter.id)
+                marked = await mark(scenario, result.get('text') or '', user, encounter.id, result.get('ui_alerts'))
                 record['marker'] = marked
                 if marked.get('accuracy'):
                     record['passed'] = False
