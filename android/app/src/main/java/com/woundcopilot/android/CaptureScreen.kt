@@ -447,14 +447,14 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
             FilterChip(key in details.surroundingSkin, { onChange(details.copy(surroundingSkin = details.surroundingSkin.toggle(key))) }, { Text(label) }, enabled = enabled)
         }
     }
-    Group("Drainage type") {
-        PhotoDetails.DRAINAGE_TYPE.forEach { (key, label) ->
-            FilterChip(details.drainageType == key, { onChange(details.copy(drainageType = if (details.drainageType == key) null else key)) }, { Text(label) }, enabled = enabled)
-        }
-    }
     Group("Drainage amount") {
         PhotoDetails.DRAINAGE_AMOUNT.forEach { (key, label) ->
             FilterChip(details.drainageAmount == key, { onChange(details.copy(drainageAmount = if (details.drainageAmount == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Drainage type") {
+        PhotoDetails.DRAINAGE_TYPE.forEach { (key, label) ->
+            FilterChip(details.drainageType == key, { onChange(details.copy(drainageType = if (details.drainageType == key) null else key)) }, { Text(label) }, enabled = enabled)
         }
     }
     Group("Local signs of infection") {
