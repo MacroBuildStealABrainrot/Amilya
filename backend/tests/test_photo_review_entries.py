@@ -264,3 +264,13 @@ def test_photo_clinical_review_is_a_senior_wound_consultant_review():
     for item in ('senior advanced wound care consultant', 'probe to bone', 'tendon integrity', 'ABI/TBI', '- Urgent review if',
                  'never a repeat of what is visible'):
         assert item.lower() in rules.lower(), item
+
+
+def test_wound_type_and_pressure_stage():
+    text = ClinicianFindings(wound_type='pressure_injury', pressure_stage='unstageable', wound_bed=['slough']).as_text()
+    assert text.startswith('wound type: pressure injury, unstageable')
+    assert 'diabetic foot ulcer' in ClinicianFindings(wound_type='diabetic_foot').as_text()
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ClinicianFindings(wound_type='venous', pressure_stage='stage_2')

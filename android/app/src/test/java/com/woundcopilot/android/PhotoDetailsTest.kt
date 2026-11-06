@@ -88,4 +88,12 @@ class PhotoDetailsTest {
         assertEquals(d, PhotoDetails.fromStored(d.toStored()))
         assertEquals(PhotoDetails(), PhotoDetails.fromStored(PhotoDetails().toStored()))
     }
+
+    @Test fun stageIsSentOnlyForAPressureInjury() {
+        val pi = PhotoDetails(woundType = "pressure_injury", pressureStage = "unstageable")
+        assertEquals("unstageable", pi.toJson().getString("pressure_stage"))
+        assertEquals(2, pi.selectedCount())
+        assertEquals(pi, PhotoDetails.fromStored(pi.toStored()))
+        assertFalse(PhotoDetails(woundType = "venous", pressureStage = "stage_2").toJson().has("pressure_stage"))
+    }
 }

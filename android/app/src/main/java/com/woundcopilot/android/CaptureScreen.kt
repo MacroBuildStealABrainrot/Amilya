@@ -432,6 +432,17 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
+    Group("Wound type") {
+        PhotoDetails.WOUND_TYPE.forEach { (key, label) ->
+            FilterChip(details.woundType == key, { onChange(details.copy(woundType = if (details.woundType == key) null else key,
+                pressureStage = if (key == "pressure_injury" && details.woundType != key) details.pressureStage else null)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    if (details.woundType == "pressure_injury") Group("Stage") {
+        PhotoDetails.PRESSURE_STAGE.forEach { (key, label) ->
+            FilterChip(details.pressureStage == key, { onChange(details.copy(pressureStage = if (details.pressureStage == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
     Group("Wound bed") {
         PhotoDetails.WOUND_BED.forEach { (key, label) ->
             FilterChip(key in details.woundBed, { onChange(details.copy(woundBed = details.woundBed.toggle(key))) }, { Text(label) }, enabled = enabled)

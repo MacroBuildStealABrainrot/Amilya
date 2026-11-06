@@ -54,6 +54,8 @@ def parse_photo_review(raw: str | None, kind: str):
 
 # ---------- Clinician-recorded wound details sent with a photo (owner request 2026-11-05) ----------
 WOUND_BED = Literal['granulation', 'slough', 'eschar', 'epithelial', 'hypergranulation', 'necrotic', 'bone', 'tendon']
+WOUND_TYPE = Literal['pressure_injury', 'diabetic_foot', 'venous', 'arterial', 'mixed', 'surgical', 'trauma', 'skin_tear', 'burn', 'moisture', 'other']
+PRESSURE_STAGE = Literal['stage_1', 'stage_2', 'stage_3', 'stage_4', 'unstageable', 'deep_tissue']
 WOUND_EDGES = Literal['attached', 'unattached', 'rolled', 'undermining', 'tunnelling']
 INFECTION_SIGNS = Literal['none', 'warmth', 'increased_pain', 'odour', 'spreading_erythema', 'friable_tissue', 'increased_drainage', 'wound_breakdown', 'delayed_healing']
 SURROUNDING_SKIN = Literal['intact', 'erythema', 'maceration', 'edema', 'induration', 'dry_flaky', 'callus', 'fragile']
@@ -64,6 +66,8 @@ Centimetres = Annotated[float, Field(gt=0, le=100, strict=False)]
 
 class ClinicianFindings(StrictModel):
     """Optional quick choices the clinician picked. Absent or empty means unknown; nothing is ever assumed or zero."""
+    wound_type: WOUND_TYPE | None = None
+    pressure_stage: PRESSURE_STAGE | None = None
     wound_bed: list[WOUND_BED] = Field(default_factory=list, max_length=8)
     wound_edges: list[WOUND_EDGES] = Field(default_factory=list, max_length=5)
     surrounding_skin: list[SURROUNDING_SKIN] = Field(default_factory=list, max_length=8)
@@ -87,6 +91,8 @@ class ClinicianFindings(StrictModel):
         if any(v is not None for v in earlier) or self.previous_weeks_ago is not None:
             if None in earlier or self.length_cm is None or self.width_cm is None:
                 raise ValueError('Healing progress needs today\'s length and width and the earlier length and width')
+        if self.pressure_stage and self.wound_type != 'pressure_injury':
+            raise ValueError('A stage applies only to a pressure injury')
         if {'attached', 'unattached'} <= set(self.wound_edges):
             raise ValueError('Edges cannot be both attached and unattached')
         return self
@@ -115,12 +121,21 @@ class ClinicianFindings(StrictModel):
         return f'healing progress: {trend} (area {now}, earlier {before}{when})'
 
     def is_empty(self) -> bool:
-        return not any([self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs, self.pain_score is not None,
+        return not any([self.wound_type, self.pressure_stage, self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs, self.pain_score is not None,
                         self.length_cm, self.width_cm, self.depth_cm])
 
     def as_text(self) -> str:
         """Plain clinical wording of exactly what was entered; unknown items are simply left out."""
         parts = []
+        if self.wound_type:
+            names = {'diabetic_foot': 'diabetic foot ulcer', 'venous': 'venous leg ulcer', 'arterial': 'arterial ulcer',
+                     'mixed': 'mixed arterial/venous ulcer', 'surgical': 'surgical wound', 'trauma': 'traumatic wound',
+                     'skin_tear': 'skin tear', 'burn': 'burn', 'moisture': 'moisture-associated skin damage',
+                     'pressure_injury': 'pressure injury', 'other': 'other wound type'}
+            stages = {'stage_1': 'stage 1', 'stage_2': 'stage 2', 'stage_3': 'stage 3', 'stage_4': 'stage 4',
+                      'unstageable': 'unstageable', 'deep_tissue': 'deep tissue pressure injury'}
+            kind = names[self.wound_type] + (f', {stages[self.pressure_stage]}' if self.pressure_stage else '')
+            parts.append('wound type: ' + kind)
         if self.wound_bed: parts.append('wound bed: ' + ', '.join(self.wound_bed))
         if self.wound_edges:
             names = {'rolled': 'rolled (epibole)'}
