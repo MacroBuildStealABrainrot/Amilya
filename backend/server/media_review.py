@@ -102,9 +102,9 @@ class ClinicianFindings(StrictModel):
         change = self.area_change_percent()
         if change is None:
             return ''
-        before = f'{self.previous_length_cm:g} x {self.previous_width_cm:g} cm ({self.previous_length_cm * self.previous_width_cm:.2f} cm2)'
+        before = f'{self.previous_length_cm:g} x {self.previous_width_cm:g} cm ({round(self.previous_length_cm * self.previous_width_cm, 2):g} cm2)'
         when = f', {self.previous_weeks_ago} week{"s" if self.previous_weeks_ago != 1 else ""} ago' if self.previous_weeks_ago else ''
-        now = f'{self.length_cm * self.width_cm:.2f} cm2'
+        now = f'{round(self.length_cm * self.width_cm, 2):g} cm2'
         if change > 0:
             trend = f'{change}% area reduction'
         elif change < 0:

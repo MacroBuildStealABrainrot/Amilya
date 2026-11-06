@@ -223,7 +223,7 @@ def test_infection_none_cannot_be_combined_and_unknown_edge_is_refused(quick_api
 def test_healing_percentage_is_calculated_not_guessed():
     shrinking = ClinicianFindings(length_cm=0.5, width_cm=0.5, previous_length_cm=1, previous_width_cm=1, previous_weeks_ago=4)
     assert shrinking.area_change_percent() == 75
-    assert 'healing progress: 75% area reduction (area 0.25 cm2, earlier 1 x 1 cm (1.00 cm2), 4 weeks ago)' in shrinking.as_text()
+    assert 'healing progress: 75% area reduction (area 0.25 cm2, earlier 1 x 1 cm (1 cm2), 4 weeks ago)' in shrinking.as_text()
     growing = ClinicianFindings(length_cm=3, width_cm=2, previous_length_cm=2, previous_width_cm=2.5)
     assert growing.area_change_percent() == -20 and 'area increased by 20%' in growing.as_text()
     assert ClinicianFindings(length_cm=2, width_cm=1).healing_progress() == ''  # optional: nothing earlier, nothing said
