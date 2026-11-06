@@ -236,3 +236,12 @@ def test_healing_progress_needs_both_sizes(quick_api, monkeypatch):
     assert upload(api, visit, 'p2', clinician_findings=json.dumps({'length_cm': 1, 'width_cm': 1, 'previous_length_cm': 2})).status_code == 422
     ok = upload(api, visit, 'p3', clinician_findings=json.dumps({'length_cm': 1, 'width_cm': 1, **only_earlier, 'previous_weeks_ago': 2}))
     assert ok.status_code == 201, ok.text
+
+
+def test_intact_periwound_against_erythema_or_maceration_is_flagged():
+    from server.media_review import selection_differences, PERIWOUND_DIFFERENCE
+    facts = [{'name': 'wound_edges', 'value': {'text': 'Irregular macerated wound edges.'}},
+             {'name': 'periwound', 'value': {'text': 'Periwound erythema.'}}]
+    assert PERIWOUND_DIFFERENCE in selection_differences(ClinicianFindings(surrounding_skin=['intact']), facts)
+    calm = [{'name': 'periwound', 'value': {'text': 'Periwound intact, no erythema.'}}]
+    assert selection_differences(ClinicianFindings(surrounding_skin=['intact']), calm) == []

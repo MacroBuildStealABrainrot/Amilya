@@ -60,10 +60,19 @@ import org.json.JSONObject
             val nextSteps=findings.filter{it.str("name")=="photo_next_steps"}.map{prettyValue(it.opt("value")).trim()}.filter{it.isNotBlank()}
             val paragraph=findings.filter{it.str("name") !in advisory}.sortedBy{order.indexOf(it.str("name")).let{i->if(i<0)order.size else i}}
                 .map{prettyValue(it.opt("value")).trim().let{t->if(t.isEmpty()||t.last() in ".!?")t else "$t."}}.filter{it.isNotBlank()}.joinToString(" ")
-            if(paragraph.isNotBlank()){Text(paragraph);sendParts+=if(groupName.startsWith("Unassigned"))paragraph else "$groupName: $paragraph"}
+            if(paragraph.isNotBlank()){
+                OutlinedCard(Modifier.fillMaxWidth()){Text(paragraph,Modifier.padding(14.dp))}
+                sendParts+=if(groupName.startsWith("Unassigned"))paragraph else "$groupName: $paragraph"
+            }
             if(twoPart)return@forEachIndexed
-            if(interpretation.isNotEmpty()){Text("Possible interpretation (AI suggestion, not charted)",style=MaterialTheme.typography.titleSmall);interpretation.forEach{Text(it)}}
-            if(nextSteps.isNotEmpty()){Text("Suggested assessment",style=MaterialTheme.typography.titleSmall);nextSteps.forEach{Text(it)}}
+            // Owner request 2026-11-06: the AI review sits in its own box under the photo report, as short direct points.
+            val points=reviewPoints(interpretation)+reviewPoints(nextSteps)
+            if(points.isNotEmpty())OutlinedCard(Modifier.fillMaxWidth()){
+                Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+                    Text("Clinical review",style=MaterialTheme.typography.titleSmall)
+                    points.forEach{Text("• $it")}
+                }
+            }
         }
         // The clinician's own words about the wound: what a photo cannot show (side, how long, warmth, pain, odour, history).
         if(photos.isNotEmpty()){
@@ -114,3 +123,10 @@ import org.json.JSONObject
     }},confirmButton={TextButton({s.arrangePhotos(photos.map{if(it.str("id")==p.str("id"))obj("id" to p.str("id"),"label" to label.trim(),"group" to group.trim())else it});editing=null},enabled=group.isNotBlank()){Text("Apply")}},dismissButton={TextButton({editing=null}){Text("Cancel")}})}
     deleting?.let{id->AlertDialog(onDismissRequest={deleting=null},title={Text("Remove photo?")},text={Text("The local copy and its stored assessment will be removed. Previously written reports need separate review.")},confirmButton={TextButton({s.removePhoto(id);deleting=null}){Text("Remove")}},dismissButton={TextButton({deleting=null}){Text("Cancel")}})}
 }
+
+/** Short points from the AI review: one point per "- " line, or per sentence for an older long answer. Labels are dropped. */
+internal fun reviewPoints(texts:List<String>):List<String> = texts.flatMap{text->
+    val clean=text.replace(Regex("^\\s*(For clinician review|Possible|Check|Suggested assessment)\\s*:\\s*",RegexOption.IGNORE_CASE),"")
+    val lines=clean.split(Regex("\\n|(?:^|\\s)-\\s+(?=\\S)")).map{it.trim().trimStart('-','•').trim()}.filter{it.isNotBlank()}
+    if(lines.size>1)lines else clean.split(Regex("(?<=[.;])\\s+")).map{it.trim()}.filter{it.isNotBlank()}
+}.map{it.removeSuffix(".").removeSuffix(";").trim()}.filter{it.isNotBlank()}

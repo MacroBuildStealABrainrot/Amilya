@@ -138,6 +138,7 @@ class ClinicianFindings(StrictModel):
 
 BED_DIFFERENCE = 'Please confirm wound-bed tissue. Your selection and the image assessment may differ.'
 DRAINAGE_DIFFERENCE = 'Please confirm drainage. Your selection and the image assessment may differ.'
+PERIWOUND_DIFFERENCE = 'Please confirm periwound. Your selection and the image assessment may differ.'
 _PHOTO_TISSUE = {'granulation': r'granulat', 'slough': r'slough', 'eschar': r'eschar', 'necrotic': r'necro',
                  'epithelial': r'epitheli', 'hypergranulation': r'hypergranulat|overgranulat'}
 _VISIBLE_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate', 'visible_finding'}
@@ -165,6 +166,11 @@ def selection_differences(findings: 'ClinicianFindings | None', facts) -> list[s
             photo_tissue.discard('granulation')
         if photo_tissue - set(findings.wound_bed):
             out.append(BED_DIFFERENCE)
+    if 'intact' in findings.surrounding_skin:
+        skin = ' '.join(str((f.get('value') or {}).get('text', '')) for f in facts or []
+                        if isinstance(f, dict) and f.get('name') in {'periwound', 'wound_edges', 'visible_finding'})
+        if re.search(r'(?<!no )(?<!without )\b(erythem\w*|macerat\w*|o?edema\w*|swell\w*|indurat\w*|redness)', skin, re.I):
+            out.append(PERIWOUND_DIFFERENCE)
     if findings.drainage_type or findings.drainage_amount:
         picked_none = findings.drainage_type == 'none' or findings.drainage_amount == 'none'
         photo_none = re.search(r'\bno\b[^.;]{0,25}\b(drainage|exudate|discharge)\b|\bdry wound (bed|surface)\b', seen, re.I) is not None
