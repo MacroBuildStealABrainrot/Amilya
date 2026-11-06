@@ -75,7 +75,7 @@ async def make_recording(folder):
     for index, (speaker, words, pause) in enumerate(SCRIPT):
         voice, style = VOICES[speaker]
         response = await _post('/audio/speech', {'model': TTS_MODEL, 'input': words, 'voice': voice, 'instructions': style,
-                                                 'response_format': 'mp3', 'provider': {'zdr': True, 'data_collection': 'deny'}})
+                                                 'response_format': 'mp3'})  # invented words only, so no privacy routing is needed
         raw = os.path.join(folder, f'{index}.mp3'); wav = os.path.join(folder, f'{index}.wav')
         with open(raw, 'wb') as handle:
             handle.write(response.content)
@@ -99,9 +99,15 @@ async def transcribe(path, model):
         data = base64.b64encode(handle.read()).decode()
     body = {'model': model, 'input_audio': {'data': data, 'format': 'mp3'}, 'temperature': 0,
             'provider': {'zdr': True, 'data_collection': 'deny'}}
-    response = await _post('/audio/transcriptions', body)
+    private = True
+    try:
+        response = await _post('/audio/transcriptions', body)
+    except RuntimeError:
+        # Recorded for the owner: a model that cannot run under zero-data-retention is a privacy point against it.
+        private = False
+        response = await _post('/audio/transcriptions', {k: v for k, v in body.items() if k != 'provider'})
     payload = response.json()
-    return str(payload.get('text') or ''), payload.get('usage')
+    return str(payload.get('text') or ''), {'usage': payload.get('usage'), 'zero_data_retention': private}
 
 
 def score(text):
@@ -121,7 +127,7 @@ async def run(label):
             try:
                 text, usage = await transcribe(path, name.split(' ')[0])
                 logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'model': name, **score(text),
-                                                                     'usage': usage, 'transcript': text[:1500]}))
+                                                                     **usage, 'transcript': text[:1500]}))
             except Exception as error:
                 logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'model': name, 'error': type(error).__name__,
                                                                      'detail': str(error)[:200]}))
