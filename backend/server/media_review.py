@@ -54,7 +54,7 @@ def parse_photo_review(raw: str | None, kind: str):
 
 # ---------- Clinician-recorded wound details sent with a photo (owner request 2026-11-05) ----------
 WOUND_BED = Literal['granulation', 'slough', 'eschar', 'epithelial', 'hypergranulation', 'necrotic', 'bone', 'tendon']
-WOUND_EDGES = Literal['attached', 'unattached']
+WOUND_EDGES = Literal['attached', 'unattached', 'rolled', 'undermining', 'tunnelling']
 INFECTION_SIGNS = Literal['none', 'warmth', 'increased_pain', 'odour', 'spreading_erythema', 'friable_tissue', 'increased_drainage', 'wound_breakdown', 'delayed_healing']
 SURROUNDING_SKIN = Literal['intact', 'erythema', 'maceration', 'edema', 'induration', 'dry_flaky', 'callus', 'fragile']
 DRAINAGE_TYPE = Literal['none', 'serous', 'serosanguineous', 'sanguineous', 'purulent']
@@ -65,7 +65,7 @@ Centimetres = Annotated[float, Field(gt=0, le=100, strict=False)]
 class ClinicianFindings(StrictModel):
     """Optional quick choices the clinician picked. Absent or empty means unknown; nothing is ever assumed or zero."""
     wound_bed: list[WOUND_BED] = Field(default_factory=list, max_length=8)
-    wound_edges: WOUND_EDGES | None = None
+    wound_edges: list[WOUND_EDGES] = Field(default_factory=list, max_length=5)
     surrounding_skin: list[SURROUNDING_SKIN] = Field(default_factory=list, max_length=8)
     drainage_type: DRAINAGE_TYPE | None = None
     drainage_amount: DRAINAGE_AMOUNT | None = None
@@ -78,6 +78,8 @@ class ClinicianFindings(StrictModel):
     def _none_stands_alone(self):
         if 'none' in self.infection_signs and len(self.infection_signs) > 1:
             raise ValueError('No local signs of infection cannot be combined with a sign')
+        if {'attached', 'unattached'} <= set(self.wound_edges):
+            raise ValueError('Edges cannot be both attached and unattached')
         return self
 
     def is_empty(self) -> bool:
@@ -88,7 +90,9 @@ class ClinicianFindings(StrictModel):
         """Plain clinical wording of exactly what was entered; unknown items are simply left out."""
         parts = []
         if self.wound_bed: parts.append('wound bed: ' + ', '.join(self.wound_bed))
-        if self.wound_edges: parts.append('wound edges: ' + self.wound_edges)
+        if self.wound_edges:
+            names = {'rolled': 'rolled (epibole)'}
+            parts.append('wound edges: ' + ', '.join(names.get(item, item) for item in self.wound_edges))
         if self.surrounding_skin: parts.append('periwound: ' + ', '.join(item.replace('_', '/') for item in self.surrounding_skin))
         drainage = ' '.join(item for item in (self.drainage_amount, self.drainage_type) if item)
         if drainage: parts.append('drainage: ' + drainage)

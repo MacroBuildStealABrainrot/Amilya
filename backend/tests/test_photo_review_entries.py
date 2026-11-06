@@ -202,18 +202,19 @@ def test_samsung_case_keeps_selections_and_sends_the_confirm_message(quick_api, 
 
 
 def test_edges_deeper_structures_and_local_infection_signs():
-    picked = ClinicianFindings(wound_bed=['bone', 'tendon', 'hypergranulation'], wound_edges='unattached', surrounding_skin=['callus'],
+    picked = ClinicianFindings(wound_bed=['bone', 'tendon', 'hypergranulation'], wound_edges=['unattached', 'rolled', 'undermining', 'tunnelling'], surrounding_skin=['callus'],
                                infection_signs=['warmth', 'odour', 'spreading_erythema'])
     text = picked.as_text()
-    assert 'wound bed: bone, tendon, hypergranulation' in text and 'wound edges: unattached' in text and 'periwound: callus' in text
+    assert 'wound bed: bone, tendon, hypergranulation' in text and 'wound edges: unattached, rolled (epibole), undermining, tunnelling' in text and 'periwound: callus' in text
     assert 'local signs of infection: warmth, odour, spreading erythema' in text
     assert 'no local signs of infection' in ClinicianFindings(infection_signs=['none']).as_text()
-    assert not ClinicianFindings(wound_edges='attached').is_empty()
+    assert not ClinicianFindings(wound_edges=['attached']).is_empty()
 
 
 def test_infection_none_cannot_be_combined_and_unknown_edge_is_refused(quick_api, monkeypatch):
     api = quick_api; visit = start(api, 'photo')['encounter']['id']; capture(monkeypatch)
     assert upload(api, visit, 'mix', clinician_findings=json.dumps({'infection_signs': ['none', 'warmth']})).status_code == 422
-    assert upload(api, visit, 'edge', clinician_findings=json.dumps({'wound_edges': 'rolled'})).status_code == 422
-    ok = upload(api, visit, 'fine', clinician_findings=json.dumps({'wound_edges': 'attached', 'infection_signs': ['none']}))
+    assert upload(api, visit, 'edge', clinician_findings=json.dumps({'wound_edges': ['attached', 'unattached']})).status_code == 422
+    assert upload(api, visit, 'edge2', clinician_findings=json.dumps({'wound_edges': ['raised']})).status_code == 422
+    ok = upload(api, visit, 'fine', clinician_findings=json.dumps({'wound_edges': ['attached', 'undermining'], 'infection_signs': ['none']}))
     assert ok.status_code == 201, ok.text

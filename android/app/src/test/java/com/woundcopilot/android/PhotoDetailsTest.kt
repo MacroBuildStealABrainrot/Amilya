@@ -48,13 +48,18 @@ class PhotoDetailsTest {
     }
 
     @Test fun edgesInfectionSignsAndDeeperStructuresAreSentAndSaved() {
-        val details = PhotoDetails(woundBed = setOf("bone", "tendon"), woundEdge = "unattached", infectionSigns = setOf("warmth", "odour"))
+        val details = PhotoDetails(woundBed = setOf("bone", "tendon"), woundEdges = setOf("unattached", "undermining"), infectionSigns = setOf("warmth", "odour"))
         val json = details.toJson()
-        assertEquals("unattached", json.getString("wound_edges"))
+        assertEquals("unattached", json.getJSONArray("wound_edges").getString(0))
         assertEquals("warmth", json.getJSONArray("infection_signs").getString(0))
         assertEquals("bone", json.getJSONArray("wound_bed").getString(0))
-        assertEquals(5, details.selectedCount())
+        assertEquals(6, details.selectedCount())
         assertEquals(details, PhotoDetails.fromStored(details.toStored()))
+    }
+
+    @Test fun attachedAndUnattachedExcludeEachOther() {
+        assertEquals(setOf("rolled", "unattached"), PhotoDetails.toggleEdge(setOf("rolled", "attached"), "unattached"))
+        assertEquals(setOf("attached", "tunnelling"), PhotoDetails.toggleEdge(setOf("attached"), "tunnelling"))
     }
 
     @Test fun noInfectionSignsStandsAlone() {

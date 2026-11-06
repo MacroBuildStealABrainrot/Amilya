@@ -439,7 +439,7 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
     }
     Group("Wound edges") {
         PhotoDetails.WOUND_EDGES.forEach { (key, label) ->
-            FilterChip(details.woundEdge == key, { onChange(details.copy(woundEdge = if (details.woundEdge == key) null else key)) }, { Text(label) }, enabled = enabled)
+            FilterChip(key in details.woundEdges, { onChange(details.copy(woundEdges = PhotoDetails.toggleEdge(details.woundEdges, key))) }, { Text(label) }, enabled = enabled)
         }
     }
     Group("Periwound") {
