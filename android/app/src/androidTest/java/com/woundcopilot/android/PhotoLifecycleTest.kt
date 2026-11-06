@@ -69,7 +69,7 @@ class PhotoLifecycleTest {
         compose.runOnIdle{
             assertTrue(s.externalCapture.begin(ExternalKind.PERMISSION,"audio","audio"))
             s.externalCapture.background(false,false);assertFalse(s.locked)
-            s.externalCapture.deviceLocked();assertTrue(s.locked)
+            s.externalCapture.deviceLocked();assertFalse(s.locked)
             assertFalse(s.externalCapture.permissionReturned());s.externalCapture.foreground(false);assertTrue(s.locked)
         }
     }
@@ -111,7 +111,7 @@ class PhotoLifecycleTest {
             flow.clear();s.unlock()
             assertTrue(flow.begin(ExternalKind.CAMERA,"photo","photo"))
             val reconstructed=ExternalCapture(s,compose.activity,compose.activity.lifecycleScope)
-            reconstructed.background(false,false);assertTrue(s.locked)
+            reconstructed.background(false,false);assertFalse(s.locked)
             reconstructed.clear();flow.clear()
         }
     }

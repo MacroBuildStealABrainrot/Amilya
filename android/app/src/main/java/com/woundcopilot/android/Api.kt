@@ -184,6 +184,7 @@ internal const val RENDER_TEST_API_ORIGIN="https://amilya-repair-test.onrender.c
 internal const val LOCAL_TEST_API_ORIGIN="http://127.0.0.1:18766/api/v1"
 
 internal const val ISOLATED_TEST_HOST="amilya-repair-test.onrender.com"
+internal fun sessionKeyFor(base:String)=if(base.startsWith("https://woundcopilot-") || base.startsWith("https://$ISOLATED_TEST_HOST/"))"session" else "session-local-integration"
 
 /** Any address of the live Google Cloud Run service (including its tagged repair copy). The isolated test app never talks to these. */
 internal fun isLiveServiceUrl(url:String):Boolean{
@@ -270,7 +271,9 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
         }
     }
 
-    private val sessionKey=if(base.startsWith("https://woundcopilot-"))"session" else "session-local-integration"
+    // The isolated test server is the only server a test build talks to, so its sign-in is kept under the same name the
+    // app checks when it starts. Before this, a test build forgot the sign-in whenever Android closed the app (owner report).
+    private val sessionKey=sessionKeyFor(base)
 
     @Volatile private var cookie=vault.read(sessionKey) ?: ""
 

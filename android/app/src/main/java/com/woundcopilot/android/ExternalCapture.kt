@@ -26,6 +26,8 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
     private var restored=pending!=null
     /** The operation the app already locked for, so it does not lock again on every resume (PIN loop). */
     private var lockedFor:String?=null
+    /** When the clinician left the app; the PIN is asked for only after [LockPolicy.AWAY_LOCK_MS] away. */
+    private var leftAt:Long?=null
     /** A photo that arrived while the PIN screen was showing; it is sent once the clinician unlocks. */
     private var deferredPhoto:JSONObject?=null
     var busy by mutableStateOf(false);private set
@@ -51,11 +53,13 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
         if(changing)return
         event("app_background")
         if(!deviceLocked && trusted()){awaitingForeground=true;event("lock_suppressed_trusted_flow")}
-        else {live=false;s.lock();event(if(deviceLocked)"lock_required_device"else"lock_required_background")}
+        else {live=false;if(leftAt==null)leftAt=clock();event(if(deviceLocked)"lock_required_device"else"lock_required_background")}
     }
     private fun trusted()=pending!=null && live && !s.locked && s.user?.str("id")==pending?.str("owner") && clock()-started in 0..TRUST_MS
     fun foreground(deviceLocked:Boolean){
         event("app_foreground")
+        val away=leftAt?.let{clock()-it};leftAt=null
+        if(LockPolicy.lockAfterAway(away))s.lock()
         val id=pending?.str("id")
         if(LockPolicy.lockForPendingOperation(deviceLocked,id,live,clock()-started,awaitingForeground,returned,lockedFor)){
             s.lock();live=false;if(id!=null)lockedFor=id;event(if(deviceLocked)"lock_required_device"else"lock_required_timeout")
@@ -66,7 +70,7 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
         // Results may be delivered before onResume. Keep their identity through that transition.
         if(returned && !busy)clear()
     }
-    fun deviceLocked(){live=false;s.lock();event("lock_required_device")}
+    fun deviceLocked(){live=false;if(leftAt==null)leftAt=clock();event("lock_required_device")}
     // Do not reuse an outstanding launch for a new account/encounter after logout.
     // Its eventual result still belongs to the original operation and cannot upload.
     fun endSession(){live=false}
