@@ -16,85 +16,9 @@ from types import SimpleNamespace
 
 logger = logging.getLogger('woundcopilot.report_eval')
 
-# Every visit below is invented. No real patient, clinician or date of a real visit.
-SCENARIOS = [
-    {'id': 'oncology_bleeding_lesion', 'specialty': 'community nursing / oncology', 'profession': 'RPN', 'template': 'nursing',
-     'text': "Okay so this client has lymphoma, she's immune compromised. She also has cell cancer, one lesion on the left thigh. "
-             "It's bleeding today, she says it hurts, pain about 6 out of 10. It's getting bigger and there's more drainage than last week, "
-             "serous, moderate amount. She cannot change her own dressing so we're seeing her daily. I cleansed with saline and applied Mepilex. "
-             "High risk for infection. She has surgery scheduled November 6th.",
-     'must': [r'cancer', r'lymphoma', r'immuno-?\s?compromised|immune[- ]compromised', r'left thigh', r'bleed', r'6\s*/\s*10|6 out of 10',
-              r'increas\w*.{0,40}size|size.{0,40}increas|bigger|larger|enlarg', r'drainage', r'daily', r'(unable|cannot|can.t).{0,30}(change|manage).{0,20}dressing',
-              r'Mepilex', r'November 6', r'saline|NS\b'],
-     'must_not': [r'squamous|basal|melanoma', r'\bcell cancer\b', r'physician (was )?(notified|informed)', r'no signs of infection'],
-     'clarify': True},
-    {'id': 'routine_catheter', 'specialty': 'community nursing', 'profession': 'RPN', 'template': 'nursing',
-     'text': 'Seen for blocked suprapubic catheter. Changed it, 16 French, clear yellow urine back right away. No other concerns, thanks.',
-     'must': [r'suprapubic', r'16\s*(Fr|French)', r'clear'], 'must_not': [r'no signs of infection', r'tolerated'], 'max_words': 45},
-    {'id': 'long_wound_soap_with_chatter', 'specialty': 'wound care', 'profession': 'RN', 'template': 'soap',
-     'text': "Hi how was the hockey game last night, oh nice. Okay, client seen for the left, sorry, correction, right heel pressure injury. "
-             "She says pain is 3 out of 10 with dressing changes, no fever or chills. Diabetes, on metformin. Wound measures 3.2 by 2.1 cm, "
-             "depth 0.4 cm. Wound bed 70 percent granulation 30 percent slough, edges rolled, periwound macerated. Moderate serous drainage, no odour. "
-             "Cleansed with saline, Inadine applied, covered with Mepilex Border, heel offloaded with a pillow. Plan dressing every 3 days and "
-             "she'll see the wound clinic next Tuesday. My daughter also plays hockey actually.",
-     'must': [r'right heel', r'3\s*/\s*10', r'3\.2\s*x\s*2\.1|3\.2 by 2\.1', r'0\.4', r'granulation', r'slough', r'macerat', r'Inadine',
-              r'Mepilex', r'offload', r'(every|q)\s*3\s*days|q3', r'diabet', r'metformin', r'denies fever|no fever'],
-     'must_not': [r'hockey', r'left heel', r'osteomyelitis is', r'cellulitis is present']},
-    {'id': 'medicine_heart_failure', 'specialty': 'internal medicine', 'profession': 'MD', 'template': 'soap',
-     'text': "Seventy eight year old man with heart failure, ejection fraction 30 percent. Three kilo weight gain this week, more short of breath "
-             "climbing stairs, orthopnea two pillows, no chest pain. BP 142 over 86, heart rate 96, sats 93 percent room air. Crackles at both bases, "
-             "pitting edema to the knees. I'm increasing furosemide from 40 mg to 80 mg daily, checking electrolytes and creatinine in 3 days, "
-             "and see him back in one week.",
-     'must': [r'heart failure', r'30\s*%|30 percent', r'3\s*(kg|kilo)', r'142\s*/\s*86', r'96', r'93\s*(%|percent)', r'crackles', r'edema',
-              r'furosemide.{0,40}80\s*mg|80\s*mg.{0,40}furosemide', r'40\s*mg', r'electrolytes|creatinine', r'(one|1) week'],
-     'must_not': [r'chest pain (is )?present', r'spironolactone', r'BNP']},
-    {'id': 'surgery_post_op', 'specialty': 'general surgery', 'profession': 'Surgeon', 'template': 'nursing',
-     'text': "Post-op day 2 laparoscopic cholecystectomy. Port sites clean and dry, no erythema. JP drain 50 mL serosanguinous over 24 hours. "
-             "Tolerating clear fluids, passing flatus. Pain 4 out of 10 on oral analgesia. Plan remove drain tomorrow if under 30 mL, advance diet.",
-     'must': [r'(post-?op|postoperative).{0,15}(day )?2|POD ?2', r'cholecystectomy', r'50\s*mL', r'serosanguin', r'flatus', r'4\s*/\s*10',
-              r'30\s*mL', r'drain'], 'must_not': [r'bowel sounds', r'abdomen (is )?soft']},
-    {'id': 'emergency_hypoxia_transfer', 'specialty': 'emergency / community', 'profession': 'RN', 'template': 'nursing',
-     'text': "Wife said he's been more tired and confused since yesterday. On arrival sats 86 percent on room air, resp rate 28, heart rate 118, "
-             "temp 38.4. Recently discharged after aspiration pneumonia. I called 911, EMS came and took him to the emergency department.",
-     'must': [r'86\s*%', r'28', r'118', r'38\.4', r'(wife|spouse).{0,30}(report|state|said)', r'aspiration pneumonia', r'(EMS|paramedics).{0,60}(transport|took|transfer)|transported'],
-     'must_not': [r'ER recommended|recommended.{0,20}(emergency|ED|ER)\b(?!.*transport)', r'client is (lethargic|confused)', r'lungs clear']},
-    {'id': 'dermatology_drug_rash', 'specialty': 'dermatology consult', 'profession': 'Dermatologist', 'template': 'soap',
-     'text': "Rash started 5 days after starting amoxicillin. Itchy, red, blotchy on trunk and arms. No blistering, no mouth or eye involvement, "
-             "no fever. Stop amoxicillin, cetirizine for itch, review in 48 hours or sooner if blistering or mucosal symptoms.",
-     'must': [r'amoxicillin', r'(5|five) days', r'trunk', r'arms', r'(no|without|denies).{0,40}blister', r'(mouth|mucosal|oral)', r'cetirizine', r'48 hours'],
-     'must_not': [r'\d+\s*mg', r'DRESS (is|confirmed)', r'Stevens']},
-    {'id': 'palliative_symptom', 'specialty': 'palliative care', 'profession': 'RPN', 'template': 'nursing',
-     'text': "Palliative client with metastatic lung cancer. Daughter reports more breathless overnight. Pain 8 out of 10 in the chest. "
-             "Gave hydromorphone 1 mg subcut at 14:00 as per order. Will reassess in 30 minutes. Goals of care comfort at home.",
-     'must': [r'metasta', r'daughter.{0,30}(report|state)', r'8\s*(/|out of)\s*10', r'hydromorphone.{0,20}1\s*mg', r'(subcut|SC|subcutaneous)', r'14:00|1400',
-              r'30 minutes', r'comfort'],
-     'must_not': [r'(pain|symptoms?) (improved|relieved|decreased)|good effect|effective', r'PPS\s*\d', r'ESAS']},
-    {'id': 'physician_update_toe', 'specialty': 'wound care letter', 'profession': 'RPN', 'template': 'physician_update',
-     'text': "Letter to the doctor. Left third toe has dry black eschar at the tip, mild swelling and redness, no drainage. "
-             "Compression makes her foot throb when tightened. Previous ABI normal. Please assess circulation and whether daily wound care is needed.",
-     'must': [r'left (3rd|third) toe', r'eschar', r'(swell|edema)', r'(red|erythema)', r'compression', r'(ABI|ABPI)', r'(circulation|vascular|perfusion)',
-              r'daily'], 'must_not': [r'gangrene (is )?(present|confirmed)', r'antibiotic']},
-    {'id': 'np_uti_short', 'specialty': 'primary care NP', 'profession': 'Nurse Practitioner', 'template': 'nursing',
-     'text': 'Burning on urination 2 days, frequency, no fever, no flank pain. Urine dip positive nitrites and leukocytes. Nitrofurantoin started per guideline, culture sent.',
-     'must': [r'(2|two) days', r'frequency', r'nitrite', r'leukocyte', r'nitrofurantoin', r'culture', r'(no|denies).{0,30}fever'],
-     'must_not': [r'\d+\s*mg', r'pyelonephritis (is )?(present|confirmed)'], 'max_words': 70},
-    {'id': 'photo_plus_clinician_note', 'specialty': 'wound photo with clinician note', 'profession': 'RPN', 'template': 'nursing',
-     'text': '',
-     'facts': [
-        {'name': 'wound_tissue', 'value': {'text': 'Wound bed with dark brown-black dry eschar at the distal toe tip.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'},
-        {'name': 'periwound', 'value': {'text': 'Surrounding skin with localized redness and mild swelling.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'}],
-     'note': 'Left second toe. Present about 3 weeks. Client reports throbbing pain 5 out of 10. Toe feels warm on assessment. Known diabetes. Dressed with Inadine and dry gauze.',
-     'must': [r'left (2nd|second) toe', r'eschar', r'(red|erythema)', r'(swell|edema)', r'3 weeks', r'5\s*/\s*10', r'warm', r'diabet', r'Inadine'],
-     'must_not': [r'For clinician review', r'osteomyelitis', r'\bright\b', r'no odou?r', r'cellulitis (is )?(present|confirmed)']},
-    {'id': 'photo_without_note', 'specialty': 'wound photo only', 'profession': 'RN', 'template': 'nursing',
-     'text': '',
-     'facts': [
-        {'name': 'wound_tissue', 'value': {'text': 'Moist pink-red granulation tissue centrally with adherent yellow slough.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'},
-        {'name': 'wound_edges', 'value': {'text': 'Irregular edges.'}, 'confirmation_state': 'unconfirmed', 'source_ref': 'photo-1'}],
-     'note': '',
-     'must': [r'granulation', r'slough', r'irregular'],
-     'must_not': [r'\bleft\b|\bright\b', r'\d+\s*(cm|mm)', r'no odou?r', r'pain']},
-]
+# The permanent visits live in eval_cases.py (every detail invented).
+from .eval_cases import CASES as SCENARIOS
+MAX_CASES = 40
 
 
 class _ProfessionUser:
@@ -115,15 +39,33 @@ def _check(scenario, result):
     alerts = [a for a in (result.get('ui_alerts') or []) if isinstance(a, dict)]
     clarify = [a for a in alerts if a.get('field') == 'clarify']
     words = len(text.split())
-    problems = []
+    problems, style = [], []
     if missing: problems.append('missing')
     if invented: problems.append('unsupported_or_wrong')
     if scenario.get('clarify') and not clarify: problems.append('no_clarify_alert')
-    if scenario.get('max_words') and words > scenario['max_words']: problems.append('too_long')
-    return {'passed': not problems and bool(text.strip()), 'problems': problems, 'missing': missing, 'invented': invented, 'words': words,
+    if scenario.get('max_words') and words > scenario['max_words']: style.append(f'longer than {scenario["max_words"]} words ({words})')
+    return {'passed': not problems and bool(text.strip()), 'problems': problems, 'style': style, 'missing': missing, 'invented': invented, 'words': words,
             'clarify_alerts': [a.get('message') for a in clarify],
             'coverage_after': coverage_defects(text, {'untrusted_sources': [{'text': scenario['text'] + ' ' + scenario.get('note', '')}],
                                                        'case_facts': scenario.get('facts', [])})}
+
+
+async def mark(scenario, report, user, encounter_id):
+    """Independent AI marker (Claude Haiku via the normal route). Accuracy problems are kept apart from style notes."""
+    from . import providers
+    payload = {'sources': {'clinician_said': scenario.get('text', ''), 'clinician_note_with_photo': scenario.get('note', ''),
+                           'photo_findings': [f['value']['text'] for f in scenario.get('facts', [])]},
+               'profession': scenario['profession'], 'report_format': scenario['template'],
+               'expected_key_facts': scenario.get('expected', []), 'candidate_report': report}
+    try:
+        verdict = await providers.routed('eval_marker', json.dumps(payload, ensure_ascii=False), user=user, encounter_id=encounter_id, max_tokens=1200)
+    except Exception as error:
+        return {'error': type(error).__name__, 'accuracy': [], 'style': []}
+    items = [str(item) for item in verdict.get('discrepancies') or []]
+    accuracy = [item for item in items if item.upper().startswith('ACCURACY')]
+    if verdict.get('passed') is False and not accuracy:
+        accuracy = ['ACCURACY: marker failed the report without a reason']
+    return {'accuracy': accuracy, 'style': [item for item in items if item.upper().startswith('STYLE')]}
 
 
 async def run(label):
@@ -144,8 +86,8 @@ async def run(label):
         if db.get(Patient, patient_id) is None:
             db.add(Patient(id=patient_id, workspace_id=user.workspace_id, display_name='Made-up evaluation container', external_ref=None))
             db.commit()
-        summary = []
-        for scenario in SCENARIOS:
+        summary, planted_results = [], []
+        for scenario in SCENARIOS[:MAX_CASES]:
             from .db import uid
             encounter = Encounter(id=uid(), workspace_id=user.workspace_id, patient_id=patient_id, wound_id=None,
                 title='Made-up evaluation visit', status='open', revision=1, created_by=user.id,
@@ -159,7 +101,7 @@ async def run(label):
                 # Exactly what the phone sends from the photo screen: the clinician's own words as one clinician message.
                 from .quick_workflows import consultation_context
                 context['consultation'] = consultation_context([SimpleNamespace(role='user', content=scenario['note'])])
-            record = {'label': label, 'scenario': scenario['id'], 'specialty': scenario['specialty'],
+            record = {'label': label, 'scenario': scenario['id'], 'specialty': scenario['area'],
                       'profession': scenario['profession'], 'template': scenario['template']}
             try:
                 result = await providers.quick_documentation(context, scenario['template'], 'concise',
@@ -167,6 +109,18 @@ async def run(label):
                 result = documentation.visible_result(result)
                 record.update(_check(scenario, result))
                 record.update({'qa': result.get('qa'), 'text': result.get('text'), 'alerts': result.get('ui_alerts')})
+                marked = await mark(scenario, result.get('text') or '', user, encounter.id)
+                record['marker'] = marked
+                if marked.get('accuracy'):
+                    record['passed'] = False
+                    record['problems'] = record.get('problems', []) + ['marker_accuracy']
+                record['style'] = record.get('style', []) + marked.get('style', [])
+                # Proof that the checks catch deliberately wrong reports for this case.
+                for planted in scenario.get('planted', []):
+                    by_patterns = not _check(scenario, {'text': planted['text'], 'ui_alerts': []})['passed']
+                    by_marker = bool((await mark(scenario, planted['text'], user, encounter.id)).get('accuracy'))
+                    planted_results.append({'scenario': scenario['id'], 'mistake': planted['mistake'],
+                                            'caught_by_patterns': by_patterns, 'caught_by_marker': by_marker})
             except TerminalReportError as error:
                 record.update({'passed': False, 'problems': ['report_not_generated'], 'error': str(error.detail)[:200]})
             except Exception as error:  # evaluation must never affect the server
@@ -178,8 +132,15 @@ async def run(label):
                     db.rollback()
             logger.warning('AMILYA_REPORT_EVAL %s', json.dumps(record, ensure_ascii=False, default=str))
             summary.append((scenario['id'], record.get('passed')))
+        for item in planted_results:
+            logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'planted': item}, ensure_ascii=False))
         logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'summary': summary,
-            'passed': sum(1 for _, ok in summary if ok), 'total': len(summary)}))
+            'passed': sum(1 for _, ok in summary if ok), 'total': len(summary),
+            'accuracy_failures': [case for case, ok in summary if not ok],
+            'planted_caught_by_marker': sum(1 for p in planted_results if p['caught_by_marker']),
+            'planted_caught_by_patterns': sum(1 for p in planted_results if p['caught_by_patterns']),
+            'planted_caught_by_either': sum(1 for p in planted_results if p['caught_by_marker'] or p['caught_by_patterns']),
+            'planted_total': len(planted_results)}))
 
 
 def start_if_requested():

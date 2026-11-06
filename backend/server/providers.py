@@ -162,12 +162,14 @@ TASK_FILES = {'extract': '20_clinical_fact_extraction', 'document': '25_document
               'assistant': '90_contextual_clinical_assistant',
               'quick_draft': '81_quick_documentation', 'quick_qa': '86_quick_documentation_qa',
               'consult': '91_wound_consultant', 'quick_refine': '82_quick_refinement',
-              'quick_repair': '83_quick_report_repair', 'improve_report': '84_improve_report', 'improve_assessment': '92_improve_assessment'}
+              'quick_repair': '83_quick_report_repair', 'improve_report': '84_improve_report', 'improve_assessment': '92_improve_assessment',
+              'eval_marker': '95_evaluation_marker'}
 
 # Each independent workflow keeps its own prompt and metered operation while
 # using the same checked response shape and Kosmo effort policy as its task type.
 TASK_FAMILIES = {'quick_draft': 'draft', 'quick_qa': 'qa', 'consult': 'assistant', 'quick_refine': 'draft',
-                 'quick_repair': 'draft', 'improve_report': 'draft', 'improve_assessment': 'assistant'}
+                 'quick_repair': 'draft', 'improve_report': 'draft', 'improve_assessment': 'assistant',
+                 'eval_marker': 'qa'}
 
 
 def fingerprint(value) -> str:
