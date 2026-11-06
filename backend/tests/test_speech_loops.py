@@ -62,7 +62,7 @@ def test_transcription_keeps_the_original_and_warns(gateway, monkeypatch):
     result = asyncio.run(providers.transcribe(b'synthetic', 'audio/wav', 'synthetic.wav', user=gateway.user, encounter_id='loops'))
     assert result['text'] == 'Wound measured 2 by 3 cm. Thank you.'
     assert result['original_text'] == original
-    assert any('original transcript is kept' in warning for warning in result['warnings'])
+    assert any('repeated by mistake' in warning for warning in result['warnings'])
 
 
 def test_transcription_flags_but_keeps_a_repeated_dose(gateway, monkeypatch):
