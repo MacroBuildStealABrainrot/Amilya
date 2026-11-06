@@ -152,6 +152,8 @@ def _photo_entries_text(row):
         parts.append('Clinician note sent with this photo: ' + str(entries['note']))
     if entries.get('findings_text'):
         parts.append('Clinician-recorded findings on assessment: ' + str(entries['findings_text']) + '.')
+    for message in entries.get('differences') or []:
+        parts.append('Possible difference to confirm: ' + str(message))
     return ' '.join(parts) or None
 
 

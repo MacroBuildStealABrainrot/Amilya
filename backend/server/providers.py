@@ -1147,7 +1147,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
         from .source_coverage import coverage_defects, strong_findings
         from .source_coverage import photo_finding_losses
         found = quality_defects(draft['text'], context) + strong_findings(coverage_defects(draft['text'], context)) + photo_finding_losses(draft['text'], context, draft.get('ui_alerts'))
-        alerts = list(draft.get('ui_alerts') or [])
+        from .source_coverage import selection_difference_alerts
+        alerts = selection_difference_alerts(context, draft.get('ui_alerts')) + list(draft.get('ui_alerts') or [])
         alerts += [{'field': 'report', 'message': item} for item in found[:10]]
         draft['ui_alerts'] = alerts
         draft.setdefault('usage', {})['stages'] = []
@@ -1176,6 +1177,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     draft['qa'] = {'passed': True, 'discrepancies': []}
     # A value or side that appears in no source is always shown to the clinician as a short "please check" note.
     draft['ui_alerts'] = list(draft.get('ui_alerts') or []) + clarify_alerts(strong_findings(coverage))
+    from .source_coverage import selection_difference_alerts
+    draft['ui_alerts'] = selection_difference_alerts(context, draft['ui_alerts']) + draft['ui_alerts']
     return draft
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Annotated, Literal
 
 from fastapi import HTTPException
@@ -83,6 +84,44 @@ class ClinicianFindings(StrictModel):
         size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
         if size: parts.append('measured ' + ', '.join(size))
         return '; '.join(parts)
+
+
+BED_DIFFERENCE = 'Please confirm wound-bed tissue. Your selection and the image assessment may differ.'
+DRAINAGE_DIFFERENCE = 'Please confirm drainage. Your selection and the image assessment may differ.'
+_PHOTO_TISSUE = {'granulation': r'granulat', 'slough': r'slough', 'eschar': r'eschar', 'necrotic': r'necro',
+                 'epithelial': r'epitheli', 'hypergranulation': r'hypergranulat|overgranulat'}
+_VISIBLE_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate', 'visible_finding'}
+
+
+def selection_differences(findings: 'ClinicianFindings | None', facts) -> list[str]:
+    """Free, fixed check (no AI): where the clinician's picks and the photo's own words may disagree. Never decides who
+    is right and never changes either; it only asks the clinician to confirm. Tissue types can coexist, so a photo
+    tissue is a possible difference only when the clinician picked wound-bed tissue and did not pick that one."""
+    if findings is None:
+        return []
+    seen = ' '.join(str((f.get('value') or {}).get('text', '')) for f in facts or []
+                    if isinstance(f, dict) and f.get('name') in _VISIBLE_FIELDS)
+    if not seen.strip():
+        return []
+    out = []
+    if findings.wound_bed:
+        photo_tissue = set()
+        for name, pattern in _PHOTO_TISSUE.items():
+            for match in re.finditer(pattern, seen, re.I):
+                before = seen[max(0, match.start() - 25):match.start()].lower()
+                if not re.search(r'\b(no|without|absent|nil)\b[^.;]*$', before):
+                    photo_tissue.add(name)
+        if 'hypergranulation' in photo_tissue:
+            photo_tissue.discard('granulation')
+        if photo_tissue - set(findings.wound_bed):
+            out.append(BED_DIFFERENCE)
+    if findings.drainage_type or findings.drainage_amount:
+        picked_none = findings.drainage_type == 'none' or findings.drainage_amount == 'none'
+        photo_none = re.search(r'\bno\b[^.;]{0,25}\b(drainage|exudate|discharge)\b|\bdry wound (bed|surface)\b', seen, re.I) is not None
+        photo_some = re.search(r'\b(purulent|serous|serosanguin\w*|sanguineous|moist|wet|exudat\w*|drainage)\b', seen, re.I) is not None and not photo_none
+        if (photo_none and not picked_none) or (picked_none and photo_some):
+            out.append(DRAINAGE_DIFFERENCE)
+    return out
 
 
 def parse_clinician_findings(raw: str | None, kind: str):

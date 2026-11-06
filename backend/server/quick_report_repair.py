@@ -54,4 +54,6 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     from .source_coverage import coverage_defects, strong_findings, clarify_alerts, photo_finding_losses
     repaired['ui_alerts'] = list(repaired.get('ui_alerts') or []) + clarify_alerts(
         photo_finding_losses(repaired['text'], context, repaired.get('ui_alerts')) + strong_findings(coverage_defects(repaired['text'], context)))
+    from .source_coverage import selection_difference_alerts
+    repaired['ui_alerts'] = selection_difference_alerts(context, repaired['ui_alerts']) + repaired['ui_alerts']
     return repaired

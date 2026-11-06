@@ -150,3 +150,51 @@ def test_rules_give_the_clinician_priority_flag_differences_and_keep_uncertainty
     assert 'recorded as' in note_rules and 'upper-left' in note_rules
     consultant = providers.prompt('consult')
     assert 'never restate it as a fact' in consultant
+
+
+# The owner's Samsung test of 2026-11-06 (made-up words in the same shape): granulation, callus and small
+# serosanguineous picked; the photo assessment described slough, dark crusted tissue and no moist drainage.
+SAMSUNG_CASE = [{'name': 'wound_tissue', 'value': {'text': 'Adherent slough and dark crusted tissue sit at the centre of the crater.'}},
+                {'name': 'periwound', 'value': {'text': 'Thickened callus, scaling and yellow-orange discolouration at the margin.'}},
+                {'name': 'exudate', 'value': {'text': 'No moist drainage visible on the wound surface.'}},
+                {'name': 'photo_interpretation', 'value': {'text': 'The dark crusted tissue may be eschar.'}}]
+
+
+def test_possible_differences_are_flagged_separately_and_never_decide():
+    from server.media_review import selection_differences, BED_DIFFERENCE, DRAINAGE_DIFFERENCE
+    picked = ClinicianFindings(wound_bed=['granulation'], surrounding_skin=['callus'], drainage_type='serosanguineous', drainage_amount='small')
+    assert selection_differences(picked, SAMSUNG_CASE) == [BED_DIFFERENCE, DRAINAGE_DIFFERENCE]
+    assert BED_DIFFERENCE == 'Please confirm wound-bed tissue. Your selection and the image assessment may differ.'
+    # Tissues can coexist: picking both granulation and slough is not a difference.
+    both = ClinicianFindings(wound_bed=['granulation', 'slough'])
+    assert selection_differences(both, [{'name': 'wound_tissue', 'value': {'text': 'Red granulation with a little slough.'}}]) == []
+    # "No slough" in the photo is not slough.
+    assert selection_differences(ClinicianFindings(wound_bed=['granulation']), [{'name': 'wound_tissue', 'value': {'text': 'Granulation base, no slough or eschar.'}}]) == []
+    # Blank fields create nothing; interpretation text is never compared.
+    assert selection_differences(None, SAMSUNG_CASE) == []
+    assert selection_differences(ClinicianFindings(length_cm=0.5), SAMSUNG_CASE) == []
+    assert selection_differences(ClinicianFindings(wound_bed=['granulation']), SAMSUNG_CASE[3:]) == []
+
+
+def test_samsung_case_keeps_selections_and_sends_the_confirm_message(quick_api, monkeypatch):
+    api = quick_api; visit = start(api, 'photo')['encounter']['id']
+
+    async def analyze(data, mime, kind, **kwargs):
+        return {'facts': [dict(f, quote='') for f in SAMSUNG_CASE], 'warnings': []}
+    monkeypatch.setattr(providers, 'analyze_media', analyze)
+    picks = {'wound_bed': ['granulation'], 'surrounding_skin': ['callus'], 'drainage_type': 'serosanguineous', 'drainage_amount': 'small',
+             'length_cm': 0.5, 'width_cm': 0.5, 'depth_cm': 0.3}
+    result = upload(api, visit, 'samsung', clinician_note='DFU', clinician_findings=json.dumps(picks))
+    assert result.status_code == 201, result.text
+    assert result.json()['evidence']['warnings'][0].startswith('Please confirm wound-bed tissue.')
+    with api.sessions() as db:
+        context = quick_workflows.source_context(db, db.get(Encounter, visit))
+    text = ' '.join(s['text'] or '' for s in context['untrusted_sources'] if s['kind'] == 'photo')
+    for kept in ('wound bed: granulation', 'surrounding skin: callus', 'drainage: small serosanguineous', 'length 0.5 cm, width 0.5 cm, depth 0.3 cm'):
+        assert kept in text
+    from server.source_coverage import selection_difference_alerts
+    alerts = selection_difference_alerts(context)
+    assert [a['message'] for a in alerts] == ['Please confirm wound-bed tissue. Your selection and the image assessment may differ.',
+                                             'Please confirm drainage. Your selection and the image assessment may differ.']
+    assert all(a['field'] == 'clarify' for a in alerts)
+    assert selection_difference_alerts(context, alerts) == []  # never added twice

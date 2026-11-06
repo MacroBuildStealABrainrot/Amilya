@@ -23,7 +23,7 @@ import org.json.JSONObject
         InstrumentTitle("Photo assessment")
         if(s.pendingPhotoFiles().isNotEmpty())TextButton({s.uploadPhotos(s.pendingPhotoFiles())},enabled=!s.loading){Text("Resume photo uploads")}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-            Text("${photos.size} photos")
+            Text(if(photos.size==1)"1 photo" else "${photos.size} photos")
             TextButton({s.retakePhoto()},enabled=!s.loading){Text("Add photos")}
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(10.dp)){

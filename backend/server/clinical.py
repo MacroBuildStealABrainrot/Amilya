@@ -24,6 +24,7 @@ from server.audit import write_audit
 from server.core import settings
 from server.db import get_db, uid, utcnow
 from server.identity import User, check_rate, current_user, require_csrf
+from server import media_review
 from server.media_review import parse_photo_review, parse_clinician_findings
 from server.clinical_models import (ClinicalDocument, ClinicalFact, ClinicalReview, DocumentSignature,
                                     Encounter, Evidence, FactRevision, Patient, TimelineEvent, Wound)
@@ -702,6 +703,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
         if automatic_quality and automatic_quality.get('retake_required'):
             candidates = []
         warnings.extend(validation_warnings)
+    differences = media_review.selection_differences(recorded, candidates) if kind == 'photo' else []
+    warnings = differences + warnings
     warnings.extend(str(w) for w in result.get('warnings', []))
     if kind == 'photo':
         warnings.append(automatic_quality['message'] if automatic_quality and automatic_quality.get('retake_required')
@@ -722,7 +725,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
                                        **({'photo_review': capture_review} if capture_review is not None else {}),
                                        # Kept with THIS photo of THIS visit, so reports use exactly what the clinician entered.
                                        **({'clinician_entries': {'note': note, 'findings': recorded.model_dump(mode='json') if recorded else None,
-                                                                 'findings_text': recorded.as_text() if recorded else ''}}
+                                                                 'findings_text': recorded.as_text() if recorded else '',
+                                                                 **({'differences': differences} if differences else {})}}
                                           if kind == 'photo' and (note or recorded is not None) else {})},
                         warnings=list(dict.fromkeys(warnings)))
     db.add(evidence)

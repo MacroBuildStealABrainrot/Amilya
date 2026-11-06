@@ -137,6 +137,15 @@ def clarify_alerts(findings: list[str]) -> list[dict]:
     return [{'field': 'clarify', 'message': 'Please check: ' + item} for item in findings[:3]]
 
 
+def selection_difference_alerts(context: dict, alerts=None) -> list[dict]:
+    """A difference between the clinician's photo picks and the photo assessment always reaches the note as its own
+    "please confirm" alert, separate from the note text, even when the AI forgot to add it."""
+    have = ' '.join(str(a.get('message', '')) for a in (alerts or []) if isinstance(a, dict))
+    sources = ' '.join(str(s.get('text') or '') for s in (context or {}).get('untrusted_sources', []) if isinstance(s, dict))
+    found = re.findall(r'Possible difference to confirm: (Please confirm [^.]+\. Your selection and the image assessment may differ\.)', sources)
+    return [{'field': 'clarify', 'message': m} for m in dict.fromkeys(found) if m not in have]
+
+
 # ---------- Photo findings must reach the note (found by the evaluation suite: a note dropped every photo finding) ----------
 PHOTO_FACT_NAMES = {'wound_tissue', 'wound_edges', 'periwound', 'exudate', 'visible_finding'}
 PHOTO_TERMS = {
