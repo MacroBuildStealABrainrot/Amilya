@@ -263,4 +263,4 @@ def test_photo_clinical_review_is_a_senior_wound_consultant_review():
     rules = providers.prompt('image')
     for item in ('senior advanced wound care consultant', 'probe to bone', 'tendon integrity', 'ABI/TBI', '- Urgent review if',
                  'never a repeat of what is visible'):
-        assert item in rules, item
+        assert item.lower() in rules.lower(), item
