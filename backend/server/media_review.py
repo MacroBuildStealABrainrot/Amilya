@@ -73,14 +73,45 @@ class ClinicianFindings(StrictModel):
     width_cm: Centimetres | None = None
     depth_cm: Centimetres | None = None
     infection_signs: list[INFECTION_SIGNS] = Field(default_factory=list, max_length=9)
+    # Optional healing progress: an earlier length x width (and how many weeks ago) to compare with today's size.
+    previous_length_cm: Centimetres | None = None
+    previous_width_cm: Centimetres | None = None
+    previous_weeks_ago: Annotated[int, Field(ge=1, le=104, strict=False)] | None = None
 
     @model_validator(mode='after')
     def _none_stands_alone(self):
         if 'none' in self.infection_signs and len(self.infection_signs) > 1:
             raise ValueError('No local signs of infection cannot be combined with a sign')
+        earlier = (self.previous_length_cm, self.previous_width_cm)
+        if any(v is not None for v in earlier) or self.previous_weeks_ago is not None:
+            if None in earlier or self.length_cm is None or self.width_cm is None:
+                raise ValueError('Healing progress needs today\'s length and width and the earlier length and width')
         if {'attached', 'unattached'} <= set(self.wound_edges):
             raise ValueError('Edges cannot be both attached and unattached')
         return self
+
+    def area_change_percent(self) -> int | None:
+        """Percent area reduction (length x width) from the earlier measurement: positive is smaller, negative is larger.
+        Calculated here, never by the AI."""
+        if None in (self.length_cm, self.width_cm, self.previous_length_cm, self.previous_width_cm):
+            return None
+        before, now = self.previous_length_cm * self.previous_width_cm, self.length_cm * self.width_cm
+        return round((before - now) / before * 100)
+
+    def healing_progress(self) -> str:
+        change = self.area_change_percent()
+        if change is None:
+            return ''
+        before = f'{self.previous_length_cm:g} x {self.previous_width_cm:g} cm ({self.previous_length_cm * self.previous_width_cm:.2f} cm2)'
+        when = f', {self.previous_weeks_ago} week{"s" if self.previous_weeks_ago != 1 else ""} ago' if self.previous_weeks_ago else ''
+        now = f'{self.length_cm * self.width_cm:.2f} cm2'
+        if change > 0:
+            trend = f'{change}% area reduction'
+        elif change < 0:
+            trend = f'area increased by {-change}%'
+        else:
+            trend = 'no change in area'
+        return f'healing progress: {trend} (area {now}, earlier {before}{when})'
 
     def is_empty(self) -> bool:
         return not any([self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs,
@@ -100,6 +131,8 @@ class ClinicianFindings(StrictModel):
         elif self.infection_signs: parts.append('local signs of infection: ' + ', '.join(item.replace('_', ' ') for item in self.infection_signs))
         size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
         if size: parts.append('measured ' + ', '.join(size))
+        progress = self.healing_progress()
+        if progress: parts.append(progress)
         return '; '.join(parts)
 
 

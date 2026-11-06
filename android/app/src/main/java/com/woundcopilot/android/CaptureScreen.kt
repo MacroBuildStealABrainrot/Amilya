@@ -472,7 +472,28 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
         }
     }
-    if (details.hasInvalidMeasurement()) Text("Enter a size above 0 and up to 100 cm, or leave it blank.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    if (listOf(details.lengthCm, details.widthCm, details.depthCm).any { details.invalidMeasurement(it) })
+        Text("Enter a size above 0 and up to 100 cm, or leave it blank.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    // Optional healing progress: earlier length x width compared with today's. Calculated in the app, never by the AI.
+    Text("Healing progress", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(Triple("Earlier length", details.previousLengthCm) { v: String -> details.copy(previousLengthCm = v.take(6)) },
+               Triple("Earlier width", details.previousWidthCm) { v: String -> details.copy(previousWidthCm = v.take(6)) },
+               Triple("Weeks ago", details.previousWeeksAgo) { v: String -> details.copy(previousWeeksAgo = v.filter { it.isDigit() }.take(3)) }).forEach { (label, value, update) ->
+            OutlinedTextField(value, { onChange(update(it)) }, Modifier.weight(1f), enabled = enabled, singleLine = true,
+                label = { Text(label) }, isError = if (label == "Weeks ago") details.invalidWeeks() else details.invalidMeasurement(value),
+                keyboardOptions = KeyboardOptions(keyboardType = if (label == "Weeks ago") KeyboardType.Number else KeyboardType.Decimal))
+        }
+    }
+    val change = details.areaChangePercent()
+    when {
+        change != null -> Text(when {
+            change > 0 -> "$change% smaller in area"
+            change < 0 -> "${-change}% larger in area"
+            else -> "No change in area"
+        }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        details.progressIncomplete() -> Text("Enter today's and the earlier length and width.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 private fun Set<String>.toggle(key: String) = if (key in this) this - key else this + key

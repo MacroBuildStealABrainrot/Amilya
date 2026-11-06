@@ -67,4 +67,16 @@ class PhotoDetailsTest {
         assertEquals(setOf("warmth"), PhotoDetails.toggleInfection(setOf("none"), "warmth"))
         assertEquals(emptySet<String>(), PhotoDetails.toggleInfection(setOf("none"), "none"))
     }
+
+    @Test fun healingPercentageIsOptionalAndCalculated() {
+        val d = PhotoDetails(lengthCm = "0.5", widthCm = "0.5", previousLengthCm = "1", previousWidthCm = "1", previousWeeksAgo = "4")
+        assertEquals(75, d.areaChangePercent())
+        val json = d.toJson()
+        assertEquals(1.0, json.getDouble("previous_length_cm"), 0.0); assertEquals(4, json.getInt("previous_weeks_ago"))
+        assertEquals(d, PhotoDetails.fromStored(d.toStored()))
+        assertEquals(-20, PhotoDetails(lengthCm = "3", widthCm = "2", previousLengthCm = "2", previousWidthCm = "2.5").areaChangePercent())
+        val half = PhotoDetails(previousLengthCm = "2", previousWidthCm = "1")
+        assertTrue(half.progressIncomplete()); assertTrue(half.hasInvalidMeasurement()); assertFalse(half.toJson().has("previous_length_cm"))
+        assertFalse(PhotoDetails(lengthCm = "2", widthCm = "1").hasInvalidMeasurement())
+    }
 }

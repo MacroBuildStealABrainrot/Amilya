@@ -17,6 +17,9 @@ data class PhotoDetails(
     val widthCm: String = "",
     val depthCm: String = "",
     val infectionSigns: Set<String> = emptySet(),
+    val previousLengthCm: String = "",
+    val previousWidthCm: String = "",
+    val previousWeeksAgo: String = "",
 ) {
     fun isEmpty() = woundBed.isEmpty() && woundEdges.isEmpty() && infectionSigns.isEmpty() && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
         centimetres(lengthCm) == null && centimetres(widthCm) == null && centimetres(depthCm) == null
@@ -24,7 +27,23 @@ data class PhotoDetails(
     /** A typed value that is not a positive number up to 100 cm. Shown under the box; never sent. */
     fun invalidMeasurement(value: String) = value.isNotBlank() && centimetres(value) == null
 
-    fun hasInvalidMeasurement() = listOf(lengthCm, widthCm, depthCm).any { invalidMeasurement(it) }
+    fun hasInvalidMeasurement() = listOf(lengthCm, widthCm, depthCm, previousLengthCm, previousWidthCm).any { invalidMeasurement(it) } ||
+        invalidWeeks() || progressIncomplete()
+
+    fun invalidWeeks() = previousWeeksAgo.isNotBlank() && weeks(previousWeeksAgo) == null
+
+    /** Something typed under Healing progress, but not enough to compare (today's and the earlier length and width). */
+    fun progressIncomplete(): Boolean {
+        val started = listOf(previousLengthCm, previousWidthCm, previousWeeksAgo).any { it.isNotBlank() }
+        return started && listOf(lengthCm, widthCm, previousLengthCm, previousWidthCm).any { centimetres(it) == null }
+    }
+
+    /** Percent area reduction (length x width): positive is smaller, negative is larger. Null when it cannot be worked out. */
+    fun areaChangePercent(): Int? {
+        val now = (centimetres(lengthCm) ?: return null) * (centimetres(widthCm) ?: return null)
+        val before = (centimetres(previousLengthCm) ?: return null) * (centimetres(previousWidthCm) ?: return null)
+        return Math.round((before - now) / before * 100).toInt()
+    }
 
     /** Exactly what the server accepts. Unknown items are left out entirely (never empty strings or zero). */
     fun toJson(): JSONObject = JSONObject().apply {
@@ -37,6 +56,10 @@ data class PhotoDetails(
         centimetres(lengthCm)?.let { put("length_cm", it) }
         centimetres(widthCm)?.let { put("width_cm", it) }
         centimetres(depthCm)?.let { put("depth_cm", it) }
+        if (areaChangePercent() != null) {
+            put("previous_length_cm", centimetres(previousLengthCm)); put("previous_width_cm", centimetres(previousWidthCm))
+            weeks(previousWeeksAgo)?.let { put("previous_weeks_ago", it) }
+        }
     }
 
     /** Saved form for this visit (keeps exactly what was typed, so a failed request loses nothing). */
@@ -45,10 +68,11 @@ data class PhotoDetails(
         put("drainage_type", drainageType ?: JSONObject.NULL); put("drainage_amount", drainageAmount ?: JSONObject.NULL)
         put("length", lengthCm); put("width", widthCm); put("depth", depthCm)
         put("wound_edges", JSONArray(woundEdges.toList())); put("infection_signs", JSONArray(infectionSigns.toList()))
+        put("previous_length", previousLengthCm); put("previous_width", previousWidthCm); put("previous_weeks", previousWeeksAgo)
     }.toString()
 
     fun selectedCount() = woundBed.size + infectionSigns.size + woundEdges.size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
-        listOf(lengthCm, widthCm, depthCm).count { centimetres(it) != null }
+        listOf(lengthCm, widthCm, depthCm).count { centimetres(it) != null } + (if (areaChangePercent() != null) 1 else 0)
 
     companion object {
         val WOUND_BED = linkedMapOf("granulation" to "Granulation", "hypergranulation" to "Hypergranulation", "slough" to "Slough",
@@ -80,6 +104,8 @@ data class PhotoDetails(
             "sanguineous" to "Sanguineous", "purulent" to "Purulent")
         val DRAINAGE_AMOUNT = linkedMapOf("none" to "None", "scant" to "Scant", "small" to "Small", "moderate" to "Moderate", "large" to "Large")
 
+        fun weeks(value: String): Int? = value.trim().toIntOrNull()?.takeIf { it in 1..104 }
+
         fun centimetres(value: String): Double? {
             val text = value.trim().replace(',', '.')
             if (!Regex("^\\d{1,3}(\\.\\d{1,2})?$").matches(text)) return null
@@ -95,7 +121,8 @@ data class PhotoDetails(
                 surroundingSkin = set("surrounding_skin", SURROUNDING_SKIN), drainageType = one("drainage_type", DRAINAGE_TYPE),
                 drainageAmount = one("drainage_amount", DRAINAGE_AMOUNT), lengthCm = o.optString("length").take(6),
                 widthCm = o.optString("width").take(6), depthCm = o.optString("depth").take(6),
-                infectionSigns = set("infection_signs", INFECTION_SIGNS))
+                infectionSigns = set("infection_signs", INFECTION_SIGNS), previousLengthCm = o.optString("previous_length").take(6),
+                previousWidthCm = o.optString("previous_width").take(6), previousWeeksAgo = o.optString("previous_weeks").take(3))
         }.getOrDefault(PhotoDetails())
     }
 }
