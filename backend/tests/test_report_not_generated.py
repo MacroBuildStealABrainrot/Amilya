@@ -16,7 +16,7 @@ def test_noise_is_removed_but_clinical_words_stay():
         assert gone not in cleaned
     for kept in ('Dressing was changed', '3 cm', 'No redness noted', '2 out of 10', 'Biatain Silicone'):
         assert kept in cleaned
-    assert cleaned.count('Thank you') == 1
+    assert cleaned.count('Thank you') <= 1
 
 
 def test_clean_text_is_returned_unchanged_and_original_context_is_untouched():
@@ -69,3 +69,24 @@ def test_case_review_in_ask_consultant_has_room_for_a_long_answer(gateway):
     except Exception:
         pass
     assert seen and seen[0] >= 8000
+
+
+def test_whole_visit_filler_is_removed_but_clinical_answers_stay():
+    # Made-up text in the shape of a real noisy home-visit recording.
+    noisy = ("Thank you. thud  Rubber band  sounds of water  Thank you. Any pain? No. Thank you.  Okay. "
+             "Thanks for watching!  you  Blood pressure 118 over 72. Thank you. \u266a \u266a  Fever? No.")
+    cleaned = clean_transcript(noisy)
+    for gone in ('thud', 'Rubber band', 'sounds of water', 'Thanks for watching', 'Thank you', '\u266a'):
+        assert gone not in cleaned
+    for kept in ('Any pain? No.', 'Blood pressure 118 over 72.', 'Fever? No.'):
+        assert kept in cleaned
+    # A single real "thank you" in a sentence is speech and stays.
+    assert clean_transcript('Client said thank you for the dressing. Pain 3/10.') == 'Client said thank you for the dressing. Pain 3/10.'
+
+
+def test_speech_comparison_never_runs_outside_the_isolated_test_server(monkeypatch):
+    from server import speech_eval
+    monkeypatch.setenv('AMILYA_SPEECH_EVAL', 'compare1')
+    monkeypatch.delenv('AMILYA_RENDER_TEST', raising=False)
+    assert speech_eval.start_if_requested() is None
+    assert speech_eval.score('Any pain? No. Thank you. Thank you.')['made_up_filler'] == 2
