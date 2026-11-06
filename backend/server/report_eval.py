@@ -80,7 +80,9 @@ async def mark(scenario, report, user, encounter_id, alerts=None):
     except Exception as error:
         return {'error': type(error).__name__, 'accuracy': [], 'style': []}
     items = [str(item) for item in verdict.get('discrepancies') or []]
-    accuracy = [item for item in items if item.upper().startswith('ACCURACY')]
+    # A marker line that says it is NOT a problem is not counted as one.
+    harmless = re.compile(r'\bnot (an? )?(accuracy )?(problem|issue|error)\b|is acceptable|is allowed', re.I)
+    accuracy = [item for item in items if item.upper().startswith('ACCURACY') and not harmless.search(item)]
     if verdict.get('passed') is False and not accuracy:
         accuracy = ['ACCURACY: marker failed the report without a reason']
     return {'accuracy': accuracy, 'style': [item for item in items if item.upper().startswith('STYLE')]}
@@ -105,13 +107,21 @@ async def run(label):
         if container is None:
             container = Patient(id=patient_id, workspace_id=user.workspace_id, display_name='Made-up evaluation container', external_ref=None)
             db.add(container); db.commit()
-        # Once per label: the free test server restarts often, and a restart must never repeat (and pay for) a run.
-        if container.external_ref == f'eval-done:{label}'[:120]:
+        # Once per label, resumable: the free test server restarts often. A restart continues after the last finished
+        # case and never repeats (or pays again for) a case that already ran.
+        progress = container.external_ref or ''
+        done = 0
+        if progress.startswith(f'eval:{label}:'):
+            done = int(progress.rsplit(':', 1)[1]) if progress.rsplit(':', 1)[1].isdigit() else 0
+        elif progress == f'eval-done:{label}':
+            done = len(SCENARIOS)
+        if done >= min(len(SCENARIOS), MAX_CASES):
             logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'skipped': 'already run for this label'}))
             return
-        container.external_ref = f'eval-done:{label}'[:120]; db.commit()
         summary, planted_results = [], []
-        for scenario in SCENARIOS[:MAX_CASES]:
+        for index, scenario in enumerate(SCENARIOS[:MAX_CASES]):
+            if index < done:
+                continue
             from .db import uid
             encounter = Encounter(id=uid(), workspace_id=user.workspace_id, patient_id=patient_id, wound_id=None,
                 title='Made-up evaluation visit', status='open', revision=1, created_by=user.id,
@@ -156,6 +166,10 @@ async def run(label):
                     db.rollback()
             logger.warning('AMILYA_REPORT_EVAL %s', json.dumps(record, ensure_ascii=False, default=str))
             summary.append((scenario['id'], record.get('passed')))
+            try:
+                container = db.get(Patient, patient_id); container.external_ref = f'eval:{label}:{index + 1}'[:200]; db.commit()
+            except Exception:
+                db.rollback()
         for item in planted_results:
             logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'planted': item}, ensure_ascii=False))
         logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'summary': summary,

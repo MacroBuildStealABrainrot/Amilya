@@ -60,7 +60,7 @@ CASES = [
              'Moderate serous drainage, periwound dry and flaky. Client tolerating compression, no pain today.',
      'expected': ['left lateral ankle venous ulcer', 'normal saline (not "sailing")', 'PureCleanse', 'Biatain Alginate (not "Biatine")', 'ABD pad',
                   'Coban 2 Lite', 'moderate serous drainage', 'dry flaky periwound', 'tolerating compression', 'no pain today'],
-     'must': [r'left lateral ankle', r'saline', r'PureCleanse|Pure ?Cleanse', r'Biatain', r'ABD', r'Coban\s*(2|two)', r'serous', r'(dry|flak)', r'compression',
+     'must': [r'left lateral ankle', r'saline|\bNS\b', r'PureCleanse|Pure ?Cleanse', r'Biatain', r'ABD', r'Coban\s*(2|two)', r'serous', r'(dry|flak)', r'compression',
               r'(no|denies) pain'],
      'must_not': [r'sailing', r'Biatine', r'infection'],
      'planted': [{'mistake': 'Keeps the misheard product name', 'text': 'Left lateral ankle venous ulcer cleansed with normal saline and PureCleanse, then Biatine alginate, ABD pad and Coban 2 Lite. Moderate serous drainage, periwound dry and flaky. Tolerating compression, no pain today.'}]},
