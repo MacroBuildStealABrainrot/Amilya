@@ -1393,7 +1393,7 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
         original_text = text
         if provider == 'openrouter' and unusable: warnings.append('Some timing details from the speech service were unusable and were left out. The transcript words are complete and unchanged.')
         text, clean, looped, repeated_clinical = collapse_speech_loops(text, clean)
-        if looped: warnings.append('The speech service repeated the same short phrase several times in a row; the extra copies were left out of the working transcript. The original transcript is kept unchanged with this source. Check this part against the recording.')
+        if looped: warnings.append('Some words were repeated by mistake when the recording was turned into text, and the extra copies were removed. Please check the text.')
         if repeated_clinical: warnings.append('A sentence with a number, dose, negation or side was repeated 3 or more times in a row. It was NOT shortened. Check this part against the recording.')
         if not text.strip(): warnings.append('No speech was detected. No clinical findings were inferred.')
         result = {'text': text, 'segments': clean, 'warnings': warnings}
