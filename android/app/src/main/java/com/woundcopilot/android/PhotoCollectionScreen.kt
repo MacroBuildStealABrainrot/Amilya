@@ -96,7 +96,7 @@ import org.json.JSONObject
                 Text("Part 2 · Consultant review (AI suggestions, not charted)",style=MaterialTheme.typography.titleMedium)
                 Text("For your clinical judgement only. It is not part of the note and is never sent with it.",style=MaterialTheme.typography.bodySmall)
                 // Lists from the consultant arrive as " - item"; show each point on its own line.
-                Text(review.replace(Regex("\\s+-\\s+(?=[A-Z0-9])"),"\n• ").replace(Regex("^-\\s+"),"• ").replace(Regex("(Assessment|Plan|Escalate if|Check|Red flags):\\s*•"),"$1:\n•"))
+                Text(review.replace(Regex("\\s+-\\s+(?=[A-Z0-9])"),"\n• ").replace(Regex("^-\\s+"),"• ").replace(Regex("(Assessment|Plan|Healing|Escalate if|Missing information|Check|Red flags):\\s*•"),"$1:\n•"))
                 val clipboard=androidx.compose.ui.platform.LocalClipboardManager.current
                 TextButton({clipboard.setText(androidx.compose.ui.text.AnnotatedString(review));s.notice="Consultant review copied."}){Text("Copy review")}
             }

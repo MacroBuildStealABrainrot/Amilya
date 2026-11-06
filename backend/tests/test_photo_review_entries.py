@@ -274,3 +274,11 @@ def test_wound_type_and_pressure_stage():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         ClinicianFindings(wound_type='venous', pressure_stage='stage_2')
+
+
+def test_reviews_include_a_holistic_healing_section():
+    image = providers.prompt('image').lower()
+    for item in ('- healing:', '- support:', 'glycemic control', 'nutrition', 'adherence', 'never as a fact about this patient'):
+        assert item in image, item
+    consult = providers.prompt('consult')
+    assert 'five headings' in consult and 'Healing:' in consult and 'Barrier:' in consult
