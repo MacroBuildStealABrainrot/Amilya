@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.ImageBitmap
@@ -405,7 +404,7 @@ private fun PhotoReviewPanel(s: AppState, file: File, idle: Boolean, sizeValid: 
         }
     }
     if (!sizeValid) Text("This file is too large to process. Choose another file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text("Add a note — optional", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text("Add a note", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     OutlinedTextField(s.photoNote, { s.updatePhotoNote(it) }, Modifier.fillMaxWidth(), enabled = idle, minLines = 3,
         placeholder = { Text("Type or speak a quick note…") },
         trailingIcon = {
@@ -416,7 +415,7 @@ private fun PhotoReviewPanel(s: AppState, file: File, idle: Boolean, sizeValid: 
     OutlinedButton({ open = !open }, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = idle) {
         Text("+", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.width(12.dp))
-        Text(if (details.selectedCount() > 0) "Wound details — ${details.selectedCount()} added" else "Add wound details — optional",
+        Text(if (details.selectedCount() > 0) "Wound details · ${details.selectedCount()}" else "Add wound details",
             Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
         Text(if (open) "⌃" else "⌄", style = MaterialTheme.typography.titleLarge)
     }
@@ -424,8 +423,6 @@ private fun PhotoReviewPanel(s: AppState, file: File, idle: Boolean, sizeValid: 
         modifier = Modifier.padding(start = 16.dp))
     if (open) WoundDetailsChoices(details, idle) { s.updatePhotoDetails(it) }
     WcpButton("Assess photo", onAssess, Modifier.fillMaxWidth().heightIn(min = 60.dp), enabled = idle && sizeValid && !details.hasInvalidMeasurement())
-    Text("Add details only if they help.", Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
-        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -435,12 +432,12 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
-    Group("Wound bed (choose any)") {
+    Group("Wound bed") {
         PhotoDetails.WOUND_BED.forEach { (key, label) ->
             FilterChip(key in details.woundBed, { onChange(details.copy(woundBed = details.woundBed.toggle(key))) }, { Text(label) }, enabled = enabled)
         }
     }
-    Group("Surrounding skin (choose any)") {
+    Group("Surrounding skin") {
         PhotoDetails.SURROUNDING_SKIN.forEach { (key, label) ->
             FilterChip(key in details.surroundingSkin, { onChange(details.copy(surroundingSkin = details.surroundingSkin.toggle(key))) }, { Text(label) }, enabled = enabled)
         }
@@ -455,7 +452,7 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
             FilterChip(details.drainageAmount == key, { onChange(details.copy(drainageAmount = if (details.drainageAmount == key) null else key)) }, { Text(label) }, enabled = enabled)
         }
     }
-    Text("Measured size in cm (leave blank if not measured)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Text("Size (cm)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(Triple("Length", details.lengthCm) { v: String -> details.copy(lengthCm = v) },
                Triple("Width", details.widthCm) { v: String -> details.copy(widthCm = v) },

@@ -67,7 +67,7 @@ import org.json.JSONObject
         }
         // The clinician's own words about the wound: what a photo cannot show (side, how long, warmth, pain, odour, history).
         if(photos.isNotEmpty()){
-            Text("Your notes about this wound (optional)",style=MaterialTheme.typography.titleMedium)
+            Text("Your notes about this wound",style=MaterialTheme.typography.titleMedium)
             OutlinedTextField(s.photoNote,{s.updatePhotoNote(it)},Modifier.fillMaxWidth(),enabled=!s.loading,minLines=2,
                 placeholder={Text("For example: left heel, 3 weeks, warm, odour, diabetic, using Inadine")})
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
