@@ -21,7 +21,7 @@ import tempfile
 
 logger = logging.getLogger('woundcopilot.speech_eval')
 
-TTS_MODEL = 'openai/gpt-4o-mini-tts-2025-12-15'
+TTS_CANDIDATES = ['openai/gpt-4o-mini-tts', 'openai/gpt-4o-mini-tts-2025-12-15', 'google/gemini-3.1-flash-tts-preview', 'mistralai/voxtral-mini-tts-2603']
 MODELS = ['openai/whisper-large-v3', 'openai/gpt-4o-mini-transcribe', 'openai/gpt-4o-transcribe']
 
 # (speaker, words, seconds of silence after). Speakers: nurse, client, family, tv, phone. All invented.
@@ -70,12 +70,28 @@ async def _post(path, body):
     return response
 
 
-async def make_recording(folder):
+async def available_models():
+    import httpx
+    from .core import settings
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.get(settings.openrouter_base_url.rstrip('/') + '/models',
+                                    headers={'Authorization': 'Bearer ' + settings.openrouter_api_key})
+    ids = [m.get('id', '') for m in (response.json().get('data') or [])] if response.status_code < 400 else []
+    return [i for i in ids if re.search(r'tts|speech|transcri|whisper|chirp|voxtral', i, re.I)]
+
+
+async def speak(model, words, speaker):
+    voice, style = VOICES[speaker]
+    body = {'model': model, 'input': words, 'response_format': 'mp3'}  # invented words only, so no privacy routing is needed
+    if model.startswith('openai/'):
+        body.update({'voice': voice, 'instructions': style})
+    return await _post('/audio/speech', body)
+
+
+async def make_recording(folder, tts_model):
     parts = []
     for index, (speaker, words, pause) in enumerate(SCRIPT):
-        voice, style = VOICES[speaker]
-        response = await _post('/audio/speech', {'model': TTS_MODEL, 'input': words, 'voice': voice, 'instructions': style,
-                                                 'response_format': 'mp3'})  # invented words only, so no privacy routing is needed
+        response = await speak(tts_model, words, speaker)
         raw = os.path.join(folder, f'{index}.mp3'); wav = os.path.join(folder, f'{index}.wav')
         with open(raw, 'wb') as handle:
             handle.write(response.content)
@@ -120,8 +136,22 @@ def score(text):
 
 
 async def run(label):
+    audio_models = await available_models()
+    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'audio_models_listed': audio_models[:40]}))
+    tts_model, last_error = None, ''
+    for candidate in [m for m in audio_models if re.search(r'tts|speech', m, re.I)] + TTS_CANDIDATES:
+        try:
+            await speak(candidate, 'Test.', 'nurse')
+            tts_model = candidate
+            break
+        except Exception as error:
+            last_error = str(error)[:160]
+    if tts_model is None:
+        logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'error': 'no text-to-speech model worked', 'detail': last_error}))
+        return
+    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'voices_made_with': tts_model}))
     with tempfile.TemporaryDirectory() as folder:
-        recording, trimmed = await make_recording(folder)
+        recording, trimmed = await make_recording(folder, tts_model)
         variants = [(model, recording) for model in MODELS] + [('openai/whisper-large-v3 + silence skipped', trimmed)]
         for name, path in variants:
             try:
