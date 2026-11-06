@@ -148,6 +148,7 @@ def test_rules_give_the_clinician_priority_flag_differences_and_keep_uncertainty
     assert 'Please confirm wound-bed tissue. Your selection and the image assessment may differ.' in note_rules
     assert 'stays out of the note' in note_rules and 'can coexist' in note_rules
     assert 'recorded as' in note_rules and 'upper-left' in note_rules
+    assert 'not a nursing-only app' in note_rules and 'callused edges and a small amount of serosanguineous drainage' in note_rules
     consultant = providers.prompt('consult')
     assert 'never restate it as a fact' in consultant
 
