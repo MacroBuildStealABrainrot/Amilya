@@ -24,7 +24,7 @@ logger = logging.getLogger('woundcopilot.speech_eval')
 
 TTS_MODEL = 'mistralai/voxtral-mini-tts-2603'
 WHISPER = 'openai/whisper-large-v3'
-VOXTRAL_CANDIDATES = ['mistralai/voxtral-mini-transcribe-2507', 'mistralai/voxtral-mini-2507', 'mistralai/voxtral-small-24b-2507']
+VOXTRAL_CANDIDATES = ['mistralai/voxtral-small-24b-2507']
 VOICES = {'nurse': 'en_paul_neutral', 'doctor': 'en_paul_neutral', 'client': 'gb_jane_neutral', 'family': 'voice_478',
           'tv': 'en_paul_neutral', 'phone': 'gb_jane_neutral'}
 VOLUME = {'nurse': 1.0, 'doctor': 1.0, 'client': 0.7, 'family': 0.8, 'tv': 0.5, 'phone': 0.6}
@@ -48,7 +48,7 @@ RECORDINGS = {
             ('nurse', 'So your chemotherapy starts on Monday?', 1), ('client', 'Yes, Monday.', 1),
             ('family', 'I will keep helping her with drinks.', 1),
             ('nurse', 'Good. Keep up the fluids, about one litre a day. Your blood sugar today is six point four.', 8)],
-        'clinical': {'tired': r'tired', 'no pain': r'pain\??\s*no|no pain', 'fever/chills': r'fever.{0,20}chills',
+        'clinical': {'tired': r'tired', 'no pain': r'pain[^.?]{0,15}\?\s*no|no pain', 'fever/chills': r'fever.{0,20}chills',
                      'cough/SOB': r'shortness of breath', 'toast': r'toast', 'BP 118/72': r'(118|one eighteen)[^0-9]{1,12}(72|seventy[- ]two)',
                      'wakes hourly to pee': r'every hour', 'urine light': r'\blight\b', 'chemo Monday': r'chemo\w*[^.]{0,40}monday',
                      'daughter helps': r'drinks', 'fluids 1 litre': r'(one|1)\s*(litre|liter|l\b)', 'sugar 6.4': r'(6\.4|six point four)'}},
@@ -150,7 +150,16 @@ async def whisper(data, mime):
 
 
 async def voxtral(data, mime, model):
-    fmt = {'audio/mp4': 'm4a', 'audio/flac': 'flac'}[mime]
+    if mime != 'audio/flac':
+        # Voxtral could not open the phone's m4a format on 2026-11-07: a plain FLAC copy, no filters, same sound.
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = os.path.join(folder, 'in.m4a'), os.path.join(folder, 'out.flac')
+            with open(source, 'wb') as handle:
+                handle.write(data)
+            _ffmpeg('-i', source, '-ac', '1', '-ar', '16000', '-c:a', 'flac', target)
+            with open(target, 'rb') as handle:
+                data, mime = handle.read(), 'audio/flac'
+    fmt = 'flac'
     audio = {'data': base64.b64encode(data).decode(), 'format': fmt}
     try:
         response = await _post('/audio/transcriptions', {'model': model, 'input_audio': audio, 'temperature': 0,
@@ -158,10 +167,18 @@ async def voxtral(data, mime, model):
         return str(response.json().get('text') or '')
     except RuntimeError:
         # A Voxtral chat model hears audio through a normal request; asked for a word-for-word transcript only.
-        response = await _post('/chat/completions', {'model': model, 'temperature': 0, 'provider': {'zdr': True, 'data_collection': 'deny'},
+        body = {'model': model, 'temperature': 0, 'provider': {'zdr': True, 'data_collection': 'deny'},
             'messages': [{'role': 'user', 'content': [
                 {'type': 'text', 'text': 'Transcribe this recording word for word. Output only the words spoken, nothing else.'},
-                {'type': 'input_audio', 'input_audio': audio}]}]})
+                {'type': 'input_audio', 'input_audio': audio}]}]}
+        for attempt in range(3):
+            try:
+                response = await _post('/chat/completions', body)
+                break
+            except RuntimeError as error:
+                if '429' not in str(error) or attempt == 2:
+                    raise
+                await asyncio.sleep(30)
         return str(((response.json().get('choices') or [{}])[0].get('message') or {}).get('content') or '')
 
 

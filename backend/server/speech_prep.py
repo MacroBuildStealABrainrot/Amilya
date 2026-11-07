@@ -3,6 +3,7 @@
 1. prepare(): a speech-band, loudness-levelled copy (mono, 16 kHz, lossless FLAC). Rumble and hiss outside the voice range
    are cut and quiet speech is lifted to a steady level. The timing is unchanged (nothing is cut out), so every timestamp
    still points to the same moment in the original recording. If anything fails, the original is used unchanged.
+   (Gain is capped so silence stays silent.)
 2. drop_guessed(): Whisper reports, for every stretch of text, how likely it was silence (no_speech_prob) and how unsure it
    was (avg_logprob). A stretch that was probably silence AND very unsure is the classic made-up line ("Thank you.").
    It is left out of the working transcript; the original transcript is always kept, and the clinician is told.
@@ -16,7 +17,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-SPEECH_FILTER = 'highpass=f=80,lowpass=f=7800,loudnorm=I=-18:TP=-2:LRA=11'
+# Gentle levelling with a gain cap: lifts quiet speech without turning silence into hiss the speech service then
+# fills with made-up words (seen with full loudness normalisation on 2026-11-07).
+SPEECH_FILTER = 'highpass=f=80,lowpass=f=7800,dynaudnorm=f=250:g=15:p=0.9:m=6'
 MAX_PREPARED_BYTES = 24 * 1024 * 1024
 _PROTECTED = re.compile(r'\d|\b(no|not|denies|denied|without|left|right|bilateral|mg|ml|cm)\b', re.I)
 
