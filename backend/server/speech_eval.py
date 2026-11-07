@@ -171,14 +171,14 @@ async def voxtral(data, mime, model):
             'messages': [{'role': 'user', 'content': [
                 {'type': 'text', 'text': 'Transcribe this recording word for word. Output only the words spoken, nothing else.'},
                 {'type': 'input_audio', 'input_audio': audio}]}]}
-        for attempt in range(3):
+        for attempt in range(6):
             try:
                 response = await _post('/chat/completions', body)
                 break
             except RuntimeError as error:
-                if '429' not in str(error) or attempt == 2:
+                if '429' not in str(error) or attempt == 5:
                     raise
-                await asyncio.sleep(30)
+                await asyncio.sleep(45 * (attempt + 1))   # Voxtral is often busy: wait longer each time
         return str(((response.json().get('choices') or [{}])[0].get('message') or {}).get('content') or '')
 
 
@@ -193,17 +193,29 @@ def score(text, clinical, segments=None):
             'guessed_lines_dropped': dropped, 'words': len(cleaned.split())}
 
 
+async def voxtral_models():
+    import httpx
+    from .core import settings
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.get(settings.openrouter_base_url.rstrip('/') + '/models')
+    ids = [m.get('id', '') for m in (response.json().get('data') or [])] if response.status_code < 400 else []
+    return [i for i in ids if 'voxtral' in i.lower()]
+
+
 async def run(label):
     from .speech_prep import prepare
     voxtral_model = None
+    found = await voxtral_models()
+    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'voxtral_models_listed': found}))
+    global VOXTRAL_CANDIDATES
+    VOXTRAL_CANDIDATES = [m for m in found if 'tts' not in m.lower()] or VOXTRAL_CANDIDATES
     if not await find_voices():
         logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'error': 'no voice accepted by the speech maker'}))
         return
     for name, spec in RECORDINGS.items():
         with tempfile.TemporaryDirectory() as folder:
             original = await make_recording(folder, name, spec)
-        cleaned, cleaned_mime = await asyncio.to_thread(prepare, original, 'audio/mp4')
-        for audio_name, data, mime in (('as recorded', original, 'audio/mp4'), ('after Amilya audio clean-up', cleaned, cleaned_mime)):
+        for audio_name, data, mime in (('as recorded', original, 'audio/mp4'),):
             line = {'label': label, 'recording': name, 'audio': audio_name}
             try:
                 text, segments, keys = await whisper(data, mime)
@@ -219,7 +231,7 @@ async def run(label):
                     break
                 except Exception as error:
                     logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': model, 'error': str(error)[:200]}))
-            await asyncio.sleep(2)
+            await asyncio.sleep(60)   # keep well under Voxtral's busy limit
     logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'finished': True}))
 
 
