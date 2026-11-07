@@ -16,6 +16,7 @@ from email.utils import parsedate_to_datetime
 import io
 import json
 import math
+import os
 from pathlib import Path
 import re
 import secrets
@@ -1325,8 +1326,9 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             raise HTTPException(422, 'Unsupported speech verification model')
         model = verification_model
     seconds = max(10, seconds) if provider == 'groq' else seconds
-    if provider == 'openrouter' and purpose == 'transcription':
-        # Speech-band, level copy with identical timing (owner request 2026-11-07); the original is used if this fails.
+    if provider == 'openrouter' and purpose == 'transcription' and os.environ.get('AMILYA_SPEECH_CLEANUP') == 'on':
+        # Speech-band, level copy with identical timing. OFF by default: on made-up recordings (2026-11-07) it heard no more
+        # clinical details, and it made Whisper invent "Thank you" in silences. Kept for testing with real noisy audio.
         from .speech_prep import prepare
         data, mime = await asyncio.to_thread(prepare, data, mime)
     price = (OPENROUTER_WHISPER_MICROS_PER_MINUTE if provider == 'openrouter' else

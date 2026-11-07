@@ -49,10 +49,9 @@ def test_same_key_transcription_preserves_privacy_and_records_actual_cost(gatewa
     assert payload['model'] == providers.OPENROUTER_SPEECH_MODEL
     assert payload['provider'] == {'zdr':True, 'data_collection':'deny'}
     assert payload['response_format'] == 'verbose_json'
-    # The speech service gets the speech-band, level copy (same length), never a different recording; ZDR is unchanged.
-    sent = base64.b64decode(payload['input_audio']['data'])
-    assert payload['input_audio']['format'] == 'flac' and sent[:4] == b'fLaC'
-    assert providers.audio_duration(sent) == pytest.approx(providers.audio_duration(audio()), abs=.05)
+    # Audio clean-up is off by default: the speech service gets the recording exactly as made; ZDR is unchanged.
+    assert base64.b64decode(payload['input_audio']['data']) == audio()
+    assert payload['input_audio']['format'] == 'm4a'
     assert 'prompt' not in payload and 'filename' not in payload
     with gateway.sessions() as db:
         operation = db.scalar(select(UsageOperation))
