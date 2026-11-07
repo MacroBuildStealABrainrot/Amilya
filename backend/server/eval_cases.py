@@ -92,8 +92,32 @@ CASES = [
                   'no TV, phone call or filler in the note'],
      'must': [r'118\s*/\s*72', r'(deni\w*|no)\s+(any\s+)?pain', r'fever', r'chills', r'toast', r'chemo', r'daughter|family', r'(1|one)\s*(l|litre|liter)'],
      'must_not': [r'engine', r'captain', r'sergeant', r'ship', r'thanks for watching', r'call you back', r'\bpump\b(?![^.]*confirm)'],
-     'clarify': True,
+     'clarify': True, 'quality_alert': True,
      'planted': [{'mistake': 'Background TV dialogue charted as the client speaking', 'text': 'Client tired. Client states the engines are failing and they need to land. Denies pain, fever and chills. BP 118/72. Chemotherapy starts Monday.'}]},
+    {'id': 'noise_only_visit', 'area': 'Whole-visit recording that is only TV and filler', 'profession': 'RN', 'template': 'nursing',
+     'pattern': 'A recording with no clear clinical statement must not become a note; the clinician is told why',
+     'text': ('Thank you. thud  Thank you. [TV] Welcome back to the show, tonight we have a very special guest. [TV] Thank you, it is great to be here. '
+              'Thank you.  sounds of water  you  Thank you. Okay. Hello. Yeah. Thank you. doorbell  Hi, I will call you back. Bye. '
+              '[TV] And now the weather: sunny tomorrow with a high of twenty two. Thank you. Thanks for watching!  you'),
+     'note': '', 'facts': [],
+     'expected': ['no note written', 'the clinician is told the recording was mostly background noise'],
+     'must': [], 'must_not': [], 'expect_no_note': True,
+     'planted': [{'mistake': 'A note written from TV dialogue', 'text': 'Client welcomed a special guest. Temperature 22. Client states it is sunny.'}]},
+    {'id': 'physician_noisy_clinic', 'area': 'Physician clinic visit with a ringing phone and chatter', 'profession': 'MD', 'template': 'soap',
+     'pattern': 'Physician SOAP note from a noisy recording: keep every value and negation, ignore the noise, no invented exam',
+     'text': ('Thank you. So you have had chest pain since yesterday? Yes, on the left side, when I walk upstairs. phone ringing  '
+              'Does it spread to your arm or jaw? No. Any shortness of breath or sweating? A little short of breath, no sweating. '
+              'Thank you.  [chatter] Did you see the game last night? Yeah, unbelievable. [chatter] '
+              'Your blood pressure is 150 over 90, heart rate 92. You take metformin 500 milligrams twice a day? Yes, and atorvastatin at night. '
+              'I will order an ECG and troponin today and refer you to cardiology. If the pain comes at rest, call 911. Thank you.'),
+     'note': '', 'facts': [],
+     'expected': ['exertional left-sided chest pain since yesterday', 'no radiation to arm or jaw', 'mild shortness of breath, no diaphoresis',
+                  'BP 150/90, HR 92', 'metformin 500 mg twice daily, atorvastatin nightly', 'ECG and troponin today, cardiology referral',
+                  'call 911 if pain at rest', 'no invented physical examination, no sports chatter'],
+     'must': [r'chest pain', r'\bleft\b', r'(exert|stairs|walk)', r'(arm|jaw)', r'150\s*/\s*90', r'\b92\b', r'metformin\s*500\s*mg', r'atorvastatin',
+              r'(ecg|ekg)', r'troponin', r'cardiolog', r'911'],
+     'must_not': [r'\bgame\b', r'unbelievable', r'(lungs?|heart sounds?|auscultat)\w*[^.]{0,30}(clear|normal)', r'diaphoretic(?! )'],
+     'planted': [{'mistake': 'Negation lost and an exam invented', 'text': 'S: Left-sided chest pain radiating to the arm since yesterday. O: BP 150/90, HR 92. Lungs clear, heart sounds normal. A: Chest pain. P: ECG, troponin, cardiology referral. Metformin 500 mg BID, atorvastatin.'}]},
     {'id': 'photo_selection_vs_image', 'area': 'Wound photo + clinician selections', 'profession': 'RPN', 'template': 'nursing',
      'pattern': 'Clinician selections outrank an uncertain photo reading (granulation selected, photo said likely eschar)',
      'text': 'Clinician-recorded findings on assessment: wound bed: granulation; drainage: small serosanguineous.', 'note': 'Lt plantar wound, pt sees foot specialist.',

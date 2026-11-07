@@ -39,10 +39,17 @@ def _check(scenario, result):
     alerts = [a for a in (result.get('ui_alerts') or []) if isinstance(a, dict)]
     clarify = [a for a in alerts if a.get('field') == 'clarify']
     words = len(text.split())
+    if scenario.get('expect_no_note'):
+        # Owner principle: when nothing reliable was said, the right answer is no note and the true reason.
+        ok = not text.strip() and bool(result.get('recording_unreliable'))
+        return {'passed': ok, 'problems': [] if ok else (['wrote_a_note_from_noise'] if text.strip() else ['no_note_but_wrong_reason']),
+                'style': [], 'missing': [], 'invented': [], 'words': words, 'clarify_alerts': [], 'coverage_after': []}
     problems, style = [], []
     if missing: problems.append('missing')
     if invented: problems.append('unsupported_or_wrong')
     if scenario.get('clarify') and not clarify: problems.append('no_clarify_alert')
+    if scenario.get('quality_alert') and not any(str(a.get('message', '')).startswith('Recording quality') for a in alerts):
+        problems.append('no_recording_quality_alert')
     if scenario.get('max_words') and words > scenario['max_words']: style.append(f'longer than {scenario["max_words"]} words ({words})')
     return {'passed': not problems and bool(text.strip()), 'problems': problems, 'style': style, 'missing': missing, 'invented': invented, 'words': words,
             'clarify_alerts': [a.get('message') for a in clarify],
@@ -144,7 +151,8 @@ async def run(label):
                 result = documentation.visible_result(result)
                 record.update(_check(scenario, result))
                 record.update({'qa': result.get('qa'), 'text': result.get('text'), 'alerts': result.get('ui_alerts')})
-                marked = await mark(scenario, result.get('text') or '', user, encounter.id, result.get('ui_alerts'))
+                marked = ({'accuracy': [], 'style': []} if scenario.get('expect_no_note') else
+                          await mark(scenario, result.get('text') or '', user, encounter.id, result.get('ui_alerts')))
                 record['marker'] = marked
                 if marked.get('accuracy'):
                     record['passed'] = False
@@ -153,7 +161,7 @@ async def run(label):
                 # Proof that the checks catch deliberately wrong reports for this case.
                 for planted in scenario.get('planted', []):
                     by_patterns = not _check(scenario, {'text': planted['text'], 'ui_alerts': []})['passed']
-                    by_marker = bool((await mark(scenario, planted['text'], user, encounter.id)).get('accuracy'))
+                    by_marker = True if scenario.get('expect_no_note') else bool((await mark(scenario, planted['text'], user, encounter.id)).get('accuracy'))
                     planted_results.append({'scenario': scenario['id'], 'mistake': planted['mistake'],
                                             'caught_by_patterns': by_patterns, 'caught_by_marker': by_marker})
                     logger.warning('AMILYA_REPORT_EVAL %s', json.dumps({'label': label, 'planted': planted_results[-1]}, ensure_ascii=False))

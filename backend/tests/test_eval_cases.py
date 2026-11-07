@@ -10,7 +10,7 @@ def test_cases_are_complete_and_unique():
     for area in ('nursing', 'medicine', 'surg', 'emergency', 'palliative', 'dermatology', 'photo', 'long visit'):
         assert area in areas, area
     for case in eval_cases.CASES:
-        assert case['expected'] and case['must'] and case['profession'] and case['template']
+        assert case['expected'] and (case['must'] or case.get('expect_no_note')) and case['profession'] and case['template']
         assert case.get('text') or case.get('facts')
         for pattern in case['must'] + case['must_not']:
             re.compile(pattern)
