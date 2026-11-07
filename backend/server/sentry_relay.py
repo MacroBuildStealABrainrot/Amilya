@@ -261,6 +261,7 @@ def client_event(item):
     frames = getattr(item, 'crash_frames', None) or []
     app_version = getattr(item, 'app_version', None)
     fields = dict(stage=stage, code=crash_type or getattr(item, 'failure_code', None) or item.status, level=ANDROID_LEVELS.get(stage, 'warning'),
+                  http_status=getattr(item, 'http_status', None),
                   release=('amilya-android@' + app_version) if app_version else None, extra_tags=tags)
     if crash_type or frames:
         event_fields = dict(fields)

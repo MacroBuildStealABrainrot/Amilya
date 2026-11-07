@@ -248,6 +248,7 @@ class ClientEvent(BaseModel):
     crash_type:str|None=Field(default=None,max_length=120,pattern=r'^[A-Za-z0-9_.$]{1,120}$')
     crash_frames:list[Annotated[str,Field(max_length=200,pattern=r'^[A-Za-z0-9_.$<>]{1,190}:[0-9]{1,6}$')]]|None=Field(default=None,max_length=30)
     exit_reason:Literal['CRASH','CRASH_NATIVE','ANR','LOW_MEMORY','EXCESSIVE_RESOURCE_USAGE','INITIALIZATION_FAILURE','SIGNALED','OTHER']|None=None
+    http_status:int|None=Field(None,ge=100,le=599)  # the server's answer code on a failed phone request (test build only)
     failure_code:Literal['PROCESSING_IN_PROGRESS','TRANSCRIPTION_TIMEOUT','REPORT_GENERATION_TIMEOUT','NETWORK_TIMEOUT','NETWORK_UNAVAILABLE','TRANSCRIPTION_FAILED','REPORT_GENERATION_FAILED','BACKEND_FAILED','REQUEST_FAILED','RESPONSE_PARSE_FAILED']|None=None
     app_version:str|None=Field(default=None,max_length=40,pattern=r'^[A-Za-z0-9_.\-]{1,40}$')
 

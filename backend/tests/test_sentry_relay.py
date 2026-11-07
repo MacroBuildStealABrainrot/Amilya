@@ -161,3 +161,19 @@ def test_envelope_is_valid_three_lines():
     assert json.loads(lines[0])['event_id'] == event['event_id']
     assert json.loads(lines[1])['type'] == 'event'
     assert json.loads(lines[2])['event_id'] == event['event_id']
+
+
+def test_a_failed_phone_request_carries_its_failure_type_and_server_answer_code(queued):
+    item = diagnostics.ClientEvent(id='00000000-0000-4000-8000-000000000005', job_id='00000000-0000-4000-8000-000000000006',
+        stage='generation_request', started_at='2026-11-07T01:00:00Z', finished_at='2026-11-07T01:00:01Z', duration_ms=900,
+        status='failed', failure_code='REPORT_GENERATION_TIMEOUT', http_status=504)
+    assert sentry_relay.client_event(item)
+    event, _ = queued[0]
+    assert event['tags']['code'] == 'REPORT_GENERATION_TIMEOUT' and event['tags']['http_status'] == '504'
+    no_private_text(event)
+    import pydantic
+    import pytest
+    with pytest.raises(pydantic.ValidationError):
+        diagnostics.ClientEvent(id='00000000-0000-4000-8000-000000000007', job_id='00000000-0000-4000-8000-000000000008',
+            stage='generation_request', started_at='2026-11-07T01:00:00Z', finished_at='2026-11-07T01:00:01Z', duration_ms=1,
+            status='failed', http_status=42)

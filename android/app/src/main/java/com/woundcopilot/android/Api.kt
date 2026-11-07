@@ -377,6 +377,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
         val perfStarted=Performance.now()
         val perfStage=when{path.endsWith("/audio-parts")->"transcription_request";path.endsWith("/audio-complete")->"transcript_assembly";path.endsWith("/quick-report")->"report_network";path.endsWith("/documents")&&method=="POST"->"report_save_network";path.endsWith("/quick/start")->"encounter_creation";path.startsWith("/auth/")->"session_request";else->"api_request"}
         var perfStatus="failed"
+        var perfHttp:Int?=null   // the server's answer code on a failure, sent as a safe technical tag on the test build
 
         try {
 
@@ -411,6 +412,8 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
             if(status==401 && !renewed && path!="/auth/refresh" && path!="/auth/login" && refreshToken.isNotBlank()) {
                 c.disconnect()
                 synchronized(renewalLock){if(cookie==requestCookie)execute("/auth/refresh","POST","{}".toByteArray(),"application/json",null,true)}
+                // Not a failure: the sign-in was renewed and the same request is sent again, which records its own result.
+                perfStatus="SESSION_RENEWED"
                 return execute(path,method,data,type,key,true)
             }
 
@@ -445,6 +448,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
             perfStatus="ok";return value ?: JSONObject()
 
         } catch(e:Exception){
+            perfHttp=(e as? ApiException)?.status?.takeIf{it in 100..599}
             if(perfStatus!="RESPONSE_PARSE_FAILED")perfStatus=when{
                 e is ApiException && e.status==409 && e.ambiguous -> "PROCESSING_IN_PROGRESS"
                 e is java.net.SocketTimeoutException || e is ApiException && e.status==504 -> when(perfStage){"transcription_request"->"TRANSCRIPTION_TIMEOUT";"report_network"->"REPORT_GENERATION_TIMEOUT";else->"NETWORK_TIMEOUT"}
@@ -455,7 +459,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
                 else -> "REQUEST_FAILED"
             }
             throw e
-        } finally {Performance.record(perfStage,perfStarted,perfStatus,diagnosticRequestJob?:"unbound",diagnosticClientRequest);c.disconnect()}
+        } finally {Performance.record(perfStage,perfStarted,perfStatus,diagnosticRequestJob?:"unbound",diagnosticClientRequest,perfHttp);c.disconnect()}
 
     }
 

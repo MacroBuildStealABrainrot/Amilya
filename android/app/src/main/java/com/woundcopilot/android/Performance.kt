@@ -12,8 +12,8 @@ object Performance{
     @Synchronized fun end(stage:String,job:String="session",status:String="ok"){
         starts.remove("$stage:$job")?.let{record(stage,it,status,job)}
     }
-    @Synchronized fun record(stage:String,start:Long,status:String="ok",job:String="session",requestId:String?=null){
-        runCatching{DeveloperDiagnostics.record(stage,start,status,job,requestId)}
+    @Synchronized fun record(stage:String,start:Long,status:String="ok",job:String="session",requestId:String?=null,httpStatus:Int?=null){
+        runCatching{DeveloperDiagnostics.record(stage,start,status,job,requestId,httpStatus)}
         require(stage.matches(Regex("[a-z_]+")) && status.matches(Regex("[A-Za-z_]+")))
         val opaque=if(job=="session" || runCatching{UUID.fromString(job)}.isSuccess)job else "session"
         rows.addLast(obj("stage" to stage,"duration_ms" to (now()-start)/1_000_000.0,"status" to status,"job" to opaque))

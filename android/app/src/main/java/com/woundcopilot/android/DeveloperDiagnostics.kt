@@ -45,11 +45,16 @@ object DeveloperDiagnostics {
         emitBinding(Binding(vault,owner,job,null),stage,Performance.now(),if(error=="NONE")"success"else "failed",commandId,"WEAR_OS",error)
     }
     fun link(vault:Vault,owner:String,from:String,to:String){runCatching{vault.write("diagnostic-job-$owner-$to",job(vault,owner,from))}}
-    fun record(stage:String,start:Long,status:String,job:String="session",requestId:String?=null){
+    /** Automatic, invisible resends (sign-in renewed, security token refreshed) are not failures: the resend records its own result.
+     *  Before this, each one was reported as "generation_request failed" (AMILYA-ANDROID-3, 2026-11-06). */
+    val renewals=setOf("SESSION_RENEWED","CSRF_REFRESHED")
+    fun record(stage:String,start:Long,status:String,job:String="session",requestId:String?=null,httpStatus:Int?=null){
         if(job!="session" && binding?.job!=job)return
+        if(status in renewals)return
         val name=stages[stage]?:return
         val b=binding?:session?:return
-        emitBinding(b,name,start,if(status=="ok")"success"else "failed",requestId,failureCode=status.takeIf{it!="ok" && it in failureCodes})
+        emitBinding(b,name,start,if(status=="ok")"success"else "failed",requestId,failureCode=status.takeIf{it!="ok" && it in failureCodes},
+            httpStatus=httpStatus.takeIf{status!="ok"})
     }
     @Synchronized fun retry(){val job=binding?.job?:return;val now=Performance.now();if(lastRetryJob==job && now-lastRetry<250_000_000)return;lastRetry=now;lastRetryJob=job;emit("retry")}
     fun emit(stage:String,start:Long=Performance.now(),status:String="success"){
@@ -63,7 +68,7 @@ object DeveloperDiagnostics {
     }}
     private val monitoringStages=setOf("app_crash","app_not_responding","app_restart","monitoring_test","report_share")
     private val failureCodes=setOf("PROCESSING_IN_PROGRESS","TRANSCRIPTION_TIMEOUT","REPORT_GENERATION_TIMEOUT","NETWORK_TIMEOUT","NETWORK_UNAVAILABLE","TRANSCRIPTION_FAILED","REPORT_GENERATION_FAILED","BACKEND_FAILED","REQUEST_FAILED","RESPONSE_PARSE_FAILED")
-    private fun emitBinding(b:Binding,stage:String,start:Long,status:String,requestId:String?=null,flowType:String?=null,wearError:String?=null,photo:File?=null,failureCode:String?=null,crash:CrashDetails?=null,exitReason:String?=null){
+    private fun emitBinding(b:Binding,stage:String,start:Long,status:String,requestId:String?=null,flowType:String?=null,wearError:String?=null,photo:File?=null,failureCode:String?=null,crash:CrashDetails?=null,exitReason:String?=null,httpStatus:Int?=null){
         // The server does not accept technical events: do not collect any more on this phone.
         if(serverUnsupported)return
         // Error-monitoring stages and fields are understood only by the isolated test server for now. Other servers
@@ -81,6 +86,7 @@ object DeveloperDiagnostics {
         if(wearError!=null)row.put("wear_error",wearError)
         if(monitored){
             if(failureCode!=null)row.put("failure_code",failureCode)
+            if(httpStatus!=null && httpStatus in 100..599)row.put("http_status",httpStatus)
             if(exitReason!=null)row.put("exit_reason",exitReason)
             if(crash!=null){row.put("crash_type",crash.type);if(crash.frames.isNotEmpty())row.put("crash_frames",JSONArray(crash.frames))}
             appVersion()?.let{row.put("app_version",it)}
