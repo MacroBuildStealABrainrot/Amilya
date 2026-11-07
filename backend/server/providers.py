@@ -1325,6 +1325,10 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             raise HTTPException(422, 'Unsupported speech verification model')
         model = verification_model
     seconds = max(10, seconds) if provider == 'groq' else seconds
+    if provider == 'openrouter' and purpose == 'transcription':
+        # Speech-band, level copy with identical timing (owner request 2026-11-07); the original is used if this fails.
+        from .speech_prep import prepare
+        data, mime = await asyncio.to_thread(prepare, data, mime)
     price = (OPENROUTER_WHISPER_MICROS_PER_MINUTE if provider == 'openrouter' else
              GROQ_FULL_WHISPER_MICROS_PER_MINUTE if model == 'whisper-large-v3' else SPEECH_PRICES[provider])
     normalized = math.ceil(Decimal(str(seconds)) / 60 * price)
@@ -1398,11 +1402,14 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
         original_text = text
         if provider == 'openrouter' and unusable: warnings.append('Some timing details from the speech service were unusable and were left out. The transcript words are complete and unchanged.')
         text, clean, looped, repeated_clinical = collapse_speech_loops(text, clean)
+        from .speech_prep import drop_guessed
+        text, clean, guessed = drop_guessed(text, clean)
+        if guessed >= 3: warnings.append('Parts of this recording were silence or background noise, and words the speech service guessed there were left out. Please check the text.')
         if looped: warnings.append('Some words were repeated by mistake when the recording was turned into text, and the extra copies were removed. Please check the text.')
         if repeated_clinical: warnings.append('A sentence with a number, dose, negation or side was repeated 3 or more times in a row. It was NOT shortened. Check this part against the recording.')
         if not text.strip(): warnings.append('No speech was detected. No clinical findings were inferred.')
         result = {'text': text, 'segments': clean, 'warnings': warnings}
-        if looped: result['original_text'] = original_text  # the unshortened transcript is always kept
+        if looped or guessed: result['original_text'] = original_text  # the unshortened transcript is always kept
         return result
     return await metered_call(user=user, encounter_id=encounter_id, task=purpose, provider=provider, model=model,
         payload_hash=fingerprint([sha256(data).hexdigest(), mime, model, primer]), estimate=normalized,

@@ -21,7 +21,7 @@ UNRELIABLE_ALERT = ('Recording quality: much of this recording was background no
 UNRELIABLE_NO_NOTE = ('This recording was mostly background noise, other conversations or unclear speech, so too little was clear '
                       'to write an accurate note. Record a short summary of what you assessed and did, or type the key findings.')
 _WORD = re.compile(r"[A-Za-z0-9']+")
-_LOOP_OR_BACKGROUND = re.compile(r'repeated by mistake|background speech|another language|not the visit', re.I)
+_LOOP_OR_BACKGROUND = re.compile(r'repeated by mistake|background audio|background noise|another language', re.I)
 
 
 def _words(text: str) -> int:
