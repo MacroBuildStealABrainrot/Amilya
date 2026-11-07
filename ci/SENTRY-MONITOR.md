@@ -1,7 +1,7 @@
 # Amilya hourly Sentry monitor
 
-`ci/sentry_monitor.py`, run by `.github/workflows/amilya-sentry-monitor.yml`. **Not scheduled yet**: the hourly
-schedule stays commented out until the owner approves it.
+`ci/sentry_monitor.py`, run every hour (at :07) by `.github/workflows/amilya-sentry-monitor.yml`, approved by the
+owner on 2026-11-07.
 
 ## What it does
 

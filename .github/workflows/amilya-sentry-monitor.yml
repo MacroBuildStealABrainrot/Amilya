@@ -1,13 +1,12 @@
 # Amilya hourly Sentry monitor: comments on the "Amilya hourly monitor" issue only when a problem is new, reopened
 # or getting worse, or when monitoring itself fails. Read-only towards Sentry (SENTRY_AUTH_TOKEN secret).
 #
-# NOT SCHEDULED YET: the hourly schedule below stays commented out until the owner approves it.
-# Until then it runs only by hand (workflow_dispatch) or as a dry run on pull requests (prints, never posts).
+# Scheduled hourly (owner approved 2026-11-07). By hand it is a dry run by default; on pull requests it never posts.
 name: amilya-sentry-monitor
 
 on:
-  # schedule:
-  #   - cron: '7 * * * *'   # every hour at :07, enable only after owner approval
+  schedule:
+    - cron: '7 * * * *'   # every hour at :07 (owner approved 2026-11-07)
   workflow_dispatch:
     inputs:
       dry_run:
@@ -46,7 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "workflow_dispatch" -a "${{ inputs.dry_run }}" = "true" ]; then
             python ci/sentry_monitor.py --dry-run | tee -a "$GITHUB_STEP_SUMMARY"
             echo '---' >> "$GITHUB_STEP_SUMMARY"
             echo 'Example with a 48-hour window (preview only, nothing posted):' >> "$GITHUB_STEP_SUMMARY"
