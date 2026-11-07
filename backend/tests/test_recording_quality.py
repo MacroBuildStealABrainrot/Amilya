@@ -68,3 +68,8 @@ def test_a_spoken_summary_is_marked_as_the_clinicians_own_account():
     plain = CompleteAudio(job_id=job, count=1)
     assert 'summary' not in plain.model_dump(mode='json', exclude={'summary'})   # older apps keep the same request code
     assert CompleteAudio(job_id=job, count=1, summary=True).summary is True
+
+
+def test_short_of_breath_in_any_wording_is_the_same_symptom():
+    assert negation_defects('Increased shortness of breath climbing stairs.', 'More short of breath climbing stairs.') == []
+    assert negation_defects('Breathless overnight.', 'Daughter says more breathless overnight.') == []

@@ -132,7 +132,7 @@ def coverage_defects(report: str, context: dict) -> list[str]:
 
 
 # ---------- Negation: "no pain" must never become "pain", and a "denies X" needs a source (owner principle 2026-11-07) ----------
-NEGATABLE = {'pain': r'pain', 'fever': r'fever|febrile', 'chills': r'chills|rigors', 'cough': r'cough', 'shortness of breath': r'shortness of breath|\bSOB\b|dyspn\w*',
+NEGATABLE = {'pain': r'pain', 'fever': r'fever|febrile', 'chills': r'chills|rigors', 'cough': r'cough', 'shortness of breath': r'short(?:ness)? of breath|\bSOB\b|dyspn\w*|breathless\w*',
              'nausea': r'nause\w*', 'vomiting': r'vomit\w*', 'diarrhea': r'diarrh\w*', 'dizziness': r'dizz\w*', 'chest pain': r'chest pain',
              'bleeding': r'bleed\w*', 'odour': r'odou?r', 'swelling': r'swell\w*|o?edema', 'redness': r'redness|erythema'}
 _NEG_WORD = r'\b(?:no|not|denies|denied|denying|without|nil|negative for|free of|absent)\b'
