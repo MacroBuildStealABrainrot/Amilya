@@ -1,0 +1,55 @@
+# Amilya hourly Sentry monitor: comments on the "Amilya hourly monitor" issue only when a problem is new, reopened
+# or getting worse, or when monitoring itself fails. Read-only towards Sentry (SENTRY_AUTH_TOKEN secret).
+#
+# Scheduled hourly (owner approved 2026-11-07). By hand it is a dry run by default; on pull requests it never posts.
+name: amilya-sentry-monitor
+
+on:
+  schedule:
+    - cron: '7 * * * *'   # every hour at :07 (owner approved 2026-11-07)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print only, do not post'
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - ci/sentry_monitor.py
+      - ci/tests/test_sentry_monitor.py
+      - .github/workflows/amilya-sentry-monitor.yml
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: amilya-sentry-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Monitor tests (synthetic Sentry answers only)
+        run: |
+          python -m pip install -q pytest
+          python -m pytest -q -p no:cacheprovider ci/tests/test_sentry_monitor.py
+      - name: Check Sentry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "workflow_dispatch" -a "${{ inputs.dry_run }}" = "true" ]; then
+            python ci/sentry_monitor.py --dry-run | tee -a "$GITHUB_STEP_SUMMARY"
+            echo '---' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Example with a 48-hour window (preview only, nothing posted):' >> "$GITHUB_STEP_SUMMARY"
+            python ci/sentry_monitor.py --dry-run --hours 48 | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            python ci/sentry_monitor.py | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
