@@ -86,9 +86,31 @@ async def _post(path, body):
     return response
 
 
+VOICE_CANDIDATES = ['en_paul_neutral', 'gb_jane_neutral', 'voice_478', 'en_paul_confident', 'gb_oliver_neutral', 'en_emma_neutral',
+                    'paul', 'jane', 'default', 'alloy']
+WORKING_VOICES: list[str] = []
+
+
+async def find_voices():
+    for voice in VOICE_CANDIDATES:
+        for fmt in ('mp3', 'wav'):
+            try:
+                await _post('/audio/speech', {'model': TTS_MODEL, 'input': 'Test.', 'voice': voice, 'response_format': fmt})
+                WORKING_VOICES.append(voice)
+                break
+            except RuntimeError as error:
+                last = str(error)[:120]
+        if len(WORKING_VOICES) >= 3:
+            break
+    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'voices_that_work': WORKING_VOICES}))
+    return WORKING_VOICES
+
+
 async def speak(words, speaker):
     # Invented words only. Mistral's speech maker is used because the account allows only private (ZDR) providers.
-    return await _post('/audio/speech', {'model': TTS_MODEL, 'input': words, 'voice': VOICES[speaker], 'response_format': 'mp3'})
+    order = ['nurse', 'client', 'family', 'doctor', 'tv', 'phone']
+    voice = WORKING_VOICES[order.index(speaker) % len(WORKING_VOICES)]
+    return await _post('/audio/speech', {'model': TTS_MODEL, 'input': words, 'voice': voice, 'response_format': 'mp3'})
 
 
 async def make_recording(folder, name, spec):
@@ -157,6 +179,9 @@ def score(text, clinical, segments=None):
 async def run(label):
     from .speech_prep import prepare
     voxtral_model = None
+    if not await find_voices():
+        logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'error': 'no voice accepted by the speech maker'}))
+        return
     for name, spec in RECORDINGS.items():
         with tempfile.TemporaryDirectory() as folder:
             original = await make_recording(folder, name, spec)
