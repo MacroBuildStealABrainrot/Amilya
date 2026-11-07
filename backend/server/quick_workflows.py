@@ -166,6 +166,9 @@ def source_context(db: Session, encounter: Encounter):
         Evidence.encounter_id == encounter.id).order_by(Evidence.created_at, Evidence.id)))
     sources = [{'id': row.id, 'kind': row.kind, 'text': row.text if row.text is not None else _photo_entries_text(row),
                 'warnings': row.warnings, 'created_at': clinical.iso(row.created_at),
+                # Length of a recording lets the reliability check see a recording that was mostly silence.
+                **({'duration_seconds': row.metadata_json['duration_seconds']} if row.kind == 'audio' and isinstance(row.metadata_json, dict)
+                   and isinstance(row.metadata_json.get('duration_seconds'), (int, float)) else {}),
                 # A long visit recorded in parts: every part is one source; label them so they read as one visit, in order.
                 **({'recording_part': f"Part {row.metadata_json['visit_part']} of {row.metadata_json['visit_parts']} of the same visit recording"}
                    if row.kind == 'audio' and isinstance(row.metadata_json, dict) and row.metadata_json.get('visit_part') else {})}

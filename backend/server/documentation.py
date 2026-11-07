@@ -62,6 +62,9 @@ def visible_result(result):
     status = result.get('status', 'ready' if result.get('text', '').strip() else 'no_content')
     result['status'] = status
     result['ui_message'] = NO_REFERRAL if status == 'referral_not_supported' else NO_CONTENT if status == 'no_content' else ''
+    if status == 'no_content' and result.get('recording_unreliable'):
+        from .recording_quality import UNRELIABLE_NO_NOTE
+        result['ui_message'] = UNRELIABLE_NO_NOTE   # the true reason, not "not enough information"
     if status != 'ready': result['text'] = ''
     result.setdefault('ui_alerts', [])
     return result

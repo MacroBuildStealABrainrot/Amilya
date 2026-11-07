@@ -1116,9 +1116,14 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
     token=document_operations.set(operations)
     try:
         result=await _checked_quick_text(context,task,options,user=user,encounter_id=encounter_id)
+        from .recording_quality import apply as apply_recording_quality
+        result=apply_recording_quality(result,context)
         if not getattr(settings,'show_report_alerts',True) and isinstance(result,dict):
             # Owner choice: no general alert box. Only short "please confirm" clarifications stay (owner request 2026-11-05).
-            result['ui_alerts']=[a for a in result.get('ui_alerts') or [] if isinstance(a,dict) and a.get('field')=='clarify'][:3]
+            # A recording-quality alert is always first and never pushes out a clarification.
+            clarify=[a for a in result.get('ui_alerts') or [] if isinstance(a,dict) and a.get('field')=='clarify']
+            quality=[a for a in clarify if str(a.get('message','')).startswith('Recording quality')]
+            result['ui_alerts']=quality+[a for a in clarify if a not in quality][:3]
         return result
     except TerminalReportError as error:
         # Temporary 409/502/503/504 responses do not establish that the whole

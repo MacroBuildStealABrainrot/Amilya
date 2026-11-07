@@ -125,12 +125,54 @@ def coverage_defects(report: str, context: dict) -> list[str]:
     for side in ('left', 'right'):
         if re.search(r'\b' + side + r'\b', note, re.I) and not re.search(r'\b' + side + r'\b', source, re.I):
             defects.append(f'The report says "{side}" but no source mentions {side}; check the side.')
+    defects += negation_defects(note, source)
     return list(dict.fromkeys(defects))[:12]
 
 
+# ---------- Negation: "no pain" must never become "pain", and a "denies X" needs a source (owner principle 2026-11-07) ----------
+NEGATABLE = {'pain': r'pain', 'fever': r'fever|febrile', 'chills': r'chills|rigors', 'cough': r'cough', 'shortness of breath': r'shortness of breath|\bSOB\b|dyspn\w*',
+             'nausea': r'nause\w*', 'vomiting': r'vomit\w*', 'diarrhea': r'diarrh\w*', 'dizziness': r'dizz\w*', 'chest pain': r'chest pain',
+             'bleeding': r'bleed\w*', 'odour': r'odou?r', 'swelling': r'swell\w*|o?edema', 'redness': r'redness|erythema'}
+_NEG_WORD = r'\b(?:no|not|denies|denied|denying|without|nil|negative for|free of|absent)\b'
+
+
+def _sentences(text):
+    # Clauses joined by "but" are judged apart: "no pain at rest, but pain with walking" holds both.
+    return [s for s in re.split(r'(?<=[.!?;])\s+|\n+|,?\s+\bbut\b\s+', text or '', flags=re.I) if s and s.strip()]
+
+
+def _states(text, pattern):
+    """('negated', 'present') seen for one symptom: plain statements and spoken question-and-answer ("Any pain? No.")."""
+    negated = present = False
+    flat = ' '.join((text or '').split())
+    if re.search(r'(?i)(?:' + pattern + r')[^.?!]{0,40}\?\s*(?:no|nope|none|not really)\b', flat):
+        negated = True
+    for sentence in _sentences(text):
+        if '?' in sentence or not re.search(r'(?i)(?:' + pattern + r')', sentence):
+            continue
+        if re.search(r'(?i)' + _NEG_WORD + r'[^.!?]{0,60}(?:' + pattern + r')|(?:' + pattern + r')[^.!?]{0,15}\b(?:0\s*/\s*10|zero out of ten)|(?:' + pattern + r')[- ]free', sentence):
+            negated = True
+        else:
+            present = True
+    return negated, present
+
+
+def negation_defects(note: str, source: str) -> list[str]:
+    out = []
+    for name, pattern in NEGATABLE.items():
+        source_negated, source_present = _states(source, pattern)
+        note_negated, note_present = _states(note, pattern)
+        if source_negated and not source_present and note_present:
+            out.append(f'The sources say there is no {name}, but the report states {name} without the negation; check the negation.')
+        if note_negated and not source_negated and not source_present and not re.search(r'(?i)(?:' + pattern + r')', source):
+            out.append(f'The report says there is no {name}, but no source mentions {name}; remove it unless it was assessed.')
+    return out
+
+
 def strong_findings(defects: list[str]) -> list[str]:
-    """Findings that are almost never harmless: a value, date or side in the report that no source contains."""
-    return [item for item in defects if 'not in any source' in item or 'that is not in the sources' in item or 'check the side' in item]
+    """Findings that are almost never harmless: a value, date or side in the report that no source contains, or a lost negation."""
+    return [item for item in defects if 'not in any source' in item or 'that is not in the sources' in item or 'check the side' in item
+            or 'check the negation' in item or 'but no source mentions' in item]
 
 
 def clarify_alerts(findings: list[str]) -> list[dict]:
