@@ -182,6 +182,32 @@ async def voxtral(data, mime, model):
         return str(((response.json().get('choices') or [{}])[0].get('message') or {}).get('content') or '')
 
 
+async def deepgram(data, mime):
+    """Deepgram Nova-3 Medical with speaker separation, exactly as the app would call it (model-improvement opt-out on)."""
+    import httpx
+    from .core import settings
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.post('https://api.deepgram.com/v1/listen', content=data, headers={'Authorization': 'Token ' + settings.deepgram_api_key,
+            'Content-Type': mime}, params={'model': 'nova-3-medical', 'smart_format': 'true', 'utterances': 'true', 'mip_opt_out': 'true', 'diarize': 'true'})
+    if response.status_code >= 400:
+        raise RuntimeError(f'deepgram HTTP {response.status_code}: {response.text[:150]}')
+    raw = response.json()
+    text = raw['results']['channels'][0]['alternatives'][0]['transcript']
+    turns = [(u.get('speaker'), u.get('transcript', '')) for u in raw['results'].get('utterances', [])]
+    return text, turns
+
+
+def speaker_report(turns, spec):
+    """How well speakers were kept apart: for each scripted voice, which speaker numbers its lines landed on."""
+    landed = {}
+    for speaker, words in turns:
+        for who, line, _ in spec['script']:
+            first = ' '.join(line.lower().split()[:3])
+            if first and first in words.lower():
+                landed.setdefault(who, set()).add(speaker)
+    return {who: sorted(s for s in found if s is not None) for who, found in landed.items()}
+
+
 def score(text, clinical, segments=None):
     from .speech_prep import drop_guessed
     from .transcript_cleaning import clean_transcript
@@ -223,6 +249,17 @@ async def run(label):
                                                                      'segment_values_sent': keys, 'transcript': text[:1200]}))
             except Exception as error:
                 logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': WHISPER, 'error': str(error)[:200]}))
+            from .core import settings
+            if settings.deepgram_api_key:
+                try:
+                    text, turns = await deepgram(data, mime)
+                    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': 'deepgram nova-3-medical + speakers', **score(text, spec['clinical']),
+                        'speakers_found': len({t[0] for t in turns}), 'speaker_of_each_voice': speaker_report(turns, spec),
+                        'transcript': ' | '.join(f'S{t[0]}: {t[1]}' for t in turns)[:1500]}))
+                except Exception as error:
+                    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': 'deepgram', 'error': str(error)[:200]}))
+            if os.environ.get('AMILYA_SPEECH_EVAL_SKIP_VOXTRAL') == '1':
+                continue
             for model in ([voxtral_model] if voxtral_model else VOXTRAL_CANDIDATES):
                 try:
                     text = await voxtral(data, mime, model)

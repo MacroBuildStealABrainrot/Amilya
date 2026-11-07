@@ -1356,7 +1356,7 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
                         'temperature':0, 'response_format':'verbose_json', 'timestamp_granularities':['segment'],
                         'provider':{'zdr':True, 'data_collection':'deny'}})
             else:
-                response = await send('https://api.deepgram.com/v1/listen', params={'model': model, 'smart_format': 'true', 'utterances': 'true', 'mip_opt_out': 'true'},
+                response = await send('https://api.deepgram.com/v1/listen', params={'model': model, 'smart_format': 'true', 'utterances': 'true', 'mip_opt_out': 'true', 'diarize': 'true'},  # speaker separation (owner-approved test 2026-11-07)
                     headers={'Authorization': 'Token ' + settings.deepgram_api_key, 'Content-Type': mime}, content=data)
             response.raise_for_status()
             raw = response.json()
