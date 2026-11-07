@@ -51,15 +51,34 @@ def test_one_repair_then_original_source_recheck_preserves_all_usage_and_input()
     assert all(call[2]['user'] == 'synthetic-user' and call[2]['encounter_id'] == 'synthetic-visit' for call in calls)
 
 
-def test_failed_repair_check_stops_without_returning_unsafe_report():
+def test_failed_repair_check_with_a_serious_problem_stops_without_returning_the_report():
     calls = []
     async def routed(task, content, **kwargs):
         calls.append(task)
-        return {'text': 'Still unsupported clinical words.'} if task == 'quick_repair' else {'passed': False, 'discrepancies': ['Still unsupported.']}
+        # An invented blood pressure: a value no source contains is always serious.
+        return {'text': 'Pain reported as 2/10. BP 150/90.'} if task == 'quick_repair' else {'passed': False, 'discrepancies': ['BP is not in the sources.']}
     with pytest.raises(HTTPException) as error:
         invoke(routed)
-    assert error.value.status_code == 502 and 'Still unsupported clinical words' not in error.value.detail
+    assert error.value.status_code == 502 and '150/90' not in error.value.detail
     assert calls == ['quick_repair', 'quick_qa']
+
+
+def test_minor_points_after_one_repair_show_the_note_with_please_check():
+    # Owner decision 2026-11-07, option 2 (made-up words).
+    async def routed(task, content, **kwargs):
+        return ({'text': 'Pain reported as 2/10.'} if task == 'quick_repair'
+                else {'passed': False, 'discrepancies': ["The note says 'mild'; the client said 'a little'."]})
+    result = invoke(routed)
+    assert result['text'] == 'Pain reported as 2/10.'
+    assert result['qa'] == {'passed': False, 'discrepancies': ["The note says 'mild'; the client said 'a little'."], 'shown_with_checks': True}
+    assert result['ui_alerts'][0] == {'field': 'clarify', 'message': "Please check: The note says 'mild'; the client said 'a little'."}
+
+
+def test_too_many_remaining_points_still_stop():
+    async def routed(task, content, **kwargs):
+        return {'text': 'Pain reported as 2/10.'} if task == 'quick_repair' else {'passed': False, 'discrepancies': ['a', 'b', 'c', 'd']}
+    with pytest.raises(HTTPException):
+        invoke(routed)
 
 
 @pytest.mark.parametrize('failing_stage', ['quick_repair', 'quick_qa'])
@@ -157,7 +176,7 @@ def test_old_cached_rejected_qa_can_recover_with_one_repair(gateway):
 
 
 def test_repeated_failed_repair_uses_cache_and_never_loops(gateway):
-    gateway.http.responses = repair_responses()[:-1] + [completion({'passed': False, 'discrepancies': ['Attribution remains unsupported.']})]
+    gateway.http.responses = repair_responses()[:-1] + [completion({'passed': False, 'discrepancies': ['a', 'b', 'c', 'd']})]
     for _ in range(2):
         with pytest.raises(HTTPException) as error:
             gateway_document(gateway)
@@ -225,3 +244,11 @@ def test_report_prompt_hashes_and_attribution_prevention_are_deployed_together()
     assert 'No blanket source disclaimer is required for a transcript' in generation
     assert "Do not assert an uncertain speaker's identity" in generation
     assert 'do reject invented clinician observations or guessed speaker identities' in checking
+
+
+def test_an_invented_finding_named_by_the_checker_is_never_shown():
+    async def routed(task, content, **kwargs):
+        return ({'text': 'Pain reported as 2/10.'} if task == 'quick_repair'
+                else {'passed': False, 'discrepancies': ['Speaker attribution is unsupported.']})
+    with pytest.raises(HTTPException):
+        invoke(routed)

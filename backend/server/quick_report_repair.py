@@ -39,6 +39,24 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     from .documentation import quality_defects
     from . import diagnostics
     diagnostics.faithfulness(checked.get('passed') is True and checked.get('discrepancies')==[] and not quality_defects(repaired['text'],context),len(checked.get('discrepancies',[])),'after_repair')
+    from .source_coverage import coverage_defects, strong_findings, clarify_alerts, photo_finding_losses
+    remaining = [str(item)[:300] for item in (checked.get('discrepancies') or []) if str(item).strip()]
+    import re
+    # A remaining point that names an invented, wrong, contradicted or misattributed fact is serious, whatever its wording.
+    grave = re.compile(r'invent|fabricat|unsupported|not (?:in|found in|present in|supported by|stated in) (?:the |any )?source|'
+                       r'absent from|wrong|incorrect|contradict|opposite|mismatch|attribut|hallucin|never (?:said|mentioned)|'
+                       r'different (?:patient|client|visit)|negation|laterality|side', re.I)
+    serious = (strong_findings(coverage_defects(repaired['text'], context)) or quality_defects(repaired['text'], context)
+               or any(grave.search(item) for item in remaining))
+    if (checked.get('passed') is not True or remaining) and not serious and checked.get('passed') is False and 1 <= len(remaining) <= 3:
+        # Owner decision 2026-11-07 (option 2): after one repair, a note with only minor remaining points is shown WITH a
+        # "Please check" for each point. Anything serious (a value, date or side not in the sources, a lost or invented
+        # negation, a broken note) is still never shown.
+        repaired.setdefault('usage', {})['stages'] = [initial_draft.get('usage', {}), failed_qa.get('usage', {}), checked.get('usage', {})]
+        repaired['qa'] = {'passed': False, 'discrepancies': remaining, 'shown_with_checks': True}
+        repaired['ui_alerts'] = [{'field': 'clarify', 'message': 'Please check: ' + item} for item in remaining] + list(repaired.get('ui_alerts') or [])
+        diagnostics.event({'source': 'server', 'stage': 'report_shown_with_checks', 'status': 'success', 'error_code': None})
+        return repaired
     if checked.get('passed') is not True or checked.get('discrepancies') != [] or quality_defects(repaired['text'], context):
         failure = TerminalReportError(502, REVIEW_FAILURE)
         # Kept on the error object only (never sent to the phone): lets the made-up-visit evaluation explain a rejection.
@@ -51,7 +69,6 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     repaired['qa'] = {'passed': True, 'discrepancies': []}
     # The free source comparison is a heuristic: after the AI recheck passes, anything it still sees becomes at most
     # three short "please check" notes for the clinician. It never blocks or discards a checked report.
-    from .source_coverage import coverage_defects, strong_findings, clarify_alerts, photo_finding_losses
     repaired['ui_alerts'] = list(repaired.get('ui_alerts') or []) + clarify_alerts(
         photo_finding_losses(repaired['text'], context, repaired.get('ui_alerts')) + strong_findings(coverage_defects(repaired['text'], context)))
     from .source_coverage import selection_difference_alerts

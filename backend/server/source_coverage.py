@@ -166,6 +166,8 @@ def negation_defects(note: str, source: str) -> list[str]:
             out.append(f'The sources say there is no {name}, but the report states {name} without the negation; check the negation.')
         if note_negated and not source_negated and not source_present and not re.search(r'(?i)(?:' + pattern + r')', source):
             out.append(f'The report says there is no {name}, but no source mentions {name}; remove it unless it was assessed.')
+        if note_present and not re.search(r'(?i)(?:' + pattern + r')', source):
+            out.append(f'The report states {name}, but no source mentions {name}; remove it unless it was assessed.')
     return out
 
 
