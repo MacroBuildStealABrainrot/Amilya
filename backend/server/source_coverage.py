@@ -116,6 +116,10 @@ def coverage_defects(report: str, context: dict) -> list[str]:
         defects.append(f'The sources mention the date "{item}" but the report does not.')
     for item in sorted(note_dates - source_dates):
         defects.append(f'The report contains the date "{item}" that is not in the sources.')
+    # A weekday ("since Tuesday", "next visit Friday") is an onset or a follow-up: it must not be lost.
+    for day in sorted(set(re.findall(r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', source.lower()))):
+        if not re.search(r'\b' + day + r'\b', note, re.I):
+            defects.append(f'The sources mention "{day.title()}" (an onset or follow-up day) but the report does not.')
     for product in PRODUCTS:
         pattern = re.compile(r'\b' + re.escape(product), re.I)
         if pattern.search(source) and not pattern.search(note):
