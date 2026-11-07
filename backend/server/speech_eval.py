@@ -1,12 +1,13 @@
-"""Speech-model comparison on the ISOLATED TEST SERVER only, with a made-up noisy home-visit recording.
+"""Speech-model comparison on the ISOLATED TEST SERVER only, with made-up noisy clinical recordings.
 
 Runs once per label in the background at start-up when AMILYA_SPEECH_EVAL=<label> is set. It:
-1. makes a fictional recording with text-to-speech: a clinician and a client talking, a TV in the background,
-   a phone call, long silences and a constant room hum (every word invented, no real person);
-2. sends the same recording to each speech model being compared, and to Whisper again after silence is skipped;
-3. logs one line per model starting with AMILYA_SPEECH_EVAL: how many clinical details were heard correctly,
-   how many made-up filler phrases appeared, and the (made-up) transcript, so the owner can choose.
-Nothing here is used by the app itself, and it never runs anywhere except the isolated test server.
+1. makes fictional recordings with text-to-speech (every word invented, no real person): a nursing home visit with a TV,
+   a phone call, long silences and room hum; and a physician clinic visit with a ringing phone and louder noise;
+2. sends each recording, as recorded and after Amilya's audio clean-up, to Whisper and to Mistral Voxtral, always with
+   strict zero-data-retention routing;
+3. logs one line per run starting with AMILYA_SPEECH_EVAL: clinical details heard, made-up filler, whether Whisper sent
+   the confidence values the made-up-line filter needs, and the made-up transcript.
+Nothing here is used by the app, it never runs outside the isolated test server, and it never touches patient data.
 """
 from __future__ import annotations
 
@@ -21,38 +22,53 @@ import tempfile
 
 logger = logging.getLogger('woundcopilot.speech_eval')
 
-TTS_CANDIDATES = ['openai/gpt-4o-mini-tts', 'openai/gpt-4o-mini-tts-2025-12-15', 'google/gemini-3.1-flash-tts-preview', 'mistralai/voxtral-mini-tts-2603']
-MODELS = ['openai/whisper-large-v3', 'openai/gpt-4o-mini-transcribe', 'openai/gpt-4o-transcribe']
+TTS_MODEL = 'mistralai/voxtral-mini-tts-2603'
+WHISPER = 'openai/whisper-large-v3'
+VOXTRAL_CANDIDATES = ['mistralai/voxtral-mini-transcribe-2507', 'mistralai/voxtral-mini-2507', 'mistralai/voxtral-small-24b-2507']
+VOICES = {'nurse': 'en_paul_neutral', 'doctor': 'en_paul_neutral', 'client': 'gb_jane_neutral', 'family': 'voice_478',
+          'tv': 'en_paul_neutral', 'phone': 'gb_jane_neutral'}
+VOLUME = {'nurse': 1.0, 'doctor': 1.0, 'client': 0.7, 'family': 0.8, 'tv': 0.5, 'phone': 0.6}
 
-# (speaker, words, seconds of silence after). Speakers: nurse, client, family, tv, phone. All invented.
-SCRIPT = [
-    ('tv', 'Captain, the engines are failing. We need to land this ship right now.', 2),
-    ('tv', 'Not on my watch, sergeant. Hold the line.', 6),
-    ('nurse', 'Hello, how are you feeling today?', 1),
-    ('client', 'Not great. Very tired.', 2),
-    ('nurse', 'Any pain today?', 1), ('client', 'No.', 1),
-    ('nurse', 'Any fever or chills?', 1), ('client', 'No, none.', 5),
-    ('phone', 'Hi, yes, the nurse is here right now. I will call you back later. Bye.', 6),
-    ('nurse', 'Any cough or shortness of breath?', 1), ('client', 'No.', 1),
-    ('nurse', 'Did you eat anything today?', 1), ('client', 'A little toast this morning.', 3),
-    ('tv', 'Ladies and gentlemen, welcome back to the big game.', 2),
-    ('nurse', 'Your blood pressure is one eighteen over seventy two.', 2),
-    ('nurse', 'How are you sleeping?', 1), ('client', 'I wake up about every hour to pee.', 1),
-    ('nurse', 'Is the urine dark?', 1), ('client', 'No, it is light.', 7),
-    ('nurse', 'So your chemotherapy starts on Monday?', 1), ('client', 'Yes, Monday.', 1),
-    ('family', 'I will keep helping her with drinks.', 1),
-    ('nurse', 'Good. Keep up the fluids, about one litre a day. Your blood sugar today is six point four.', 8),
-]
-VOICES = {'nurse': ('alloy', 'Calm, clear nurse.'), 'client': ('shimmer', 'Older, tired, quiet patient.'),
-          'family': ('echo', 'Caring adult daughter.'), 'tv': ('onyx', 'Dramatic TV actor, slightly distant.'),
-          'phone': ('ash', 'Speaking on the phone across the room.')}
-VOLUME = {'nurse': 1.0, 'client': 0.75, 'family': 0.8, 'tv': 0.45, 'phone': 0.6}
-
-CLINICAL = {'tired': r'tired', 'no pain': r'pain\?\s*no|no pain|pain[^.?]*\?[^a-z]*no', 'fever/chills': r'fever.{0,20}chills',
-            'cough/SOB': r'shortness of breath', 'toast': r'toast', 'BP 118/72': r'(118|one eighteen)[^0-9]{1,12}(72|seventy[- ]two)',
-            'wakes hourly to pee': r'every hour', 'urine light': r'light', 'chemo Monday': r'chemo\w*[^.]{0,40}monday|monday',
-            'daughter helps': r'helping her|drinks', 'fluids 1 litre': r'(one|1)\s*(litre|liter|l\b)', 'sugar 6.4': r'(6\.4|six point four)'}
-FILLER = r"thank you\.|thanks for watching|please subscribe|♪|\bsubtitles\b|\[music\]|\byou\s*$"
+RECORDINGS = {
+    'home_visit_tv': {
+        'noise': 0.02, 'ring': False,
+        'script': [
+            ('tv', 'Captain, the engines are failing. We need to land this ship right now.', 2),
+            ('tv', 'Not on my watch, sergeant. Hold the line.', 6),
+            ('nurse', 'Hello, how are you feeling today?', 1), ('client', 'Not great. Very tired.', 2),
+            ('nurse', 'Any pain today?', 1), ('client', 'No.', 1),
+            ('nurse', 'Any fever or chills?', 1), ('client', 'No, none.', 5),
+            ('phone', 'Hi, yes, the nurse is here right now. I will call you back later. Bye.', 6),
+            ('nurse', 'Any cough or shortness of breath?', 1), ('client', 'No.', 1),
+            ('nurse', 'Did you eat anything today?', 1), ('client', 'A little toast this morning.', 3),
+            ('tv', 'Ladies and gentlemen, welcome back to the big game.', 2),
+            ('nurse', 'Your blood pressure is one eighteen over seventy two.', 2),
+            ('nurse', 'How are you sleeping?', 1), ('client', 'I wake up about every hour to pee.', 1),
+            ('nurse', 'Is the urine dark?', 1), ('client', 'No, it is light.', 7),
+            ('nurse', 'So your chemotherapy starts on Monday?', 1), ('client', 'Yes, Monday.', 1),
+            ('family', 'I will keep helping her with drinks.', 1),
+            ('nurse', 'Good. Keep up the fluids, about one litre a day. Your blood sugar today is six point four.', 8)],
+        'clinical': {'tired': r'tired', 'no pain': r'pain\??\s*no|no pain', 'fever/chills': r'fever.{0,20}chills',
+                     'cough/SOB': r'shortness of breath', 'toast': r'toast', 'BP 118/72': r'(118|one eighteen)[^0-9]{1,12}(72|seventy[- ]two)',
+                     'wakes hourly to pee': r'every hour', 'urine light': r'\blight\b', 'chemo Monday': r'chemo\w*[^.]{0,40}monday',
+                     'daughter helps': r'drinks', 'fluids 1 litre': r'(one|1)\s*(litre|liter|l\b)', 'sugar 6.4': r'(6\.4|six point four)'}},
+    'clinic_physician_noise': {
+        'noise': 0.05, 'ring': True,
+        'script': [
+            ('doctor', 'So you have had chest pain since yesterday?', 1), ('client', 'Yes, on the left side, when I walk upstairs.', 2),
+            ('doctor', 'Does it spread to your arm or jaw?', 1), ('client', 'No.', 1),
+            ('doctor', 'Any shortness of breath or sweating?', 1), ('client', 'A little short of breath, no sweating.', 4),
+            ('doctor', 'Your blood pressure is one fifty over ninety, heart rate ninety two.', 2),
+            ('doctor', 'You take metformin five hundred milligrams twice a day?', 1), ('client', 'Yes, and atorvastatin at night.', 5),
+            ('doctor', 'I will order an ECG and troponin today, and refer you to cardiology.', 1),
+            ('doctor', 'If the pain comes at rest, call nine one one.', 6)],
+        'clinical': {'chest pain': r'chest pain', 'left side': r'\bleft\b', 'exertional': r'(walk|stairs|upstairs)',
+                     'no radiation': r'(arm|jaw)[^.?]*\??\s*no|no[^.]{0,20}(arm|jaw)', 'some SOB': r'short of breath',
+                     'no sweating': r'no sweat', 'BP 150/90': r'(150|one fifty)[^0-9]{1,12}(90|ninety)', 'HR 92': r'(92|ninety[- ]two)',
+                     'metformin 500 BID': r'metformin[^.]{0,30}(500|five hundred)', 'atorvastatin': r'atorvastatin',
+                     'ECG/troponin': r'(ecg|ekg)[^.]{0,30}troponin', 'cardiology': r'cardiolog', '911 advice': r'(911|nine one one)'}},
+}
+FILLER = r"thank you\.|thanks for watching|please subscribe|♪|\bsubtitles\b|\[music\]"
 
 
 def _ffmpeg(*args):
@@ -70,98 +86,98 @@ async def _post(path, body):
     return response
 
 
-async def available_models():
-    import httpx
-    from .core import settings
-    async with httpx.AsyncClient(timeout=60) as client:
-        response = await client.get(settings.openrouter_base_url.rstrip('/') + '/models',
-                                    headers={'Authorization': 'Bearer ' + settings.openrouter_api_key})
-    ids = [m.get('id', '') for m in (response.json().get('data') or [])] if response.status_code < 400 else []
-    return [i for i in ids if re.search(r'tts|speech|transcri|whisper|chirp|voxtral', i, re.I)]
+async def speak(words, speaker):
+    # Invented words only. Mistral's speech maker is used because the account allows only private (ZDR) providers.
+    return await _post('/audio/speech', {'model': TTS_MODEL, 'input': words, 'voice': VOICES[speaker], 'response_format': 'mp3'})
 
 
-async def speak(model, words, speaker):
-    voice, style = VOICES[speaker]
-    body = {'model': model, 'input': words, 'response_format': 'mp3'}  # invented words only, so no privacy routing is needed
-    if model.startswith('openai/'):
-        body.update({'voice': voice, 'instructions': style})
-    return await _post('/audio/speech', body)
-
-
-async def make_recording(folder, tts_model):
+async def make_recording(folder, name, spec):
     parts = []
-    for index, (speaker, words, pause) in enumerate(SCRIPT):
-        response = await speak(tts_model, words, speaker)
-        raw = os.path.join(folder, f'{index}.mp3'); wav = os.path.join(folder, f'{index}.wav')
+    for index, (speaker, words, pause) in enumerate(spec['script']):
+        response = await speak(words, speaker)
+        raw = os.path.join(folder, f'{name}-{index}.mp3'); wav = os.path.join(folder, f'{name}-{index}.wav')
         with open(raw, 'wb') as handle:
             handle.write(response.content)
         _ffmpeg('-i', raw, '-af', f'volume={VOLUME[speaker]},apad=pad_dur={pause}', '-ar', '16000', '-ac', '1', wav)
         parts.append(wav)
-    listing = os.path.join(folder, 'list.txt')
+    listing = os.path.join(folder, f'{name}-list.txt')
     with open(listing, 'w') as handle:
         handle.write(''.join(f"file '{p}'\n" for p in parts))
-    speech = os.path.join(folder, 'speech.wav'); final = os.path.join(folder, 'visit.mp3')
+    speech = os.path.join(folder, f'{name}-speech.wav'); final = os.path.join(folder, f'{name}.m4a')
     _ffmpeg('-f', 'concat', '-safe', '0', '-i', listing, '-ar', '16000', '-ac', '1', speech)
-    # A constant quiet room hum under everything, like a fridge or fan in a home.
-    _ffmpeg('-i', speech, '-f', 'lavfi', '-i', 'anoisesrc=color=brown:amplitude=0.02:sample_rate=16000',
-            '-filter_complex', '[0][1]amix=inputs=2:duration=first:normalize=0', '-ac', '1', '-b:a', '64k', final)
-    trimmed = os.path.join(folder, 'visit-no-silence.mp3')
-    _ffmpeg('-i', final, '-af', 'silenceremove=start_periods=1:stop_periods=-1:stop_duration=0.8:stop_threshold=-38dB', '-b:a', '64k', trimmed)
-    return final, trimmed
+    graph = f"anoisesrc=color=brown:amplitude={spec['noise']}:sample_rate=16000[n];[0:a][n]amix=inputs=2:duration=first:normalize=0[m]"
+    out = '[m]'
+    if spec['ring']:
+        # A phone ringing for one second in every six, in the background.
+        graph += ";sine=frequency=880:sample_rate=16000,volume='if(lt(mod(t,6),1),0.08,0)':eval=frame[r];[m][r]amix=inputs=2:duration=first:normalize=0[o]"
+        out = '[o]'
+    _ffmpeg('-i', speech, '-filter_complex', graph, '-map', out, '-ac', '1', '-c:a', 'aac', '-b:a', '64k', final)
+    with open(final, 'rb') as handle:
+        return handle.read()
 
 
-async def transcribe(path, model):
-    with open(path, 'rb') as handle:
-        data = base64.b64encode(handle.read()).decode()
-    body = {'model': model, 'input_audio': {'data': data, 'format': 'mp3'}, 'temperature': 0,
-            'provider': {'zdr': True, 'data_collection': 'deny'}}
-    private = True
-    try:
-        response = await _post('/audio/transcriptions', body)
-    except RuntimeError:
-        # Recorded for the owner: a model that cannot run under zero-data-retention is a privacy point against it.
-        private = False
-        response = await _post('/audio/transcriptions', {k: v for k, v in body.items() if k != 'provider'})
+async def whisper(data, mime):
+    fmt = {'audio/mp4': 'm4a', 'audio/flac': 'flac'}[mime]
+    response = await _post('/audio/transcriptions', {'model': WHISPER, 'input_audio': {'data': base64.b64encode(data).decode(), 'format': fmt},
+                                                     'temperature': 0, 'response_format': 'verbose_json', 'timestamp_granularities': ['segment'],
+                                                     'provider': {'zdr': True, 'data_collection': 'deny'}})
     payload = response.json()
-    return str(payload.get('text') or ''), {'usage': payload.get('usage'), 'zero_data_retention': private}
+    segments = payload.get('segments') or []
+    keys = sorted(segments[0].keys()) if segments and isinstance(segments[0], dict) else []
+    return str(payload.get('text') or ''), segments, keys
 
 
-def score(text):
+async def voxtral(data, mime, model):
+    fmt = {'audio/mp4': 'm4a', 'audio/flac': 'flac'}[mime]
+    audio = {'data': base64.b64encode(data).decode(), 'format': fmt}
+    try:
+        response = await _post('/audio/transcriptions', {'model': model, 'input_audio': audio, 'temperature': 0,
+                                                         'provider': {'zdr': True, 'data_collection': 'deny'}})
+        return str(response.json().get('text') or '')
+    except RuntimeError:
+        # A Voxtral chat model hears audio through a normal request; asked for a word-for-word transcript only.
+        response = await _post('/chat/completions', {'model': model, 'temperature': 0, 'provider': {'zdr': True, 'data_collection': 'deny'},
+            'messages': [{'role': 'user', 'content': [
+                {'type': 'text', 'text': 'Transcribe this recording word for word. Output only the words spoken, nothing else.'},
+                {'type': 'input_audio', 'input_audio': audio}]}]})
+        return str(((response.json().get('choices') or [{}])[0].get('message') or {}).get('content') or '')
+
+
+def score(text, clinical, segments=None):
+    from .speech_prep import drop_guessed
     from .transcript_cleaning import clean_transcript
-    cleaned = clean_transcript(text) or ''
-    heard = [name for name, pattern in CLINICAL.items() if re.search(pattern, text, re.I)]
-    return {'clinical_heard': f'{len(heard)}/{len(CLINICAL)}', 'missed': [n for n in CLINICAL if n not in heard],
-            'made_up_filler': len(re.findall(FILLER, text, re.I | re.M)),
-            'filler_after_free_cleaning': len(re.findall(FILLER, cleaned, re.I | re.M)), 'words': len(text.split())}
+    working, _, dropped = drop_guessed(text, segments or [])
+    cleaned = clean_transcript(working) or ''
+    heard = [name for name, pattern in clinical.items() if re.search(pattern, cleaned, re.I)]
+    return {'clinical_heard': f'{len(heard)}/{len(clinical)}', 'missed': [n for n in clinical if n not in heard],
+            'made_up_filler_raw': len(re.findall(FILLER, text, re.I)), 'made_up_filler_after_amilya': len(re.findall(FILLER, cleaned, re.I)),
+            'guessed_lines_dropped': dropped, 'words': len(cleaned.split())}
 
 
 async def run(label):
-    audio_models = await available_models()
-    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'audio_models_listed': audio_models[:40]}))
-    tts_model, last_error = None, ''
-    for candidate in [m for m in audio_models if re.search(r'tts|speech', m, re.I)] + TTS_CANDIDATES:
-        try:
-            await speak(candidate, 'Test.', 'nurse')
-            tts_model = candidate
-            break
-        except Exception as error:
-            last_error = str(error)[:160]
-    if tts_model is None:
-        logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'error': 'no text-to-speech model worked', 'detail': last_error}))
-        return
-    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'voices_made_with': tts_model}))
-    with tempfile.TemporaryDirectory() as folder:
-        recording, trimmed = await make_recording(folder, tts_model)
-        variants = [(model, recording) for model in MODELS] + [('openai/whisper-large-v3 + silence skipped', trimmed)]
-        for name, path in variants:
+    from .speech_prep import prepare
+    voxtral_model = None
+    for name, spec in RECORDINGS.items():
+        with tempfile.TemporaryDirectory() as folder:
+            original = await make_recording(folder, name, spec)
+        cleaned, cleaned_mime = await asyncio.to_thread(prepare, original, 'audio/mp4')
+        for audio_name, data, mime in (('as recorded', original, 'audio/mp4'), ('after Amilya audio clean-up', cleaned, cleaned_mime)):
+            line = {'label': label, 'recording': name, 'audio': audio_name}
             try:
-                text, usage = await transcribe(path, name.split(' ')[0])
-                logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'model': name, **score(text),
-                                                                     **usage, 'transcript': text[:1500]}))
+                text, segments, keys = await whisper(data, mime)
+                logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': WHISPER, **score(text, spec['clinical'], segments),
+                                                                     'segment_values_sent': keys, 'transcript': text[:1200]}))
             except Exception as error:
-                logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'model': name, 'error': type(error).__name__,
-                                                                     'detail': str(error)[:200]}))
-            await asyncio.sleep(3)
+                logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': WHISPER, 'error': str(error)[:200]}))
+            for model in ([voxtral_model] if voxtral_model else VOXTRAL_CANDIDATES):
+                try:
+                    text = await voxtral(data, mime, model)
+                    voxtral_model = model
+                    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': model, **score(text, spec['clinical']), 'transcript': text[:1200]}))
+                    break
+                except Exception as error:
+                    logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({**line, 'model': model, 'error': str(error)[:200]}))
+            await asyncio.sleep(2)
     logger.warning('AMILYA_SPEECH_EVAL %s', json.dumps({'label': label, 'finished': True}))
 
 

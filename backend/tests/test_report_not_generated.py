@@ -89,4 +89,5 @@ def test_speech_comparison_never_runs_outside_the_isolated_test_server(monkeypat
     monkeypatch.setenv('AMILYA_SPEECH_EVAL', 'compare1')
     monkeypatch.delenv('AMILYA_RENDER_TEST', raising=False)
     assert speech_eval.start_if_requested() is None
-    assert speech_eval.score('Any pain? No. Thank you. Thank you.')['made_up_filler'] == 2
+    result = speech_eval.score('Any pain? No. Thank you. Thank you.', {'no pain': r'pain\??\s*no'})
+    assert result['made_up_filler_raw'] == 2 and result['made_up_filler_after_amilya'] == 0 and result['clinical_heard'] == '1/1'
