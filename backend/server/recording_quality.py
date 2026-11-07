@@ -32,8 +32,8 @@ def free_signals(context: dict) -> list[str]:
     """Reasons a spoken source looks unreliable, from fixed rules only (no AI, no cost). Never patient words."""
     reasons = []
     for source in (context or {}).get('untrusted_sources', []):
-        if not isinstance(source, dict) or source.get('kind') != 'audio':
-            continue
+        if not isinstance(source, dict) or source.get('kind') != 'audio' or source.get('source_role'):
+            continue   # the clinician's own short summary is not judged as a noisy visit recording
         raw = str(source.get('text') or '')
         raw_words = _words(raw)
         if raw_words >= 40:

@@ -56,3 +56,15 @@ def test_a_pertinent_negative_nobody_assessed_is_flagged():
     assert any('cough' in f for f in found) and any('shortness of breath' in f for f in found)
     assert negation_defects('Pain 0/10.', 'No pain today.') == []
     assert negation_defects('Pain 4/10 with walking, none at rest.', 'No pain at rest, but pain with walking, 4 out of 10.') == []
+
+
+def test_a_spoken_summary_is_marked_as_the_clinicians_own_account():
+    from server import providers
+    rules = providers.prompt('quick_draft')
+    assert "clinician's own spoken summary" in rules and 'follow the summary' in rules
+    from server.audio_parts import CompleteAudio
+    import uuid
+    job = uuid.uuid4()
+    plain = CompleteAudio(job_id=job, count=1)
+    assert 'summary' not in plain.model_dump(mode='json', exclude={'summary'})   # older apps keep the same request code
+    assert CompleteAudio(job_id=job, count=1, summary=True).summary is True

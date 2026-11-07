@@ -85,8 +85,11 @@ data class VisitPosition(val part:Int,val parts:Int,val id:String)
 class AudioChunks(private val api:Api,private val vault:Vault){
     /** Sandbox encrypted recordings: the parts are built in memory from the encrypted pieces and sent straight from memory. */
     /** Fields sent when the recording is one part of a longer visit, so the server labels the transcript "part 1 of 2" and keeps the parts together. */
+    /** True while transcribing the clinician's own short spoken summary after a visit (owner request 2026-11-07). */
+    var summary=false
     private fun completion(state:JSONObject,count:Int,visit:VisitPosition?)=obj("job_id" to state.str("job_id"),"count" to count).also{body->
         visit?.takeIf{it.parts>1}?.let{body.put("visit_part",it.part);body.put("visit_parts",it.parts);body.put("visit_id",it.id)}
+        if(summary)body.put("summary",true)
     }
 
     private suspend fun transcribeSealed(encounter:String,source:File,sealed:SealedRecordingHandle,key:String,visit:VisitPosition?,stage:(String)->Unit):JSONObject{

@@ -160,7 +160,9 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                 recording=belongsHere && rec.recording, paused=rec.paused,
                 onRecord={ if(consent)beginWithPermission() else consentPrompt=true }, onStop={RecordingService.stop(context)}
             )
-            if (rec.recording && belongsHere) TextButton(onClick={if(rec.paused)RecordingService.resume(context)else RecordingService.pause(context)},modifier=Modifier.align(Alignment.CenterHorizontally)) { Text(if(rec.paused)"Resume" else "Pause") }
+            // A clear Pause button: pause during TV, phone calls or private talk, then resume (owner request 2026-11-07).
+            if (rec.recording && belongsHere) WcpButton(if(rec.paused)"Resume recording" else "Pause recording",
+                {if(rec.paused)RecordingService.resume(context)else RecordingService.pause(context)},Modifier.fillMaxWidth(),secondary=!rec.paused)
             if (belongsHere || recordingRequested) rec.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (belongsHere || recordingRequested) rec.notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             if (belongsHere && rec.recording) RecordingPermissions.notificationHint(android.os.Build.VERSION.SDK_INT, notificationsGranted())?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

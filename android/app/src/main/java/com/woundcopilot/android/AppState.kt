@@ -157,6 +157,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     var quickMode by mutableStateOf<String?>(null); private set
     /** True for one recording started with "Record, text only": keep the words, do not make a report. */
     var textOnlyNext by mutableStateOf(false)
+    /** True for one recording started with "Add a spoken summary": the clinician's own account, which outranks a noisy visit recording. */
+    var summaryNext by mutableStateOf(false)
     var consultantMessages by mutableStateOf<List<JSONObject>>(emptyList()); private set
     /** Done on Ask Consultant asks whether to turn the conversation into a report instead of losing it. */
     var consultantReportPrompt by mutableStateOf(false)
@@ -532,7 +534,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             val r=try {
                 uploadResponse(keyName){
                     if(kind=="audio" && file.extension.lowercase() in listOf("m4a","mp4"))
-                        AudioChunks(api,vault).transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
+                        AudioChunks(api,vault).apply{summary=summaryNext && quickMode=="document"}.transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
                     else api.upload(encounterId,file,mime,kind,key,photoReview,sentNote.ifBlank{null},sentDetails)
                 }.also { if(kind=="photo")requireValidPhotoUpload(it) }
             }catch(e:Exception){
@@ -903,7 +905,8 @@ class AppState(application:Application):AndroidViewModel(application) {
             if(quality?.optBoolean("retake_required")==true){screen="photo_assessment";return}
         }
         when(quickMode){
-            "document"->{screen="document_capture";val textOnly=textOnlyNext;if(kind=="audio")textOnlyNext=false;if(!textOnly && kind in listOf("audio","typed","transcript") && editor.isBlank())draftQuick(true)}
+            "document"->{screen="document_capture";val textOnly=textOnlyNext;if(kind=="audio")textOnlyNext=false
+                if(kind=="audio" && summaryNext){summaryNext=false;if(editor.isNotBlank())notice="Your spoken summary was added. Open the report and generate it again to include it."};if(!textOnly && kind in listOf("audio","typed","transcript") && editor.isBlank())draftQuick(true)}
             "photo"->screen="photo_assessment"
             "consultant"->screen="consultant"
         }

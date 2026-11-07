@@ -166,6 +166,10 @@ def source_context(db: Session, encounter: Encounter):
         Evidence.encounter_id == encounter.id).order_by(Evidence.created_at, Evidence.id)))
     sources = [{'id': row.id, 'kind': row.kind, 'text': row.text if row.text is not None else _photo_entries_text(row),
                 'warnings': row.warnings, 'created_at': clinical.iso(row.created_at),
+                # The clinician's own spoken summary after the visit: their account, which outranks a noisy whole-visit recording.
+                **({'source_role': "Clinician's own spoken summary after the visit. It is the clinician's account: where it differs from "
+                    "a whole-visit recording, the summary is correct; anything only in the visit recording is used only if clearly heard."}
+                   if row.kind == 'audio' and isinstance(row.metadata_json, dict) and row.metadata_json.get('clinician_summary') else {}),
                 # Length of a recording lets the reliability check see a recording that was mostly silence.
                 **({'duration_seconds': row.metadata_json['duration_seconds']} if row.kind == 'audio' and isinstance(row.metadata_json, dict)
                    and isinstance(row.metadata_json.get('duration_seconds'), (int, float)) else {}),

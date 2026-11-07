@@ -55,11 +55,13 @@ class CompleteAudio(BaseModel):
     visit_part:int|None=Field(None,ge=1,le=8)
     visit_parts:int|None=Field(None,ge=2,le=8)
     visit_id:str|None=Field(None,min_length=8,max_length=64,pattern=r'^[A-Za-z0-9_-]+$')
+    # The clinician's own short spoken summary after a visit (owner request 2026-11-07). Optional; older apps omit it.
+    summary:bool=False
 
 @router.post('/encounters/{encounter_id}/audio-complete',dependencies=[Depends(require_csrf)])
 def complete_audio(encounter_id:str,payload:CompleteAudio,user:User=Depends(current_user),db:Session=Depends(get_db)):
     encounter=clinical.owned(db,Encounter,encounter_id,user)
-    key=f'audio-complete:{payload.job_id}';digest=clinical.digest(payload.model_dump(mode='json'))
+    key=f'audio-complete:{payload.job_id}';digest=clinical.digest(payload.model_dump(mode='json',exclude=set() if payload.summary else {'summary'}))
     previous=clinical.previous_request(db,Evidence,user,encounter_id,key,digest)
     if previous:return clinical.source_response(db,encounter,previous)
     parts=list(db.scalars(select(Evidence).where(Evidence.encounter_id==encounter_id,Evidence.created_by==user.id,Evidence.kind=='audio_part')))
@@ -94,7 +96,8 @@ def complete_audio(encounter_id:str,payload:CompleteAudio,user:User=Depends(curr
         request_key=key,request_hash=digest,metadata_json={'raw_media_retained':False,'duration_seconds':duration,'segments':segments,'job_id':str(payload.job_id),'segment_count':len(parts),
             **({'original_transcript':original} if original!=text else {}),
             **({'overlap_joins':joins} if joins else {}),
-            **({'visit_part':payload.visit_part,'visit_parts':payload.visit_parts,'visit_id':payload.visit_id} if payload.visit_part else {})},
+            **({'visit_part':payload.visit_part,'visit_parts':payload.visit_parts,'visit_id':payload.visit_id} if payload.visit_part else {}),
+            **({'clinician_summary':True} if payload.summary else {})},
         warnings=list(dict.fromkeys(['Review the transcript against the recording, including words at segment boundaries, numbers, negation and laterality.']+part_warnings+join_notes)))
     db.add(row);db.flush()
     candidates,_=clinical.extract_explicit(text,'transcript');clinical.add_facts(db,row,candidates,user)

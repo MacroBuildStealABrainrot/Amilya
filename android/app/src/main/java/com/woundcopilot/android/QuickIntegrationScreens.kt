@@ -68,6 +68,8 @@ import java.time.format.DateTimeFormatter
         WcpButton("Record",{s.textOnlyNext=false;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
         WcpButton("Record, text only (no report)",{s.textOnlyNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         WcpButton("Write instead",{s.screen="evidence:typed"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        // After a whole-visit recording: a short spoken summary in the clinician's own words is the most reliable source.
+        if(sources.any{it.str("kind")=="audio"})WcpButton("Add a spoken summary",{s.textOnlyNext=false;s.summaryNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
             TextButton({s.screen="photo"},enabled=!s.loading){InstrumentIcon("photo",Modifier.size(18.dp));Text("  Add photo")}
             TextButton({s.screen="upload"},enabled=!s.loading){InstrumentIcon("add",Modifier.size(18.dp));Text("  Add Files")}
