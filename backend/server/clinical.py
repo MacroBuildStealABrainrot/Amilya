@@ -550,6 +550,8 @@ async def create_evidence(encounter_id: str, payload: EvidenceCreate, request: R
                 raise
             from .error_feedback import extraction_warning
             warnings.append(extraction_warning(error))
+            from . import monitoring
+            monitoring.emit('ai_extraction','failed','extraction_failed')
             if error.status_code == 402:
                 warnings.append('This account needs an AI entitlement or app credits. Ask the owner to enable access; adding provider funds alone does not activate this account.')
     lock_case(db, encounter, expected)
@@ -648,6 +650,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
         except HTTPException as error:
             from .error_feedback import extraction_warning
             warnings.append(extraction_warning(error))
+            from . import monitoring
+            monitoring.emit('ai_extraction','failed','extraction_failed')
     elif kind == 'document' and mime in {'text/plain', 'text/csv'}:
         text = data.decode('utf-8-sig')
         if len(text) > 40000:

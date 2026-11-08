@@ -107,9 +107,14 @@ class AudioChunks(private val api:Api,private val vault:Vault){
             val bytes=withContext(Dispatchers.IO){sealed.part(index)}
             try{
                 val overlap=withContext(Dispatchers.IO){sealed.overlapMillis(index)}
+                try {
                 api.multipartBytes("/encounters/$encounter/audio-parts","segment-$index.m4a",bytes,"audio/mp4",
                     mapOf("job_id" to state.str("job_id"),"index" to index.toString(),"count" to count.toString(),"consent" to "true")+
                         (if(overlap>0)mapOf("overlap_ms" to overlap.toString()) else emptyMap()),"${state.str("job_id")}-$index")
+                } catch(e:Exception) {
+                    ErrorTelemetry.record(if(index>0)"recording_handover" else "transcription","failed",if(index>0)"handover_failed" else "upload_failed")
+                    throw e
+                }
             }finally{bytes.fill(0)}
             state.put("completed",index+1);vault.write(checkpoint,state.toString())
         }
@@ -144,8 +149,13 @@ class AudioChunks(private val api:Api,private val vault:Vault){
         }
         for(index in state.optInt("completed") until count){
             stage("Transcribing")
+            try {
             api.multipart("/encounters/$encounter/audio-parts",File(files.getString(index)),"audio/mp4",
                 mapOf("job_id" to state.str("job_id"),"index" to index.toString(),"count" to count.toString(),"consent" to "true"),"${state.str("job_id")}-$index")
+            } catch(e:Exception) {
+                ErrorTelemetry.record(if(index>0)"recording_handover" else "transcription","failed",if(index>0)"handover_failed" else "upload_failed")
+                throw e
+            }
             state.put("completed",index+1);vault.write(checkpoint,state.toString())
         }
         stage("Preparing transcript")
