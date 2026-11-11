@@ -147,7 +147,7 @@ class ClinicianFindings(StrictModel):
         if drainage: parts.append('drainage: ' + drainage)
         if self.infection_signs == ['none']: parts.append('no local signs of infection')
         elif self.infection_signs: parts.append('local signs of infection: ' + ', '.join(item.replace('_', ' ') for item in self.infection_signs))
-        if self.pain_score is not None: parts.append(f'pain {self.pain_score}/10')
+        if self.pain_score: parts.append(f'pain {self.pain_score}/10')  # pain 0 is never charted (owner request 2026-11-11)
         if self.probe_to_bone: parts.append('probe to bone: ' + self.probe_to_bone.replace('_', ' '))
         size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
         if size: parts.append('measured ' + ', '.join(size))

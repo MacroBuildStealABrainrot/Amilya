@@ -532,4 +532,4 @@ Reread your note and fix it until all of these are true:
 - Keep each recorded item in the category the clinician picked: friable tissue picked under infection signs is charted as an infection sign, never moved into the wound bed; periwound picks stay periwound.
 - State periwound ONCE: the clinician's picks, plus any extra the photo clearly shows, merged into one fragment. Never a second periwound or surrounding-skin sentence. Never mention a drape, towel, cover or anything hiding skin, and never write that part of the skin cannot be assessed.
 - Do not use the word "extending" or "adjacent".
-
+- Pain: chart a recorded pain score only when it is above 0. Never write "pain 0", "pain 0/10", "no pain" or "pain free".
