@@ -8,7 +8,7 @@ import math
 import time
 from uuid import UUID
 
-APPROVAL_END = 1794361800  # Renewed by Hazim Nov 3: 7 days, to 2026-11-11 01:50 UTC (Nov 10, 20:50 Toronto)
+APPROVAL_END = 1795053000  # Renewed by Hazim Nov 11: 7 more days, to 2026-11-19 01:50 UTC (Nov 18, 20:50 Toronto)
 
 
 def key_is_bounded(data, deadline, now):

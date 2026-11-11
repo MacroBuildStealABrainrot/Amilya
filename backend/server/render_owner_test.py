@@ -4,7 +4,7 @@ import time
 from uuid import UUID
 from .core import settings
 
-APPROVAL_END = 1794361800
+APPROVAL_END = 1795053000  # Renewed by Hazim Nov 11: 7 more days, to 2026-11-19 01:50 UTC (Nov 18, 20:50 Toronto)
 
 
 def required():
