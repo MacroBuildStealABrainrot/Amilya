@@ -93,3 +93,21 @@ def test_foreign_script_speech_is_flagged_as_background():
     assert flagged['background_suspected'] and flagged['warnings']
     ok = providers.flag_background_speech({'text': 'Packed with Hydrofera Blue', 'warnings': []})
     assert 'background_suspected' not in ok
+
+
+@pytest.mark.parametrize('task', ['quick_draft', 'quick_qa', 'image', 'consult', 'review', 'extract', 'challenge', 'escalation'])
+def test_one_model_for_every_step_when_owner_sets_it(gateway, task):
+    gateway.config.ai_model_all = 'minimax/minimax-m3'
+    route = providers.configured_route(task, json.dumps({'template': 'nursing'}))
+    assert route['model'] == 'minimax/minimax-m3'
+
+
+def test_one_model_setting_never_falls_back_to_another_developer(gateway):
+    gateway.config.ai_model_all = 'minimax/minimax-m3'
+    assert providers.photo_backup_model() is None
+
+
+def test_unknown_single_model_is_refused(gateway):
+    gateway.config.ai_model_all = 'unknown/model'
+    with pytest.raises(Exception):
+        providers.configured_route('quick_draft', json.dumps({'template': 'nursing'}))

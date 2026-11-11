@@ -70,6 +70,7 @@ MODEL_PRICES = {
     'openai/gpt-6-astra': ('10', '50', '.4'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
     'anthropic/claude-haiku-5.5': ('.10', '.50', '.01'),
+    'minimax/minimax-m3': ('.30', '1.20', '.06'),
 }
 # Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
 # Exact aliases only: never accept arbitrary date suffixes or another model.
@@ -903,6 +904,7 @@ def configured_route(task, content):
     elif family in {'draft', 'qa'}: selected = settings.model_documentation
     elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
     else: selected = settings.model_extraction
+    if getattr(settings, 'ai_model_all', ''): selected = settings.ai_model_all  # one model for every step (owner's choice)
     if selected not in MODEL_PRICES:
         raise preflight_error(503, 'Configured AI model is not in the approved price registry')
     return {**route, 'model': selected, 'reason': 'configured_' + task, 'effort_reason': route.get('reason')}
@@ -971,6 +973,7 @@ PHOTO_FALLBACK_CATEGORIES = frozenset({'provider_unavailable', 'provider_overloa
 
 def photo_backup_model():
     """First approved configured model from a different developer than the photo model."""
+    if getattr(settings, 'ai_model_all', ''): return None  # one model for every step: no second developer's model
     primary = settings.model_vision.split('/')[0]
     for name in ('model_challenger', 'model_review', 'model_documentation', 'model_frontier'):
         candidate = getattr(settings, name, '')
