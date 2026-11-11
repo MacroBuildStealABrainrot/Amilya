@@ -513,7 +513,8 @@ Write it the way a wound specialist charts at the bedside, not the way a picture
 FINAL CHECK BEFORE ANSWERING THE CHARTING NOTE (this overrides any earlier wording in this file)
 Reread your note and fix it until all of these are true:
 - It reads like a clinician dictating a brief chart note: short fragments, plain wound-care terms. Example of the voice only: "Coccyx wound. Red granulation centrally, yellow slough at upper and right edges. Edges irregular, partly macerated. Periwound erythema, dry flaky skin. Moist wound bed."
-- None of these words or phrases appear: shows, appears, appear, likely, possible, probably, suggests, area, areas, along, scattered, rim, predominantly, noted, "is present", "extending several centimeters" or any measurement, shallow, deep, depth.
+- None of these words or phrases appear: shows, appears, appear, likely, possible, probably, suggests, area, areas, along, scattered, rim, predominantly, noted, patch, patches, extensive, large, small, region, "is present", "extending several centimeters" or any measurement, shallow, deep, depth.
 - No sentence about what cannot be seen, confirmed, determined or established, and no mention of the photo or photograph. If you cannot see it clearly, leave it out and say nothing.
 - No sentence ends up longer than about 15 words, and no finding is written twice.
-
+- Cover every part that is clearly visible, in this order, each as a short fragment: location and wound type; wound bed tissue; edges; periwound skin; exudate or dressing only if visible. Do not stop after the wound bed.
+- Location: use the location the clinician typed in their notes when there is one. If none was typed, name only the broad site that is plainly visible and never narrow it further (for example "Buttock wound", not "coccyx" or "sacral"), because the exact site cannot be confirmed from a photo.
