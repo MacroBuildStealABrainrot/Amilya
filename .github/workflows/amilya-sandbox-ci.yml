@@ -61,19 +61,25 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install ffmpeg
-        timeout-minutes: 14
+        timeout-minutes: 10
         run: |
-          # A stalled package mirror must fail fast and retry, not hang the whole job for 30 minutes.
-          # The audio tests need both ffmpeg and ffprobe, so check both and fail loudly if either is missing.
+          # The audio tests need both ffmpeg and ffprobe. Try the normal package once with short timeouts; if the
+          # package mirror is stalled, fall back to a checksum-verified build from GitHub releases. Fail loudly if neither works.
           if ! command -v ffprobe >/dev/null || ! command -v ffmpeg >/dev/null; then
-            sudo sed -i 's#azure.archive.ubuntu.com#archive.ubuntu.com#g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
-            for try in 1 2 3; do
-              if sudo timeout 120 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update -qq >apt.log 2>&1 \
-                 && sudo timeout 240 apt-get install -y -qq ffmpeg >>apt.log 2>&1; then break; fi
-              echo "::warning::ffmpeg install try $try failed: $(tail -n 3 apt.log | tr '\n' ' ' | cut -c1-400)"
-              sleep 5
-            done
+            if ! { sudo timeout 90 apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 update -qq >apt.log 2>&1 \
+                   && sudo timeout 180 apt-get install -y -qq ffmpeg >>apt.log 2>&1; }; then
+              echo "::warning::apt could not install ffmpeg (mirror stalled); using the checksum-verified GitHub build instead"
+              base=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest
+              name=ffmpeg-master-latest-linux64-gpl.tar.xz
+              mkdir -p ffmpeg-dl && cd ffmpeg-dl
+              curl -fsSL --retry 3 --max-time 240 -O "$base/$name" -O "$base/checksums.sha256"
+              grep " $name\$" checksums.sha256 | sha256sum -c -
+              tar -xJf "$name" --strip-components=2 --wildcards '*/bin/ffmpeg' '*/bin/ffprobe'
+              sudo install -m 0755 ffmpeg ffprobe /usr/local/bin/
+              cd ..
+            fi
           fi
+          ffmpeg -version | head -1; ffprobe -version | head -1
           command -v ffmpeg && command -v ffprobe
       - name: Install backend packages
         timeout-minutes: 8
