@@ -60,10 +60,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install ffmpeg and backend packages
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
-          python -m pip install -r backend/requirements.txt
+      - name: Install ffmpeg
+        timeout-minutes: 6
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Install backend packages
+        timeout-minutes: 8
+        run: python -m pip install --progress-bar off -r backend/requirements.txt
       - name: Backend test suite
         working-directory: backend
         env:
