@@ -31,6 +31,7 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         code=="MODEL_UNAVAILABLE" -> "No provider endpoint matches the configured model and privacy settings. An administrator must check routing."
         code=="REQUEST_INCOMPATIBLE" -> "The provider rejected the request format or model parameters. The integration needs correction."
         code=="PROVIDER_TIMEOUT" -> "The AI provider timed out. Check request status before retrying."
+        code=="OUTPUT_LIMIT" -> "The AI response was cut short. No partial result was accepted. Your source is saved; contact support before trying again."
         code=="INVALID_RESPONSE" -> "The AI response failed structure or clinical-data validation. Its result was not accepted."
         code=="NETWORK_UNAVAILABLE" -> "The server could not connect to the AI provider. Retry when that connection is restored."
         code=="RATE_LIMITED" -> "The provider rate-limited this request. Wait before retrying."

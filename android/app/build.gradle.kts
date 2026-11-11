@@ -11,8 +11,10 @@ android {
         applicationId = "com.woundcopilot.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 30
-        versionName = "1.8.5-test10"
+        buildConfigField("boolean", "REPAIR_SERVER", "false")
+        buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
+        versionCode = 32
+        versionName = "1.8.5-test12"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
         // Crash-resistant recorder: compiled into every build, switched ON only in sandbox. Turning it on for debug/release later is one
@@ -54,6 +56,26 @@ android {
             buildConfigField("boolean", "RETAIN_UNRESOLVED", "false")
             matchingFallbacks += listOf("debug")
         }
+        // Isolated repair verification app: never replaces a recording-bearing install.
+        create("repair") {
+            initWith(getByName("pilot"))
+            applicationIdSuffix = ".repair"
+            buildConfigField("boolean", "REPAIR_SERVER", "true")
+            versionNameSuffix = "-photo-repair13"
+            buildConfigField("String", "API_BASE_URL", "\"https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
+        // A new package keeps all existing apps, sessions and recordings separate.
+        create("renderTest") {
+            initWith(getByName("pilot"))
+            applicationIdSuffix = ".rendertest"
+            versionNameSuffix = "-render-test14"
+            buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
+            buildConfigField("boolean", "REPAIR_SERVER", "false")
+            buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
+            buildConfigField("String", "API_BASE_URL", "\"https://amilya-repair-test.onrender.com/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
         // production address is refused in code, so a recording can never be sent to the live service.
@@ -91,4 +113,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     add("sandboxImplementation", "androidx.compose.ui:ui-tooling")
     add("sandboxImplementation", "androidx.compose.ui:ui-test-manifest")
+}
+
+
+// Optional CI-only bounded-disk fixture; never used by the application runtime.
+tasks.withType<Test>().configureEach {
+    providers.environmentVariable("WCP_STORAGE_FULL_TEST_DIR").orNull?.let {
+        systemProperty("full.dir", it)
+    }
 }

@@ -54,6 +54,11 @@ class Observation(StrictModel):
         return self
 
 
+class PhotoTissue(StrictModel):
+    """Photo interpretation is qualitative; percentages belong to clinician input."""
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+
+
 class Tissue(StrictModel):
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)] | None = None
     granulation: float | None = Field(default=None, ge=0, le=100, strict=True)
@@ -209,3 +214,4 @@ class SignDocument(StrictModel):
     content_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
     acknowledge_review: Literal[True]
     expected_case_revision: int = Field(ge=1)
+

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     trusted_hosts: str = 'localhost,127.0.0.1,testserver'
     session_hours: int = 12
     allow_signup: bool = True
+    render_owner_enrollment_email: str = ''
+    render_owner_enrollment_until: int = 0
+    render_owner_test_user_id: str = ''
+    render_owner_test_until: int = 0
     clinical_data_enabled: bool = False
     legal_version: str = '2026-09-05'
     legal_business_name: str = ''
@@ -31,6 +35,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = 'https://openrouter.ai/api/v1'
     openrouter_phi_approved: bool = False
     openrouter_require_zdr: bool = True
+    openrouter_speech_enabled: bool = False
     cloudflare_api_token: str = ''
     cloudflare_account_id: str = ''
     cloudflare_phi_approved: bool = False
@@ -43,7 +48,9 @@ class Settings(BaseSettings):
     speech_provider: str = 'auto'
     model_extraction: str = 'openai/gpt-6-luna'
     model_documentation: str = 'openai/gpt-6.1-sol'
-    model_vision: str = 'openai/gpt-6.1-sol'
+    # Owner-approved (2026-10-28): Haiku writes standard notes; accuracy checks stay on model_documentation.
+    model_documentation_simple: str = 'anthropic/claude-haiku-5.5'
+    model_vision: str = 'anthropic/claude-sonnet-5.5'  # owner's choice for wound photos (2026-10-28)
     model_review: str = 'openai/gpt-6.1-sol'
     model_frontier: str = 'openai/gpt-6-astra'
     model_challenger: str = 'anthropic/claude-sonnet-5.5'
@@ -70,7 +77,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():
@@ -96,3 +103,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

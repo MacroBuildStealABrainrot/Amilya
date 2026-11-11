@@ -1,0 +1,7 @@
+# Android repair candidate
+
+The repair build installs as com.woundcopilot.android.repair, labeled Amilya Repair Test, alongside all existing installs. It targets the repair tag (woundcopilot-photo-ce63ac2 last verified by Cloud Shell), where Hazim reported successful photo and synthetic visit/report tests. It does not move normal server traffic. Use synthetic/nonpatient data only. Existing recordings stay in the existing app and are not copied or deleted. Never uninstall or clear old app data.
+
+This is a separate repair verification APK, not a production final release. Production rollout still needs explicit approval and physical Samsung verification; signing continuity for future updates needs the original signing key or a deliberately provisioned stable key. CI default debug signing is not stable across machines. No new credentials are provisioned by this change. Wear pairing with separate app identity is unverified; do not claim watch compatibility. Crash-safe recording stays disabled as in pilot, with original recorder preserved.
+
+The backend repair excluded image-only observed_on metadata with a warning, retained strict clinical validation, increased report budgets and added bounded gateway retry. 174 focused live-baseline regression tests pass. Repository backend CI tests a newer source tree, so it is additional evidence rather than proof that the old deployed image passes that entire suite.

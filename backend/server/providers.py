@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import unicodedata
 from typing import get_args
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -39,12 +40,22 @@ from .identity import User, check_rate, require_admin
 from .provider_models import ProviderResult
 from .performance import timed
 from .billing_models import UsageOperation
-from .schemas import Name, Measurement, Location, Tissue, Pain, Observation, validated_value
+from .schemas import Name, Measurement, Location, Tissue, PhotoTissue, Pain, Observation, validated_value
 from . import billing
 from .kosmo import select_route
 from . import diagnostics
 
 router = APIRouter()
+
+
+class OutputLimitError(ValueError):
+    """The provider exhausted its output allowance; partial findings are unusable."""
+
+
+class ModelIdentityError(ValueError):
+    """A gateway response does not identify the model that was requested."""
+
+
 request_operation: ContextVar[str | None] = ContextVar('request_operation', default=None)
 document_operations: ContextVar[list | None] = ContextVar('document_operations',default=None)
 PROMPTS = Path(__file__).parent / 'prompts'
@@ -56,7 +67,35 @@ MODEL_PRICES = {
     'openai/gpt-6.1-sol': ('2', '10', '.2'),
     'openai/gpt-6-astra': ('10', '50', '.4'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
+    'anthropic/claude-haiku-5.5': ('.10', '.50', '.01'),
 }
+# Reviewed against the public OpenRouter endpoint catalog on 2026-10-26.
+# Exact aliases only: never accept arbitrary date suffixes or another model.
+MODEL_SNAPSHOTS = {
+    'openai/gpt-6-luna': frozenset({'openai/gpt-6-luna-20260922'}),
+    'openai/gpt-6.1-sol': frozenset({'openai/gpt-6.1-sol-20260929'}),
+    'openai/gpt-6-astra': frozenset({'openai/gpt-6-astra-20260903'}),
+    'anthropic/claude-sonnet-5.5': frozenset({'anthropic/claude-sonnet-5.5-20260928'}),
+    # Snapshot slug per the public genai-prices review of OpenRouter (released 2026-10-07).
+    'anthropic/claude-haiku-5.5': frozenset({'anthropic/claude-haiku-5.5-20261007'}),
+}
+FINISH_REASONS = frozenset({'stop', 'length', 'content_filter', 'tool_calls', 'function_call'})
+OPENROUTER_SPEECH_MODEL = 'openai/whisper-large-v3'
+SPEECH_MODEL_IDS = frozenset({OPENROUTER_SPEECH_MODEL})
+# Reviewed 2026-10-28: duration-priced endpoints ranged from $0.0000075
+# to $0.0000308333333333/second. Normalize/reserve at the reviewed upper rate;
+# actual vendor cost is recorded separately when supplied, otherwise unknown.
+OPENROUTER_WHISPER_MICROS_PER_MINUTE = Decimal('1850')
+
+
+def known_model_id(value):
+    return isinstance(value, str) and (value in MODEL_PRICES or value in SPEECH_MODEL_IDS or any(value in ids for ids in MODEL_SNAPSHOTS.values()))
+
+
+def model_identity_matches(selected, reported):
+    return reported is None or isinstance(reported, str) and (reported == selected or reported in MODEL_SNAPSHOTS.get(selected, ()))
+
+
 SPEECH_PRICES = {'cloudflare': Decimal('510'), 'groq': Decimal('40000') / 60,
                  'deepgram': Decimal('7700')}  # microUSD per minute, medical reserve uses configurable cap
 GROQ_FULL_WHISPER_MICROS_PER_MINUTE = Decimal('111000') / 60
@@ -179,11 +218,12 @@ def result_schema(task: str) -> dict:
     if task in {'extract', 'document', 'image'}:
         # Give the model the same value contracts enforced when accepting results.
         # A free-form object here allowed plausible but unusable field names.
+        tissue_model = PhotoTissue if task == 'image' else Tissue
         special = {'wound_measurement': Measurement, 'wound_location': Location,
-                   'wound_tissue': Tissue, 'pain': Pain}
+                   'wound_tissue': tissue_model, 'pain': Pain}
         allowed = PHOTO_NAMES if task == 'image' else set(get_args(Name))
         variants = []
-        for model in (Measurement, Location, Tissue, Pain, Observation):
+        for model in (Measurement, Location, tissue_model, Pain, Observation):
             names = sorted(name for name in allowed if special.get(name, Observation) is model)
             if names:
                 variants.append({'type': 'object', 'additionalProperties': False,
@@ -214,6 +254,16 @@ def parse_provider_json(value):
     def invalid_constant(value):
         raise ValueError('Non-finite provider JSON value')
     return json.loads(value, object_pairs_hook=pairs, parse_constant=invalid_constant)
+
+
+def validated_photo_value(name: str, value: dict) -> dict:
+    """Do not accept or reinterpret AI-generated tissue percentages."""
+    checked = (PhotoTissue.model_validate(value).model_dump(mode='json')
+               if name == 'wound_tissue' else validated_value(name, value))
+    text = unicodedata.normalize('NFKC', checked.get('text') or '')
+    if re.search(r'[%\u066a]|percent(?:age)?s?|per[\s-]+cent', text, re.IGNORECASE):
+        raise ValueError('Photo percentage estimates are not accepted')
+    return checked
 
 
 def validate_result(data: dict, task: str, source: str | None = None) -> dict:
@@ -247,7 +297,8 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
                 if source is not None and (not quote.strip() or quote not in source):
                     warnings.append('A suggestion without an exact source quotation was excluded.')
                     continue
-                facts.append({'name': name, 'value': validated_value(name, value), 'quote': quote})
+                checked = validated_photo_value(name, value) if task == 'image' else validated_value(name, value)
+                facts.append({'name': name, 'value': checked, 'quote': quote})
             except (ValueError, KeyError, TypeError):
                 if task != 'image':raise
                 invalid_photo_count += 1
@@ -285,6 +336,66 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
     if not isinstance(warnings, list) or len(warnings) > 16 or any(not isinstance(x, str) or len(x) > 1000 for x in warnings):
         raise ValueError('Invalid review warnings')
     return {'considerations': values, 'warnings': warnings}
+
+
+# Only documented technical codes may leave this parser. Provider messages,
+# native codes, raw metadata and generated content can contain clinical data.
+PROVIDER_ERROR_STATUS = {
+    'authentication': 401, 'permission_denied': 403, 'payment_required': 402,
+    'rate_limit_exceeded': 429, 'provider_overloaded': 503,
+    'provider_unavailable': 502, 'timeout': 504, 'server': 500,
+    'content_policy_violation': 403, 'refusal': 403,
+    'context_length_exceeded': 400, 'max_tokens_exceeded': 400,
+    'token_limit_exceeded': 400, 'string_too_long': 400,
+    'invalid_request': 400, 'invalid_prompt': 400, 'not_found': 404,
+    'precondition_failed': 400, 'payload_too_large': 413, 'unprocessable': 422,
+    'invalid_image': 400, 'image_too_large': 400, 'image_too_small': 400,
+    'unsupported_image_format': 400, 'image_not_found': 404,
+    'image_download_failed': 400, 'unmapped': 502,
+}
+
+
+def provider_error_response(response, raw):
+    """Normalize top-level/choice errors without retaining their sensitive body.
+
+    HTTP 200 does not prove generation succeeded. Never retry an error envelope:
+    partial generation and vendor cost may be unknown.
+    """
+    if not isinstance(raw, dict):
+        return None
+    info = raw.get('error')
+    if info is None:
+        choices = raw.get('choices')
+        if isinstance(choices, list):
+            info = next((choice['error'] for choice in choices
+                         if isinstance(choice, dict) and choice.get('error') is not None), None)
+    if info is None:
+        return None
+    metadata = info.get('metadata') if isinstance(info, dict) else None
+    category = metadata.get('error_type') if isinstance(metadata, dict) else None
+    if not isinstance(category, str) or category not in PROVIDER_ERROR_STATUS:
+        category = 'unknown'
+    code = info.get('code') if isinstance(info, dict) else None
+    if isinstance(code, str) and code.isascii() and code.isdigit() and len(code) <= 3:
+        code = int(code)
+    if category in PROVIDER_ERROR_STATUS:
+        code = PROVIDER_ERROR_STATUS[category]
+    elif type(code) is not int or not 400 <= code <= 599:
+        code = 502
+    delay = retry_after_delay(response)
+    # Closed, non-clinical details only: which upstream company answered, whether a
+    # safety filter flagged the input, and a numeric native code. Never message text.
+    upstream = metadata.get('provider_name') if isinstance(metadata, dict) else None
+    if upstream not in ('Azure', 'OpenAI', 'Anthropic', 'Google', 'DeepInfra', 'Together', 'Groq', 'Cloudflare'):
+        upstream = 'unknown'
+    flagged = isinstance(metadata, dict) and (bool(metadata.get('flagged_input')) or bool(metadata.get('reasons')))
+    native = info.get('code') if isinstance(info, dict) else None
+    native = native if type(native) is int and 100 <= native <= 599 else None
+    return httpx.Response(code, request=response.request,
+        extensions={'wcp_transport_status': response.status_code, 'wcp_error_type': category,
+                    'wcp_upstream_provider': upstream, 'wcp_safety_flagged': flagged, 'wcp_native_code': native},
+        headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
+        json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
 
 
 def quota_rejection(response):
@@ -337,9 +448,9 @@ def photo_error_headers(usage, exhausted=False):
         'route_unavailable':'MODEL_UNAVAILABLE', 'request_incompatible':'REQUEST_INCOMPATIBLE',
         'provider_timeout':'PROVIDER_TIMEOUT', 'invalid_response':'INVALID_RESPONSE',
         'provider_connection':'NETWORK_UNAVAILABLE', 'provider_rate_limit':'RATE_LIMITED',
-        'response_processing':'RESPONSE_PROCESSING_FAILED',
+        'response_processing':'RESPONSE_PROCESSING_FAILED', 'output_limit':'OUTPUT_LIMIT',
     }.get(usage.get('failure_reason'), 'PROVIDER_UNAVAILABLE')
-    permanent = category in {'PROVIDER_QUOTA','PROVIDER_AUTH','MODEL_UNAVAILABLE','REQUEST_INCOMPATIBLE'}
+    permanent = category in {'PROVIDER_QUOTA','PROVIDER_AUTH','MODEL_UNAVAILABLE','REQUEST_INCOMPATIBLE','OUTPUT_LIMIT'}
     return {**(retry_after_headers(usage) or {}),
             'X-WCP-Error': 'RETRY_LIMIT' if exhausted and not permanent else category,
             'X-WCP-Retryable': 'false' if permanent or exhausted else 'true',
@@ -378,6 +489,9 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
     diagnostics.bind(user)
     diagnostics.event({'source':'router','stage':'provider_preflight','selected_model':model,'provider':provider,'status':'selected','finished_at':diagnostics.timestamp()})
     privacy_guard(provider)
+    from . import render_owner_test
+    if render_owner_test.required() and (provider != 'openrouter' or not render_owner_test.allows(user)):
+        raise preflight_error(503, 'The synthetic test allowance is unavailable for this account or has expired')
     check_rate('provider:' + user.id, limit=60)
     crypt = cipher()
     seed = request_operation.get() or str(uuid.uuid4())
@@ -403,7 +517,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     # without charge. Let the same request key try again (bounded),
                     # instead of replaying the old failure forever. Permanent
                     # configuration failures (credits, access, routing) never advance.
-                    if previous.usage.get('failure_reason') in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                    if previous.usage.get('failure_reason') in {'provider_credits','provider_access','route_unavailable','request_incompatible','output_limit'}:
                         break
                     attempts = previous.usage.get('attempts', [])
                     if not attempts or attempts[-1].get('error_code') not in {'502','503','504'}:
@@ -414,7 +528,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     # A success, unknown charge or running request never advances.
                     reason = previous.usage.get('failure_reason')
                     if replay_invalid_failure and reason == 'invalid_response':break
-                    if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible'}:
+                    if reason in {'provider_credits','provider_access','route_unavailable','request_incompatible','output_limit'}:
                         break
                     if retry_after_headers(previous.usage):
                         raise HTTPException(503, 'Photo assessment is waiting for provider capacity.',
@@ -507,9 +621,36 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         elif code == 400:
             reason = 'request_incompatible'
             detail = 'The AI provider rejected the request format or model parameters. The owner must review the integration; manual charting remains available.'
+        category = exc.response.extensions.get('wcp_error_type', 'unknown')
+        if category not in PROVIDER_ERROR_STATUS:
+            category = 'unknown'
+        if category in {'content_policy_violation', 'refusal'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider declined this assessment. No findings were accepted. Manual charting remains available.'
+        elif category in {'invalid_image', 'image_too_large', 'image_too_small', 'unsupported_image_format', 'image_not_found', 'image_download_failed'}:
+            reason = 'request_incompatible'
+            detail = 'The AI provider could not read the uploaded image. No findings were accepted. Manual charting remains available.'
+        elif category in {'context_length_exceeded', 'max_tokens_exceeded', 'token_limit_exceeded', 'string_too_long'}:
+            reason = 'output_limit'
+            detail = 'The AI provider reached a token or length limit. No partial findings were accepted. Manual charting remains available.'
+        elif category == 'timeout':
+            reason = 'provider_timeout'
+        logging.getLogger('wcp.providers').warning('provider_request_failed transport=%d status=%d category=%s upstream=%s safety_flagged=%s native_code=%s',
+            exc.response.extensions.get('wcp_transport_status', code), code, category,
+            exc.response.extensions.get('wcp_upstream_provider', 'unknown'),
+            bool(exc.response.extensions.get('wcp_safety_flagged', False)),
+            exc.response.extensions.get('wcp_native_code'))
         usage.update({'upstream_status': exc.response.extensions.get('wcp_transport_status', code), 'failure_reason': reason})
         error = HTTPException(503 if code in {401, 402, 403, 404, 429} else 502, detail,
-                              headers=retry_after_headers(usage))
+                              headers={**(retry_after_headers(usage) or {}), 'X-WCP-Upstream-Status': str(usage['upstream_status']),
+                                       **({'X-WCP-Provider-Error': category} if task == 'image' or category != 'unknown' else {}),
+                                       **({'X-WCP-Retryable': 'false'} if task == 'image' and exc.response.extensions.get('wcp_transport_status') == 200 else {})})
+    except OutputLimitError:
+        usage['failure_reason'] = 'output_limit'
+        error = HTTPException(502, 'The AI response reached its output limit before completion. No partial findings were accepted. The source is preserved; the administrator must review the output allowance.')
+    except ModelIdentityError:
+        usage['failure_reason'] = 'request_incompatible'
+        error = HTTPException(502, 'The provider returned an unexpected model. The owner must review routing; no findings were accepted.')
     except (ValueError, KeyError, TypeError, IndexError):
         usage['failure_reason'] = 'invalid_response'
         error = HTTPException(502, 'The provider returned an invalid clinical response. No unsupported findings were accepted.')
@@ -551,7 +692,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         ledger_db.commit()
     if error:
         if usage.get('failure_reason'):
-            error.headers = {**(error.headers or {}), **photo_error_headers(usage, task == 'image' and resumed_attempt >= 3)}
+            error.headers = {**photo_error_headers(usage, task == 'image' and resumed_attempt >= 3), **(error.headers or {})}
         raise error
     return result
 
@@ -615,37 +756,39 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
                 await rate_limit_backoff(delay)
             response.raise_for_status()
             raw = parse_provider_json(response.text)
-            # Some gateways return HTTP 200 with an error object. Normalize it
-            # through the same safe failure/waived-charge path as HTTP failures.
-            if isinstance(raw, dict) and 'error' in raw:
-                info = raw['error']
-                code = info.get('code') if isinstance(info, dict) else None
-                if isinstance(code, str) and code.isascii() and code.isdigit(): code = int(code)
-                if type(code) is not int or not 400 <= code <= 599: code = 502
-                delay = retry_after_delay(response)
-                synthetic = httpx.Response(code, request=response.request, extensions={'wcp_transport_status':response.status_code},
-                    headers={'Retry-After': str(math.ceil(delay))} if delay is not None else {},
-                    json={'error': {'type': 'insufficient_quota' if quota_rejection(response) is True else 'upstream_error'}})
+            synthetic = provider_error_response(response, raw)
+            if synthetic is not None:
                 raise httpx.HTTPStatusError('Provider error envelope', request=response.request, response=synthetic)
             return raw
     async def perform():
-        if task not in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:
-            return await perform_attempts()
-        # A report has at most four stages. Bound the whole network portion of
-        # each stage, including the single 429 retry/backoff, rather than only
-        # socket inactivity. Keep this inside metering so timeout settles safely.
+        # Socket timeouts alone allow a slow/dribbling response to run indefinitely.
+        # Bound every text/vision stage, including backoff, inside credit settlement.
+        timeout = settings.provider_timeout_seconds
+        if task in REPORT_STAGE_TASKS:
+            timeout = min(REPORT_STAGE_TIMEOUT_SECONDS, timeout)
         try:
-            return await asyncio.wait_for(perform_attempts(),
-                timeout=min(REPORT_STAGE_TIMEOUT_SECONDS, settings.provider_timeout_seconds))
+            return await asyncio.wait_for(perform_attempts(), timeout=timeout)
         except TimeoutError:
-            raise httpx.TimeoutException('The report stage exceeded its bounded wait') from None
+            raise httpx.TimeoutException('The AI stage exceeded its bounded wait') from None
     def measure(raw):
         vendor = raw.get('usage') or {}
         amount, safe = normalized_tokens(model, vendor)
+        reported = raw.get('model')
+        safe['reported_model'] = reported if known_model_id(reported) else None
+        safe['model_identity'] = 'unreported' if reported is None else 'confirmed' if model_identity_matches(model, reported) else 'mismatch'
+        safe['max_output_tokens'] = max_tokens
+        choices = raw.get('choices')
+        choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+        finish = choice.get('finish_reason')
+        if isinstance(finish, str) and finish in FINISH_REASONS:
+            safe['finish_reason'] = finish
         if routing: safe['routing'] = routing
         return amount, safe, actual_cost(vendor)
     def validate(raw):
+        if not model_identity_matches(model, raw.get('model')):
+            raise ModelIdentityError('Provider returned a different or unrecognized model')
         choice = raw['choices'][0]
+        if choice.get('finish_reason') == 'length': raise OutputLimitError('Output limit reached')
         if choice.get('finish_reason') not in {'stop', None}: raise ValueError('Incomplete output')
         message = choice['message']
         if message.get('tool_calls') or message.get('refusal'): raise ValueError('Non-clinical response')
@@ -659,21 +802,56 @@ async def structured(task, content, model, *, user, encounter_id, source=None, m
         prior_attempts=prior_attempts, replay_invalid_failure=replay_invalid_failure)
 
 
+# Owner's blind review (2026-10-28) preferred Haiku's notes; custom layouts stay on the main model until tested.
+SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
+
+
+def simple_note_template(content):
+    """Standard note types; custom layouts keep the main model."""
+    try:
+        data = json.loads(content) if isinstance(content, str) else {}
+    except (ValueError, TypeError):
+        return False
+    return isinstance(data, dict) and data.get('template') in SIMPLE_NOTE_TEMPLATES and not data.get('untrusted_layout_preferences')
+
+
+def configured_route(task, content):
+    """Keep automatic effort selection while honoring the owner's model settings."""
+    route = select_route(TASK_FAMILIES.get(task, task), content)
+    family = TASK_FAMILIES.get(task, task)
+    if task == 'image': selected = settings.model_vision
+    elif task == 'challenge': selected = settings.model_challenger
+    elif route['effort_level'] == 'high': selected = settings.model_frontier
+    elif family == 'draft' and simple_note_template(content) and getattr(settings, 'model_documentation_simple', ''):
+        selected = settings.model_documentation_simple
+    elif family in {'draft', 'qa'}: selected = settings.model_documentation
+    elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
+    else: selected = settings.model_extraction
+    if selected not in MODEL_PRICES:
+        raise preflight_error(503, 'Configured AI model is not in the approved price registry')
+    return {**route, 'model': selected, 'reason': 'configured_' + task, 'effort_reason': route.get('reason')}
+
+
 @timed('ai_stage')
 async def routed(task, content, model=None, **kwargs):
-    if task not in {'quick_draft','quick_qa','quick_repair','quick_refine','improve_report'} and (diagnostics.active.get() or {}).get('task')!='deep_review':
+    if task not in REPORT_STAGE_TASKS and (diagnostics.active.get() or {}).get('task')!='deep_review':
         diagnostics.task({'image':'photo_assessment','consult':'ask_consultant','assistant':'ask_consultant','review':'clinical_review'}.get(task,task))
-    route = select_route(TASK_FAMILIES.get(task, task), content)
-    # Explicit configured models must be respected for modality-specific and independent stages.
-    # All other tasks retain Kosmo's automatic complexity routing.
-    overrides = {'image': settings.model_vision, 'challenge': settings.model_challenger}
-    if task in overrides:
-        selected = overrides[task]
-        if selected not in MODEL_PRICES:
+    override = kwargs.pop('model_override', None)
+    route = configured_route(task, content)
+    if override:
+        if override not in MODEL_PRICES:
             raise preflight_error(503, 'Configured AI model is not in the approved price registry')
-        route = {**route, 'model': selected, 'reason': 'configured_' + task}
-    # Completion limits include hidden reasoning; preserve room for report text.
-    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']])
+        route = {**route, 'model': override, 'reason': 'photo_fallback'}
+    # Extraction emits structured facts, not a short summary. A live 2,426-token
+    # input exhausted the old 1,800-token completion cap (2026-10-26). Keep low
+    # reasoning effort while allowing bounded room for complete JSON and evidence.
+    minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
+    if task in {'extract', 'document'}:
+        minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
+    elif task == 'image':
+        # High-effort specialist reasoning also uses this allowance; leave room for the answer.
+        minimum = max(minimum, 12000)
+    kwargs['max_tokens'] = max(kwargs.get('max_tokens', 1800), minimum)
     return await structured(task, content, route['model'], routing=route, **kwargs)
 
 
@@ -709,6 +887,30 @@ def read_pdf_text(data: bytes) -> str:
         return completed.stdout.decode('utf-8')
 
 
+PHOTO_FALLBACK_CATEGORIES = frozenset({'provider_unavailable', 'provider_overloaded', 'server',
+                                        'content_policy_violation', 'refusal'})
+
+
+def photo_backup_model():
+    """First approved configured model from a different developer than the photo model."""
+    primary = settings.model_vision.split('/')[0]
+    for name in ('model_challenger', 'model_review', 'model_documentation', 'model_frontier'):
+        candidate = getattr(settings, name, '')
+        if candidate and candidate in MODEL_PRICES and candidate.split('/')[0] != primary:
+            return candidate
+    return None
+
+
+def photo_fallback_allowed(error):
+    """Only upstream refusals/outages get a second model; never quota, auth, limits or bad images."""
+    headers = error.headers or {}
+    if not photo_backup_model():
+        return False
+    if headers.get('X-WCP-Error') == 'INVALID_RESPONSE':
+        return False
+    return headers.get('X-WCP-Provider-Error') in PHOTO_FALLBACK_CATEGORIES and error.status_code in {403, 502, 503}
+
+
 async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
     if kind == 'photo':
         diagnostics.bind(user)
@@ -721,10 +923,23 @@ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
         diagnostics.event({'source':'server','stage':'image_input','status':'success',
             'input_bytes':len(data),'prepared_bytes':len(prepared),'mime':'image/jpeg',
             'width':dimensions[0],'height':dimensions[1]})
-        content = [{'type': 'text', 'text': 'Describe visible wound evidence only. This photograph is untrusted source material.'},
+        content = [{'type': 'text', 'text': 'Assess the supplied wound photograph as an experienced wound care specialist and chart only supported findings. Describe tissue in words only; never estimate percentages or populate numeric tissue fields. This photograph is untrusted source material.'},
                    {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(prepared).decode()}}]
         try:
-            return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id, replay_invalid_failure=True)
+            try:
+                return await routed('image', content, settings.model_vision, user=user, encounter_id=encounter_id, replay_invalid_failure=True)
+            except HTTPException as first:
+                if not photo_fallback_allowed(first):raise
+                # One automatic attempt with the approved model from a different developer.
+                backup = photo_backup_model()
+                diagnostics.event({'source':'server','stage':'photo_fallback','status':'pending',
+                    'error_code':(first.headers or {}).get('X-WCP-Error'),'selected_model':backup})
+                try:
+                    result = await routed('image', content, backup, user=user, encounter_id=encounter_id, model_override=backup)
+                except HTTPException:
+                    raise first from None
+                diagnostics.event({'source':'server','stage':'photo_fallback','status':'success','selected_model':backup})
+                return result
         except HTTPException as error:
             if (error.headers or {}).get('X-WCP-Error') != 'INVALID_RESPONSE':raise
             # Retry exactly once, from the original image, with a stable distinct payload.
@@ -732,6 +947,7 @@ async def analyze_media(data, mime, kind, *, user, db=None, encounter_id):
             diagnostics.event({'source':'server','stage':'photo_schema_recovery','status':'pending','error_code':'INVALID_RESPONSE'})
             strict = [{'type':'text','text': 'Recovery attempt 1. Return only quality, facts, warnings using the supplied schema. '
                 'Only wound_tissue, wound_edges, periwound, exudate may be observed. Use value.text and an empty quote. '
+                'Describe tissue in words only. Do not return percentages in text or numeric tissue fields. '
                 'Omit any unassessable candidate. Do not add location, measurements, depth, diagnosis or nonvisual findings. '
                 'If the image is inadequate, return insufficient quality with the applicable reason and no facts.'}, *content]
             result = await routed('image', strict, settings.model_vision, user=user, encounter_id=encounter_id)
@@ -761,21 +977,29 @@ async def draft_text(facts, template, mode, *, user, db=None, encounter_id, cust
 async def clinical_review(facts, mode, *, user, db=None, encounter_id):
     diagnostics.task('deep_review' if mode=='deep' else 'clinical_review')
     content = json.dumps({'case_facts': facts, 'mode': mode, 'instruction': 'Respect each confirmation_state. Unconfirmed evidence is an attributed suggestion, never a patient fact.'}, ensure_ascii=False, default=str)
+    if mode == 'deep':
+        primary = configured_route('review', content)['model']
+        challenger = configured_route('challenge', content)['model']
+        if primary.split('/')[0] == challenger.split('/')[0]:
+            raise preflight_error(503, 'Deep Review requires a challenger from a different model developer')
     first = await routed('review', content, settings.model_review, user=user, encounter_id=encounter_id)
     triggers = review_triggers(facts)
     first['routing'] = {**first.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': False}
-    if mode == 'fast' or not triggers: return first
+    if mode == 'fast' or not triggers and mode != 'deep': return first
     targeted = json.dumps({'case_facts': facts, 'material_questions': triggers, 'initial_considerations': first['considerations']}, ensure_ascii=False, default=str)
-    additional = await routed('escalation', targeted, settings.model_frontier, user=user, encounter_id=encounter_id)
-    stages = [first['usage'], additional['usage']]
-    opinions = [first['considerations'], additional['considerations']]
-    if mode == 'deep' and any('conflict' in x or 'vascular' in x for x in triggers):
-        challenged = await routed('challenge', targeted, settings.model_challenger, user=user, encounter_id=encounter_id)
+    stages = [first['usage']]
+    opinions = [first['considerations']]
+    if triggers:
+        additional = await routed('escalation', targeted, settings.model_frontier, user=user, encounter_id=encounter_id)
+        stages.append(additional['usage']); opinions.append(additional['considerations'])
+    if mode == 'deep':
+        # Independent assessment sees source evidence, not the first model's conclusions.
+        challenged = await routed('challenge', content, settings.model_challenger, user=user, encounter_id=encounter_id)
         opinions.append(challenged['considerations']); stages.append(challenged['usage'])
     reconciled = await routed('reconcile', json.dumps({'case_facts': facts, 'material_questions': triggers, 'interpretations': opinions}, ensure_ascii=False, default=str),
         settings.model_review, user=user, encounter_id=encounter_id)
     reconciled['usage']['stages'] = stages
-    reconciled['routing'] = {**reconciled.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': True}
+    reconciled['routing'] = {**reconciled.get('routing', {}), 'mode': mode, 'triggers': triggers, 'escalated': bool(triggers), 'independent_challenge': mode == 'deep'}
     return reconciled
 
 
@@ -955,7 +1179,10 @@ def collapse_speech_loops(text, segments, minimum_run=3):
 async def speech_attempt(provider, data, mime, filename, seconds, *, user, encounter_id, verification_model=None, purpose='transcription', diagnostic_original=None):
     diagnostics.task(purpose)
     primer = (PROMPTS / 'speech_primer.txt').read_text(encoding='utf-8')[:1000]
-    model = {'cloudflare': '@cf/openai/whisper-large-v3-turbo', 'groq': 'whisper-large-v3-turbo', 'deepgram': 'nova-3-medical'}[provider]
+    model = {'cloudflare': '@cf/openai/whisper-large-v3-turbo', 'groq': 'whisper-large-v3-turbo', 'deepgram': 'nova-3-medical',
+             'openrouter': OPENROUTER_SPEECH_MODEL}[provider]
+    if provider == 'openrouter' and not (getattr(settings, 'openrouter_speech_enabled', False) and settings.openrouter_api_key):
+        raise HTTPException(503, 'Recording transcription is not enabled')
     if purpose not in {'transcription', 'audio_verification'}:
         raise HTTPException(422, 'Unsupported speech purpose')
     if verification_model is not None:
@@ -963,7 +1190,8 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             raise HTTPException(422, 'Unsupported speech verification model')
         model = verification_model
     seconds = max(10, seconds) if provider == 'groq' else seconds
-    price = GROQ_FULL_WHISPER_MICROS_PER_MINUTE if model == 'whisper-large-v3' else SPEECH_PRICES[provider]
+    price = (OPENROUTER_WHISPER_MICROS_PER_MINUTE if provider == 'openrouter' else
+             GROQ_FULL_WHISPER_MICROS_PER_MINUTE if model == 'whisper-large-v3' else SPEECH_PRICES[provider])
     normalized = math.ceil(Decimal(str(seconds)) / 60 * price)
     async def perform():
         async with httpx.AsyncClient(timeout=settings.provider_timeout_seconds, follow_redirects=False) as client:
@@ -976,11 +1204,26 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             elif provider == 'groq':
                 response = await send('https://api.groq.com/openai/v1/audio/transcriptions', headers={'Authorization': 'Bearer ' + settings.groq_api_key},
                     data={'model': model, 'prompt': primer, 'response_format': 'verbose_json', 'temperature': '0'}, files={'file': (filename, data, mime)})
+            elif provider == 'openrouter':
+                formats = {'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/mpeg':'mp3', 'audio/mp4':'m4a',
+                    'audio/x-m4a':'m4a', 'audio/ogg':'ogg', 'audio/webm':'webm', 'video/webm':'webm',
+                    'audio/flac':'flac', 'audio/aac':'aac'}
+                if mime not in formats: raise HTTPException(422, 'This recording format is not supported')
+                response = await send(settings.openrouter_base_url.rstrip('/') + '/audio/transcriptions',
+                    headers={'Authorization':'Bearer ' + settings.openrouter_api_key},
+                    json={'model':model, 'input_audio':{'data':base64.b64encode(data).decode(), 'format':formats[mime]},
+                        'temperature':0, 'response_format':'verbose_json', 'timestamp_granularities':['segment'],
+                        'provider':{'zdr':True, 'data_collection':'deny'}})
             else:
                 response = await send('https://api.deepgram.com/v1/listen', params={'model': model, 'smart_format': 'true', 'utterances': 'true', 'mip_opt_out': 'true'},
                     headers={'Authorization': 'Token ' + settings.deepgram_api_key, 'Content-Type': mime}, content=data)
             response.raise_for_status()
-            return response.json()
+            raw = response.json()
+            if provider == 'openrouter':
+                failure = provider_error_response(response, raw)
+                if failure is not None: failure.raise_for_status()
+                if not isinstance(raw, dict): raise ValueError('Invalid transcript')
+            return raw
     def validate(raw):
         if provider == 'cloudflare':
             if raw.get('success') is False: raise ValueError('Provider failure')
@@ -990,6 +1233,15 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
             text = alt['transcript']
             segments = [{'text': x['transcript'], 'start': x['start'], 'end': x['end'], 'confidence': x.get('confidence'), 'speaker': x.get('speaker')} for x in raw['results'].get('utterances', [])]
         else: text, segments = raw.get('text'), raw.get('segments') or []
+        if provider == 'openrouter':
+            if not model_identity_matches(model, raw.get('model')): raise ModelIdentityError()
+            if not isinstance(segments, list) or len(segments) > 1000: raise ValueError('Invalid transcript segments')
+            for segment in segments:
+                if (not isinstance(segment, dict) or not isinstance(segment.get('text'), str)
+                        or len(segment['text']) > settings.max_text_chars
+                        or any(type(segment.get(k)) not in (int,float) or not math.isfinite(segment[k]) for k in ('start','end'))
+                        or not 0 <= segment['start'] <= segment['end'] <= seconds + 1):
+                    raise ValueError('Invalid transcript segments')
         limit = 8000 if purpose == 'audio_verification' else settings.max_text_chars
         if not isinstance(text, str) or len(text) > limit or (purpose == 'audio_verification' and not text.strip()): raise ValueError('Invalid transcript')
         clean = []
@@ -1008,7 +1260,8 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
         return result
     return await metered_call(user=user, encounter_id=encounter_id, task=purpose, provider=provider, model=model,
         payload_hash=fingerprint([sha256(data).hexdigest(), mime, model, primer]), estimate=normalized,
-        perform=perform, measure=lambda raw: (normalized, {'audio_seconds': seconds, 'audio_minutes': seconds / 60}, None), validate=validate)
+        perform=perform, measure=lambda raw: (normalized, {'audio_seconds': seconds, 'audio_minutes': seconds / 60},
+            actual_cost(raw.get('usage', {})) if provider == 'openrouter' and isinstance(raw.get('usage'), dict) else None), validate=validate)
 
 
 async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
@@ -1029,6 +1282,8 @@ async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
             options.append(('groq', 'whisper-large-v3', 'full_whisper_v3_verification'))
         if settings.cloudflare_api_token and settings.cloudflare_account_id:
             options.append(('cloudflare', None, 'repeat_transcription_fallback'))
+        if getattr(settings, 'openrouter_speech_enabled', False) and settings.openrouter_api_key:
+            options.append(('openrouter', None, 'repeat_openrouter_transcription'))
     if not options:
         raise HTTPException(503, 'The requested short-window speech verifier is not configured')
     errors = []
@@ -1039,6 +1294,8 @@ async def verify_speech_clip(data, *, user, encounter_id, verifier='stronger'):
             result['verifier'] = {'provider': provider, 'model': result['usage']['model'], 'method': method}
             if method == 'repeat_transcription_fallback':
                 result['warnings'].append('The configured Turbo speech service repeated this clip; a stronger or independent medical verifier was not used.')
+            elif method == 'repeat_openrouter_transcription':
+                result['warnings'].append('The same configured speech model repeated this clip. This is not an independent or stronger medical check; compare it with the recording.')
             return result
         except HTTPException as error:
             if error.status_code not in {502, 503, 504}:
@@ -1054,12 +1311,14 @@ async def transcribe(data, mime, filename, duration_seconds=None, *, user, db=No
     if settings.cloudflare_api_token and settings.cloudflare_account_id: available.append('cloudflare')
     if settings.groq_api_key: available.append('groq')
     if settings.deepgram_enabled and settings.deepgram_api_key: available.append('deepgram')
+    if getattr(settings, 'openrouter_speech_enabled', False) and settings.openrouter_api_key: available.append('openrouter')
     if settings.speech_provider != 'auto': available = [p for p in available if p == settings.speech_provider]
     if not available: raise HTTPException(503, 'Speech providers are not configured. Typed transcripts and manual evidence remain available.')
     errors = []
     for provider in available[:3]:
         try:
-            original=(available[0],{'cloudflare':'@cf/openai/whisper-large-v3-turbo','groq':'whisper-large-v3-turbo','deepgram':'nova-3-medical'}[available[0]]) if errors else None
+            original=(available[0],{'cloudflare':'@cf/openai/whisper-large-v3-turbo','groq':'whisper-large-v3-turbo','deepgram':'nova-3-medical',
+                'openrouter':OPENROUTER_SPEECH_MODEL}[available[0]]) if errors else None
             result = await speech_attempt(provider, data, mime, filename, seconds, user=user, encounter_id=encounter_id,diagnostic_original=original)
             if errors: result['warnings'].append('A configured fallback speech provider was used.')
             return result
@@ -1074,3 +1333,7 @@ def provider_status(user: User = Depends(require_admin)):
     return {'price_registry_version': PRICE_VERSION, 'models': list(MODEL_PRICES), 'clinical_data_enabled': settings.clinical_data_enabled, 'execution_enabled': settings.provider_execution_enabled,
         'providers': [{'name': name, 'configured': bool(key), 'clinical_approved': bool(getattr(settings, name + '_phi_approved', False))}
             for name, key in [('openrouter', settings.openrouter_api_key), ('cloudflare', settings.cloudflare_api_token), ('groq', settings.groq_api_key), ('deepgram', settings.deepgram_api_key)]]}
+
+
+
+

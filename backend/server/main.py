@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio,logging,time,uuid
+import asyncio,logging,sys,time,uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI,Request
@@ -15,6 +15,11 @@ from server.performance import job_id as performance_job
 from server import diagnostics
 
 logger=logging.getLogger('woundcopilot')
+# Cloud Run ingests one JSON object per line as structured logs. This dedicated
+# logger receives only diagnostics.cloud_event's allowlisted technical metadata.
+if not diagnostics.provider_log.handlers:
+    diagnostics.provider_log.addHandler(logging.StreamHandler(sys.stdout))
+diagnostics.provider_log.setLevel(logging.INFO)
 
 
 @asynccontextmanager
@@ -81,12 +86,26 @@ def health():
 
 @app.get('/api/v1/config')
 def public_config():
+    owner_enrollment = False
+    if not settings.allow_signup:
+        from .render_enrollment import configured, is_open
+        if configured():
+            with SessionLocal() as db:
+                owner_enrollment = is_open(db)
     def capability(enabled,reason):return {'enabled':bool(enabled),'reason':'' if enabled else reason}
     ai=bool(settings.provider_execution_enabled and settings.openrouter_api_key)
-    speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key))
+    from . import render_owner_test
+    if render_owner_test.required():
+        ai = ai and render_owner_test.available()
+    speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key
+        or settings.openrouter_speech_enabled and settings.openrouter_api_key))
+    if render_owner_test.required(): speech = speech and render_owner_test.available()
     paused='Live assistance is configured but paused while the owner completes provider activation. Manual documentation remains available.'
-    return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':settings.allow_signup,
+    return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':bool(settings.allow_signup or owner_enrollment),
+        'signup_scope':'public' if settings.allow_signup else 'owner_test' if owner_enrollment else 'closed',
         'clinical_data_enabled':settings.clinical_data_enabled,'privacy_review_required':not settings.clinical_data_enabled,
+        'synthetic_test': {'enabled': render_owner_test.available(), 'expires_at': settings.render_owner_test_until,
+            'patient_data_allowed': False, 'provider_cap_usd': 1} if render_owner_test.required() else None,
         'capabilities':{'ai':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Clinical assistance is not configured. Manual documentation remains available.'),
             'photo':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Image interpretation is not configured.'),'document':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Document extraction is not configured.'),
             'audio':capability(speech,paused if not settings.provider_execution_enabled else 'Transcription is not configured. You can type or paste findings.'),
@@ -121,3 +140,5 @@ def frontend(path:str):
         return FileResponse(asset,headers={'Cache-Control':'no-cache' if path.endswith(('sw.js','index.html')) else 'public, max-age=3600'})
     if not (FRONTEND/'index.html').exists():return JSONResponse({'service':'WoundCoPilot','frontend':'Build the frontend to open the app.'},status_code=503)
     return FileResponse(FRONTEND/'index.html',headers={'Cache-Control':'no-cache'})
+
+

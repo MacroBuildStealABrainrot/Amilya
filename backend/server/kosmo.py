@@ -2,7 +2,7 @@
 import json
 import re
 
-VERSION = 'kosmo-2026-09-08.2'
+VERSION = 'kosmo-2026-10-25.1'
 MODELS = {'low': 'openai/gpt-6-luna', 'medium': 'openai/gpt-6.1-sol', 'high': 'openai/gpt-6-astra'}
 
 
@@ -38,6 +38,9 @@ def select_route(task, content):
         if fact.get('name') in {'infection_findings', 'compression', 'perfusion_assessment'} and isinstance(value, dict) and value.get('present') is not False:
             effort, reason = 'high', 'consequential_evidence'
     if any(len(values) > 1 for values in grouped.values()): effort, reason = 'high', 'source_conflict'
+    # A wound photo needs a careful specialist-level look, not a quick glance.
+    if task == 'image':
+        effort, reason = 'high', 'wound_photo_specialist'
     if task in {'escalation', 'challenge', 'reconcile'} or data.get('mode') == 'deep':
         effort, reason = 'high', 'deep_review'
     if task == 'assistant' and re.search(r'(?i)\b(sepsis|ischemi\w*|ischaemi\w*|necrosis|conflict\w*|contradict\w*|urgent|emergency|vascular|compression)\b', question):
