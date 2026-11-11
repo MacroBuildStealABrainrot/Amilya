@@ -61,15 +61,17 @@ MODEL_PRICES = {
 # Owner's choices (2026-10-28): Claude Sonnet 5.5 looks at wound photos with a careful (high-effort) look;
 # Claude Haiku 5.5 writes standard notes, which the owner preferred in a blind review. Accuracy checks and
 # custom layouts keep the existing routing.
-PHOTO_MODEL = 'anthropic/claude-sonnet-5.5'
-PHOTO_BACKUP_MODEL = 'openai/gpt-5.6-sol'
-NOTE_MODEL = 'anthropic/claude-sonnet-5.5'
+# Owner's choice (2026-11-10): every AI step on the test server uses MiniMax M3 (it reads photos too).
+AI_MODEL = 'minimax/minimax-m3'
+PHOTO_MODEL = AI_MODEL
+PHOTO_BACKUP_MODEL = AI_MODEL  # no other developer's model: a second try with the same model
+NOTE_MODEL = AI_MODEL
 # Owner's choice (2026-10-30): reports are written by Claude Sonnet, which turns messy transcripts into clean
 # notes the way a strong model does.
 # Owner's choice (2026-11-10): the accuracy check runs on MiniMax M3 instead of Claude Haiku (test server only).
-NOTE_CHECK_MODEL = 'minimax/minimax-m3'
+NOTE_CHECK_MODEL = AI_MODEL
 # Owner's choice (2026-10-29): Ask Consultant answers with Claude Sonnet 5.5 like an experienced wound consultant.
-CONSULT_MODEL = 'anthropic/claude-sonnet-5.5'
+CONSULT_MODEL = AI_MODEL
 SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
 PHOTO_FALLBACK_CATEGORIES = frozenset({'provider_unavailable', 'provider_overloaded', 'server',
                                         'content_policy_violation', 'refusal'})
@@ -703,6 +705,7 @@ async def routed(task, content, model=None, **kwargs):
         route = {**route, 'model': NOTE_CHECK_MODEL, 'effort_level': 'medium', 'reason': 'owner_fast_note_check'}
     elif task == 'consult':
         route = {**route, 'model': override or CONSULT_MODEL, 'reason': 'owner_consult_model'}
+    route = {**route, 'model': AI_MODEL}  # every task, including those left on the service's own settings
     # Structured evidence needs room beyond the old 1,800-token cap.
     minimum = {'low': 1800, 'medium': 5000, 'high': 8000}[route['effort_level']]
     if task in {'quick_draft', 'quick_refine', 'quick_qa', 'quick_repair', 'improve_report'}:

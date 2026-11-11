@@ -50,7 +50,7 @@ def test_photo_uses_claude_with_a_careful_look_and_room_to_answer(live, gateway)
     gateway.http.responses = [wound_result()]
     result = assess(live, gateway)
     payload = gateway.http.calls[0]['json']
-    assert payload['model'] == 'anthropic/claude-sonnet-5.5'
+    assert payload['model'] == 'minimax/minimax-m3'
     assert payload['reasoning']['effort'] == 'high'
     assert payload['max_tokens'] >= 12000
     assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
@@ -62,7 +62,7 @@ def test_photo_uses_claude_with_a_careful_look_and_room_to_answer(live, gateway)
 def test_refused_photo_gets_one_backup_attempt(live, gateway, error_type):
     gateway.http.responses = [refused(error_type), wound_result()]
     assess(live, gateway)
-    assert [c['json']['model'] for c in gateway.http.calls] == ['anthropic/claude-sonnet-5.5', 'openai/gpt-5.6-sol']
+    assert [c['json']['model'] for c in gateway.http.calls] == ['minimax/minimax-m3', 'minimax/minimax-m3']
 
 
 def test_no_backup_for_budget_problems(live, gateway):
@@ -94,7 +94,7 @@ def test_live_consultant_answers_with_claude_and_the_owner_voice(live, gateway):
                                                user=gateway.user, encounter_id='synthetic-consult'))
     payload = gateway.http.calls[0]['json']
     assert result['answer'] == answer
-    assert payload['model'] == 'anthropic/claude-sonnet-5.5'
+    assert payload['model'] == 'minimax/minimax-m3'
     assert payload['max_tokens'] >= 5000
     system = payload['messages'][0]['content']
     assert 'experienced wound care consultant' in system and 'Use conditions instead of refusing' in system
@@ -141,10 +141,10 @@ def test_live_report_instructions_keep_the_live_rules_and_add_the_charting_voice
 
 
 @pytest.mark.parametrize('task,result,model,effort', [
-    ('quick_draft', {'text': 'Synthetic note.', 'status': 'ready', 'ui_alerts': []}, 'anthropic/claude-sonnet-5.5', 'medium'),
+    ('quick_draft', {'text': 'Synthetic note.', 'status': 'ready', 'ui_alerts': []}, 'minimax/minimax-m3', 'medium'),
     ('quick_qa', {'passed': True, 'discrepancies': []}, 'minimax/minimax-m3', 'medium'),
 ])
-def test_live_standard_notes_are_written_by_sonnet_and_checked_by_minimax(live, gateway, task, result, model, effort):
+def test_live_standard_notes_are_written_and_checked_by_minimax(live, gateway, task, result, model, effort):
     gateway.http.responses = [completion(result)]
     content = json.dumps({'template': 'soap', 'case_facts': [], 'untrusted_sources': [
         {'id': 's1', 'kind': 'typed', 'text': 'Synthetic: purulent drainage today.'}]})
