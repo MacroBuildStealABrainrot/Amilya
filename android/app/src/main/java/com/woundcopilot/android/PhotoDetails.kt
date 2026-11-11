@@ -21,11 +21,13 @@ data class PhotoDetails(
     val infectionSigns: Set<String> = emptySet(),
     /** Pain 0 to 10. Null means not asked; 0 is a real answer. */
     val painScore: Int? = null,
+    /** Probe to bone result: positive, negative or not done. Null means not recorded. */
+    val probeToBone: String? = null,
     val previousLengthCm: String = "",
     val previousWidthCm: String = "",
     val previousWeeksAgo: String = "",
 ) {
-    fun isEmpty() = woundType == null && woundBed.isEmpty() && woundEdges.isEmpty() && infectionSigns.isEmpty() && painScore == null && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
+    fun isEmpty() = woundType == null && woundBed.isEmpty() && woundEdges.isEmpty() && infectionSigns.isEmpty() && painScore == null && probeToBone == null && surroundingSkin.isEmpty() && drainageType == null && drainageAmount == null &&
         centimetres(lengthCm) == null && centimetres(widthCm) == null && centimetres(depthCm) == null
 
     /** A typed value that is not a positive number up to 100 cm. Shown under the box; never sent. */
@@ -60,6 +62,7 @@ data class PhotoDetails(
         drainageType?.let { put("drainage_type", it) }
         painScore?.takeIf { it in 0..10 }?.let { put("pain_score", it) }
         drainageAmount?.let { put("drainage_amount", it) }
+        probeToBone?.let { put("probe_to_bone", it) }
         centimetres(lengthCm)?.let { put("length_cm", it) }
         centimetres(widthCm)?.let { put("width_cm", it) }
         centimetres(depthCm)?.let { put("depth_cm", it) }
@@ -75,10 +78,10 @@ data class PhotoDetails(
         put("drainage_type", drainageType ?: JSONObject.NULL); put("drainage_amount", drainageAmount ?: JSONObject.NULL)
         put("length", lengthCm); put("width", widthCm); put("depth", depthCm)
         put("wound_edges", JSONArray(woundEdges.toList())); put("infection_signs", JSONArray(infectionSigns.toList()))
-        put("pain", painScore ?: JSONObject.NULL); put("wound_type", woundType ?: JSONObject.NULL); put("pressure_stage", pressureStage ?: JSONObject.NULL); put("previous_length", previousLengthCm); put("previous_width", previousWidthCm); put("previous_weeks", previousWeeksAgo)
+        put("pain", painScore ?: JSONObject.NULL); put("probe_to_bone", probeToBone ?: JSONObject.NULL); put("wound_type", woundType ?: JSONObject.NULL); put("pressure_stage", pressureStage ?: JSONObject.NULL); put("previous_length", previousLengthCm); put("previous_width", previousWidthCm); put("previous_weeks", previousWeeksAgo)
     }.toString()
 
-    fun selectedCount() = listOfNotNull(woundType, pressureStage.takeIf { woundType == "pressure_injury" }).size + woundBed.size + infectionSigns.size + woundEdges.size + listOfNotNull(painScore).size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
+    fun selectedCount() = listOfNotNull(woundType, pressureStage.takeIf { woundType == "pressure_injury" }).size + woundBed.size + infectionSigns.size + woundEdges.size + listOfNotNull(painScore, probeToBone).size + surroundingSkin.size + listOfNotNull(drainageType, drainageAmount).size +
         listOf(lengthCm, widthCm, depthCm).count { centimetres(it) != null } + (if (areaChangePercent() != null) 1 else 0)
 
     companion object {
@@ -114,6 +117,7 @@ data class PhotoDetails(
         }
         val DRAINAGE_TYPE = linkedMapOf("none" to "None", "serous" to "Serous", "serosanguineous" to "Serosanguineous",
             "sanguineous" to "Sanguineous", "purulent" to "Purulent")
+        val PROBE_TO_BONE = linkedMapOf("positive" to "Positive", "negative" to "Negative", "not_done" to "Not done")
         val DRAINAGE_AMOUNT = linkedMapOf("none" to "None", "scant" to "Scant", "small" to "Small", "moderate" to "Moderate", "large" to "Large")
 
         fun weeks(value: String): Int? = value.trim().toIntOrNull()?.takeIf { it in 1..104 }
@@ -132,7 +136,7 @@ data class PhotoDetails(
             PhotoDetails(woundType = one("wound_type", WOUND_TYPE), pressureStage = one("pressure_stage", PRESSURE_STAGE),
                 woundBed = set("wound_bed", WOUND_BED), woundEdges = set("wound_edges", WOUND_EDGES),
                 surroundingSkin = set("surrounding_skin", SURROUNDING_SKIN), drainageType = one("drainage_type", DRAINAGE_TYPE),
-                drainageAmount = one("drainage_amount", DRAINAGE_AMOUNT), lengthCm = o.optString("length").take(6),
+                drainageAmount = one("drainage_amount", DRAINAGE_AMOUNT), probeToBone = one("probe_to_bone", PROBE_TO_BONE), lengthCm = o.optString("length").take(6),
                 widthCm = o.optString("width").take(6), depthCm = o.optString("depth").take(6),
                 infectionSigns = set("infection_signs", INFECTION_SIGNS), painScore = if (o.isNull("pain")) null else o.optInt("pain", -1).takeIf { it in 0..10 },
                 previousLengthCm = o.optString("previous_length").take(6),

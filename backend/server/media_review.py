@@ -61,6 +61,7 @@ INFECTION_SIGNS = Literal['none', 'warmth', 'increased_pain', 'odour', 'spreadin
 SURROUNDING_SKIN = Literal['intact', 'erythema', 'maceration', 'edema', 'induration', 'dry_flaky', 'callus', 'fragile']
 DRAINAGE_TYPE = Literal['none', 'serous', 'serosanguineous', 'sanguineous', 'purulent']
 DRAINAGE_AMOUNT = Literal['none', 'scant', 'small', 'moderate', 'large']
+PROBE_TO_BONE = Literal['positive', 'negative', 'not_done']
 Centimetres = Annotated[float, Field(gt=0, le=100, strict=False)]
 
 
@@ -73,6 +74,7 @@ class ClinicianFindings(StrictModel):
     surrounding_skin: list[SURROUNDING_SKIN] = Field(default_factory=list, max_length=8)
     drainage_type: DRAINAGE_TYPE | None = None
     drainage_amount: DRAINAGE_AMOUNT | None = None
+    probe_to_bone: PROBE_TO_BONE | None = None
     length_cm: Centimetres | None = None
     width_cm: Centimetres | None = None
     depth_cm: Centimetres | None = None
@@ -121,7 +123,7 @@ class ClinicianFindings(StrictModel):
         return f'healing progress: {trend} (area {now}, earlier {before}{when})'
 
     def is_empty(self) -> bool:
-        return not any([self.wound_type, self.pressure_stage, self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.infection_signs, self.pain_score is not None,
+        return not any([self.wound_type, self.pressure_stage, self.wound_bed, self.wound_edges, self.surrounding_skin, self.drainage_type, self.drainage_amount, self.probe_to_bone, self.infection_signs, self.pain_score is not None,
                         self.length_cm, self.width_cm, self.depth_cm])
 
     def as_text(self) -> str:
@@ -146,6 +148,7 @@ class ClinicianFindings(StrictModel):
         if self.infection_signs == ['none']: parts.append('no local signs of infection')
         elif self.infection_signs: parts.append('local signs of infection: ' + ', '.join(item.replace('_', ' ') for item in self.infection_signs))
         if self.pain_score is not None: parts.append(f'pain {self.pain_score}/10')
+        if self.probe_to_bone: parts.append('probe to bone: ' + self.probe_to_bone.replace('_', ' '))
         size = [f'{label} {value:g} cm' for label, value in (('length', self.length_cm), ('width', self.width_cm), ('depth', self.depth_cm)) if value is not None]
         if size: parts.append('measured ' + ', '.join(size))
         progress = self.healing_progress()

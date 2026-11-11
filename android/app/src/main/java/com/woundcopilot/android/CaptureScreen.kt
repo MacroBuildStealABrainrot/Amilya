@@ -455,6 +455,11 @@ private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChang
             FilterChip(key in details.woundEdges, { onChange(details.copy(woundEdges = PhotoDetails.toggleEdge(details.woundEdges, key))) }, { Text(label) }, enabled = enabled)
         }
     }
+    Group("Probe to bone") {
+        PhotoDetails.PROBE_TO_BONE.forEach { (key, label) ->
+            FilterChip(details.probeToBone == key, { onChange(details.copy(probeToBone = if (details.probeToBone == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
     Group("Periwound") {
         PhotoDetails.SURROUNDING_SKIN.forEach { (key, label) ->
             FilterChip(key in details.surroundingSkin, { onChange(details.copy(surroundingSkin = details.surroundingSkin.toggle(key))) }, { Text(label) }, enabled = enabled)

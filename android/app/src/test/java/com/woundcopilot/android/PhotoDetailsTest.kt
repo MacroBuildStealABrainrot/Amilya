@@ -96,4 +96,12 @@ class PhotoDetailsTest {
         assertEquals(pi, PhotoDetails.fromStored(pi.toStored()))
         assertFalse(PhotoDetails(woundType = "venous", pressureStage = "stage_2").toJson().has("pressure_stage"))
     }
+
+    @Test fun probeToBoneIsSentSavedAndCountsAsAnEntry() {
+        val d = PhotoDetails(probeToBone = "positive")
+        assertEquals("positive", d.toJson().getString("probe_to_bone"))
+        assertFalse(d.isEmpty())
+        assertEquals(d, PhotoDetails.fromStored(d.toStored()))
+        assertFalse(PhotoDetails().toJson().has("probe_to_bone"))
+    }
 }
