@@ -266,9 +266,13 @@ def result_schema(task: str) -> dict:
         for model in (Measurement, Location, tissue_model, Pain, Observation):
             names = sorted(name for name in allowed if special.get(name, Observation) is model)
             if names:
+                value_schema = model.model_json_schema()
+                if task == 'image':
+                    # A date cannot be read from photo pixels, so the photo model is not asked for one.
+                    value_schema.get('properties', {}).pop('observed_on', None)
                 variants.append({'type': 'object', 'additionalProperties': False,
                     'properties': {'name': {'type': 'string', 'enum': names},
-                                   'value': model.model_json_schema(), 'quote': {'type': 'string'}},
+                                   'value': value_schema, 'quote': {'type': 'string'}},
                     'required': ['name', 'value', 'quote']})
         properties = {'facts': {'type': 'array', 'maxItems': 100, 'items': {'anyOf': variants}},
                       'warnings': {'type': 'array', 'items': {'type': 'string'}}}
@@ -343,6 +347,9 @@ def validate_result(data: dict, task: str, source: str | None = None) -> dict:
                 if source is not None and (not quote.strip() or quote not in source):
                     warnings.append('A suggestion without an exact source quotation was excluded.')
                     continue
+                if task == 'image' and isinstance(value, dict) and 'observed_on' in value:
+                    # Dates cannot be established from image pixels; drop only this unsupported detail.
+                    value = {key: val for key, val in value.items() if key != 'observed_on'}
                 checked = validated_photo_value(name, value) if task == 'image' else validated_value(name, value)
                 facts.append({'name': name, 'value': checked, 'quote': quote})
             except (ValueError, KeyError, TypeError):
