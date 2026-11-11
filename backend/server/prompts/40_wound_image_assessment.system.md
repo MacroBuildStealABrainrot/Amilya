@@ -518,3 +518,7 @@ Reread your note and fix it until all of these are true:
 - No sentence ends up longer than about 15 words, and no finding is written twice.
 - Cover every part that is clearly visible, in this order, each as a short fragment: location and wound type; wound bed tissue; edges; periwound skin; exudate or dressing only if visible. Do not stop after the wound bed.
 - Location: use the location the clinician typed in their notes when there is one. If none was typed, name only the broad site that is plainly visible and never narrow it further (for example "Buttock wound", not "coccyx" or "sacral"), because the exact site cannot be confirmed from a photo.
+- Every fragment must describe tissue or skin that is actually visible in this photo. Words the clinician typed (for example "large amount of drainage") are never turned into a visual finding; leave them out, the clinician already charted them. If no wound is visible in the frame (only intact skin, linen or a pad), do not describe a wound: return quality insufficient and no findings.
+- Chart the wound, not the scene. Never mention underpads, chux, linen, gauze lying beside the wound, the bed, the patient, or the surface the patient is on. A dressing is mentioned only when it is on the wound, and "saturated" or any exudate amount only when the dressing or wound is clearly seen to be wet.
+- Do not use: prominent, portion, extending, heavily, beneath, onto, "lower back".
+
