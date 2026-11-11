@@ -61,8 +61,17 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install ffmpeg
-        timeout-minutes: 6
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 12
+        run: |
+          # A stalled package mirror must fail fast and retry, not hang the whole job for 30 minutes.
+          if ! command -v ffmpeg >/dev/null; then
+            for try in 1 2 3; do
+              sudo timeout 120 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update -qq \
+                && sudo timeout 240 apt-get install -y -qq ffmpeg && break
+              echo "ffmpeg install try $try did not finish; retrying"; sleep 5
+            done
+          fi
+          ffmpeg -version | head -1
       - name: Install backend packages
         timeout-minutes: 8
         run: python -m pip install --progress-bar off -r backend/requirements.txt
