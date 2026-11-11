@@ -56,6 +56,7 @@ MODEL_PRICES = {
     'anthropic/claude-fable-5.1': ('10', '50', '.25'),
     'anthropic/claude-sonnet-5.5': ('2', '10', '.25'),
     'anthropic/claude-haiku-5.5': ('.10', '.50', '.01'),
+    'minimax/minimax-m3': ('.30', '1.20', '.06'),
 }
 # Owner's choices (2026-10-28): Claude Sonnet 5.5 looks at wound photos with a careful (high-effort) look;
 # Claude Haiku 5.5 writes standard notes, which the owner preferred in a blind review. Accuracy checks and
@@ -64,8 +65,9 @@ PHOTO_MODEL = 'anthropic/claude-sonnet-5.5'
 PHOTO_BACKUP_MODEL = 'openai/gpt-5.6-sol'
 NOTE_MODEL = 'anthropic/claude-sonnet-5.5'
 # Owner's choice (2026-10-30): reports are written by Claude Sonnet, which turns messy transcripts into clean
-# notes the way a strong model does; the accuracy check stays on fast Claude Haiku.
-NOTE_CHECK_MODEL = 'anthropic/claude-haiku-5.5'
+# notes the way a strong model does.
+# Owner's choice (2026-11-10): the accuracy check runs on MiniMax M3 instead of Claude Haiku (test server only).
+NOTE_CHECK_MODEL = 'minimax/minimax-m3'
 # Owner's choice (2026-10-29): Ask Consultant answers with Claude Sonnet 5.5 like an experienced wound consultant.
 CONSULT_MODEL = 'anthropic/claude-sonnet-5.5'
 SIMPLE_NOTE_TEMPLATES = frozenset({'nursing', 'sbar', 'handoff', 'soap', 'physician_update', 'referral_letter'})
@@ -697,7 +699,7 @@ async def routed(task, content, model=None, **kwargs):
         # Sonnet reads the whole transcript before writing (moderate reasoning budget).
         route = {**route, 'model': NOTE_MODEL, 'effort_level': 'medium', 'reason': 'owner_note_model'}
     elif task == 'quick_qa' and simple_note_template(content):
-        # The accuracy check on a standard note runs on Haiku, with a moderate reasoning budget.
+        # The accuracy check on a standard note runs on MiniMax M3, with a moderate reasoning budget.
         route = {**route, 'model': NOTE_CHECK_MODEL, 'effort_level': 'medium', 'reason': 'owner_fast_note_check'}
     elif task == 'consult':
         route = {**route, 'model': override or CONSULT_MODEL, 'reason': 'owner_consult_model'}

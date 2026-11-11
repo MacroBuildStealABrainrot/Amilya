@@ -76,7 +76,7 @@ def test_no_backup_for_budget_problems(live, gateway):
 def test_standard_notes_use_haiku(live, template, expected):
     content = json.dumps({'template': template})
     assert live.simple_note_template(content) is expected
-    assert 'anthropic/claude-haiku-5.5' in live.MODEL_PRICES and 'anthropic/claude-sonnet-5.5' in live.MODEL_PRICES
+    assert 'minimax/minimax-m3' in live.MODEL_PRICES and 'anthropic/claude-sonnet-5.5' in live.MODEL_PRICES
 
 
 def test_repair_photo_instructions_match_the_reviewed_file():
@@ -142,9 +142,9 @@ def test_live_report_instructions_keep_the_live_rules_and_add_the_charting_voice
 
 @pytest.mark.parametrize('task,result,model,effort', [
     ('quick_draft', {'text': 'Synthetic note.', 'status': 'ready', 'ui_alerts': []}, 'anthropic/claude-sonnet-5.5', 'medium'),
-    ('quick_qa', {'passed': True, 'discrepancies': []}, 'anthropic/claude-haiku-5.5', 'medium'),
+    ('quick_qa', {'passed': True, 'discrepancies': []}, 'minimax/minimax-m3', 'medium'),
 ])
-def test_live_standard_notes_are_written_by_sonnet_and_checked_by_haiku(live, gateway, task, result, model, effort):
+def test_live_standard_notes_are_written_by_sonnet_and_checked_by_minimax(live, gateway, task, result, model, effort):
     gateway.http.responses = [completion(result)]
     content = json.dumps({'template': 'soap', 'case_facts': [], 'untrusted_sources': [
         {'id': 's1', 'kind': 'typed', 'text': 'Synthetic: purulent drainage today.'}]})
