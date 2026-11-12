@@ -3,6 +3,9 @@ name: deepgram-keyterm-test
 # Uses made-up practice text only. The key comes from the repository secret DEEPGRAM_TEST_KEY and is never printed.
 on:
   workflow_dispatch:
+  push:
+    branches: [test/deepgram-keyterm-20261111]
+    paths: ['backend/scripts/deepgram_keyterm_test/**', '.github/workflows/deepgram-keyterm-test.yml']
 permissions:
   contents: read
 jobs:
