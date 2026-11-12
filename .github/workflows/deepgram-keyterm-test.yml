@@ -1,0 +1,24 @@
+name: deepgram-keyterm-test
+# Manual, test-branch-only comparison of Deepgram nova-3-medical with and without a word list.
+# Uses made-up practice text only. The key comes from the repository secret DEEPGRAM_TEST_KEY and is never printed.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  run:
+    if: startsWith(github.ref, 'refs/heads/test/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the made-up-audio comparison
+        env:
+          DEEPGRAM_TEST_KEY: ${{ secrets.DEEPGRAM_TEST_KEY }}
+        run: |
+          python3 backend/scripts/deepgram_keyterm_test/run_test.py
+          cat backend/scripts/deepgram_keyterm_test/out/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyterm-test-results
+          path: backend/scripts/deepgram_keyterm_test/out/
