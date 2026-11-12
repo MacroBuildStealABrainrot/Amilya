@@ -1485,8 +1485,22 @@ BACKGROUND_SPEECH_WARNING = ('Part of this recording sounds like another languag
     'It may not be your voice. Check it against what you said, or record again.')
 
 
+FOREIGN_PIECE_DROPPED_WARNING = ('One stretch of this recording was not English speech (usually TV, radio or silence the speech service '
+    'made up words for), so it was left out. The rest of the recording is unchanged.')
+
+
 def flag_background_speech(result):
-    if isinstance(result, dict) and foreign_speech_share(result.get('text')) > 0.2:
+    share = foreign_speech_share(result.get('text')) if isinstance(result, dict) else 0.0
+    if share > 0.8:
+        # The whole piece is another language: the speech service made it up over silence or TV (owner's real recording,
+        # 2026-11-12: a Korean news sign-off). It is left out so one junk piece does not make the whole visit "unreliable".
+        # The untouched text stays in original_text. Wording avoids "another language" on purpose: that phrase is the
+        # recording-quality alarm, and it is kept for pieces that mix English with other speech (below).
+        result['original_text'] = result.get('original_text') or result.get('text')
+        result['text'], result['segments'] = '', []
+        result['background_suspected'] = True
+        result.setdefault('warnings', []).append(FOREIGN_PIECE_DROPPED_WARNING)
+    elif share > 0.2:
         result['background_suspected'] = True
         result.setdefault('warnings', []).append(BACKGROUND_SPEECH_WARNING)
     return result
