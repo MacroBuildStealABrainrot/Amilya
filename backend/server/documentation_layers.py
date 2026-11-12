@@ -37,7 +37,5 @@ def instructions():
         (ROOT/'community_nursing_v1.md').read_text(encoding='utf-8') if role in {'NURSE','OTHER_CLINICIAN'} else (ROOT/'clinical_style_v1.md').read_text(encoding='utf-8'),
         (ROOT/'clinical_reasoning_v1.md').read_text(encoding='utf-8'),
         (ROOT/'charting_rules_v1.md').read_text(encoding='utf-8'),
-        # Owner-supplied wound wording list: comes after every other rule, so the earlier rules win.
-        (ROOT/'wound_vocabulary_v1.md').read_text(encoding='utf-8'),
         *([examples.read_text(encoding='utf-8')] if (examples:=ROOT/'examples'/f'{report}_v1.md').is_file() else []),
     ])
