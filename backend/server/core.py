@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     model_addon: str = ''
     # Owner's choice (2026-11-11): when set, every AI step uses this one model (test servers). Empty = per-task settings.
     ai_model_all: str = ''
+    # Test-only comparison switch (2026-11-11): when set, ONLY the report accuracy check uses this model. Empty = no change.
+    ai_model_qa: str = ''
     # Owner choice (2026-11-02): false = never show the "Check before saving or sending" box on a report.
     show_report_alerts: bool = True
     provider_timeout_seconds: int = 60
@@ -87,7 +89,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','ai_model_qa','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():

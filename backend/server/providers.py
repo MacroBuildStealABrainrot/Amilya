@@ -912,6 +912,7 @@ def configured_route(task, content):
     elif family in {'review', 'holistic', 'assistant'}: selected = settings.model_review
     else: selected = settings.model_extraction
     if getattr(settings, 'ai_model_all', ''): selected = settings.ai_model_all  # one model for every step (owner's choice)
+    if task == 'quick_qa' and getattr(settings, 'ai_model_qa', ''): selected = settings.ai_model_qa  # test-only: accuracy check on its own model
     if selected not in MODEL_PRICES:
         raise preflight_error(503, 'Configured AI model is not in the approved price registry')
     return {**route, 'model': selected, 'reason': 'configured_' + task, 'effort_reason': route.get('reason')}

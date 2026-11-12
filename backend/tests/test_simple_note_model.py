@@ -111,3 +111,13 @@ def test_unknown_single_model_is_refused(gateway):
     gateway.config.ai_model_all = 'unknown/model'
     with pytest.raises(Exception):
         providers.configured_route('quick_draft', json.dumps({'template': 'nursing'}))
+
+
+def test_accuracy_check_model_can_differ_from_the_single_model_and_only_for_that_step(gateway):
+    gateway.config.ai_model_all = 'minimax/minimax-m3'
+    gateway.config.ai_model_qa = 'anthropic/claude-haiku-5.5'
+    content = json.dumps({'template': 'nursing'})
+    assert providers.configured_route('quick_qa', content)['model'] == 'anthropic/claude-haiku-5.5'
+    assert providers.configured_route('quick_draft', content)['model'] == 'minimax/minimax-m3'
+    gateway.config.ai_model_qa = ''
+    assert providers.configured_route('quick_qa', content)['model'] == 'minimax/minimax-m3'
