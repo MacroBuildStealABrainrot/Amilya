@@ -1180,11 +1180,11 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id, _fr
     from .transcript_cleaning import clean_context_for_report
     # Stage 2 of 3 (free, local): the raw transcript stays saved; only the copy sent to the writer drops sound-effect tags and glitches.
     content = {**clean_context_for_report(context), **options, 'document_task': task}
-    if _fresh_attempt:
-        content['previous_attempt_returned_no_note'] = True
     options = {**options, 'document_task': task}
     # A whole-visit note plus reasoning ran out of 2,400 tokens on 2026-11-04 and nothing usable came back. Unused allowance is not billed.
-    draft = await _draft_once(task, content, user=user, encounter_id=encounter_id)
+    # Only the writer is told about an earlier empty attempt; the check always sees just the sources and the note.
+    draft = await _draft_once(task, {**content, 'previous_attempt_returned_no_note': True} if _fresh_attempt else content,
+        user=user, encounter_id=encounter_id)
     draft = clean_generated_layout(draft, options, context)
     if not getattr(settings, 'quick_ai_check', True):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
