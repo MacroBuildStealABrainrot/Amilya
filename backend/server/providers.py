@@ -124,6 +124,7 @@ MAX_RATE_LIMIT_WAIT_SECONDS = 4.0
 REPORT_STAGE_TIMEOUT_SECONDS = 60
 # Report stages that may be re-attempted (never charged for a failed attempt) when the
 # same request key comes back after a timeout or upstream failure. Bounded per key.
+QUICK_QA_MIN_TOKENS = 5000
 REPORT_STAGE_TASKS = frozenset({'quick_draft', 'quick_qa', 'quick_repair', 'quick_refine', 'improve_report'})
 MAX_REPORT_STAGE_ATTEMPTS = 3  # total per report step and request key, INCLUDING the first attempt
 MAX_REPORT_STAGE_RETRIES = MAX_REPORT_STAGE_ATTEMPTS - 1
@@ -936,6 +937,10 @@ async def routed(task, content, model=None, **kwargs):
         minimum = max(minimum, min(16000, max(8000, len(content) // 2)))
     elif task in {'quick_draft', 'quick_refine', 'consult'}:
         minimum = max(minimum, 8000)
+    elif task == 'quick_qa':
+        # The check lists what it found. On a long whole-visit recording 1,800 tokens ran out before it finished and
+        # the whole report was lost (made-up noisy visit, 2026-11-13: 2 of 3 runs). Unused allowance is not billed.
+        minimum = max(minimum, QUICK_QA_MIN_TOKENS)
     elif task == 'image':
         # High-effort specialist reasoning also uses this allowance; leave room for the answer.
         minimum = max(minimum, 12000)
@@ -1154,16 +1159,32 @@ async def checked_quick_text(context, task, options, *, user, encounter_id):
 
 
 @timed('report_pipeline')
-async def _checked_quick_text(context, task, options, *, user, encounter_id):
+async def _draft_once(task, content, *, user, encounter_id):
+    """Writes the note. If the writer runs out of room before finishing, asks once more (a fresh request)."""
+    try:
+        return await routed(task, json.dumps(content, ensure_ascii=False, default=str),
+            user=user, encounter_id=encounter_id, max_tokens=8000)
+    except HTTPException as error:
+        if (error.headers or {}).get('X-WCP-Error') != 'OUTPUT_LIMIT':
+            raise
+        # The writer sometimes fills its whole allowance without finishing (real visit, 2026-11-13). Nothing partial is
+        # ever used. One more try usually completes normally; a second failure ends the report as before.
+        diagnostics.event({'source': 'server', 'stage': 'report_writer_retry_after_output_limit', 'status': 'success', 'error_code': None})
+        return await routed(task, json.dumps({**content, 'retry_after_incomplete_output': True}, ensure_ascii=False, default=str),
+            user=user, encounter_id=encounter_id, max_tokens=8000)
+
+
+async def _checked_quick_text(context, task, options, *, user, encounter_id, _fresh_attempt=False):
     diagnostics.task(options.get('template','nursing'))
     from .documentation import quality_defects, clean_generated_layout
     from .transcript_cleaning import clean_context_for_report
     # Stage 2 of 3 (free, local): the raw transcript stays saved; only the copy sent to the writer drops sound-effect tags and glitches.
     content = {**clean_context_for_report(context), **options, 'document_task': task}
+    if _fresh_attempt:
+        content['previous_attempt_returned_no_note'] = True
     options = {**options, 'document_task': task}
     # A whole-visit note plus reasoning ran out of 2,400 tokens on 2026-11-04 and nothing usable came back. Unused allowance is not billed.
-    draft = await routed(task, json.dumps(content, ensure_ascii=False, default=str),
-        user=user, encounter_id=encounter_id, max_tokens=8000)
+    draft = await _draft_once(task, content, user=user, encounter_id=encounter_id)
     draft = clean_generated_layout(draft, options, context)
     if not getattr(settings, 'quick_ai_check', True):
         # Owner choice: one AI request writes the report. The built-in word checks still run, and anything they
@@ -1191,6 +1212,13 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id):
     if defects:
         qa = {**qa, 'passed': False, 'discrepancies': list(dict.fromkeys(qa.get('discrepancies', []) + defects))[:20]}
     diagnostics.faithfulness(qa.get('passed') is True and qa.get('discrepancies')==[],len(qa.get('discrepancies',[])),'initial')
+    if qa.get('passed') is False and task == 'quick_draft' and draft.get('status') == 'no_content' and not _fresh_attempt:
+        # The writer returned no note, and the independent check says the sources DO hold clear clinical statements.
+        # An empty note cannot be repaired (the repair step only makes small changes and returned empty again in the
+        # made-up noisy visit of 2026-11-13). Write the note afresh once, telling the writer what the check found;
+        # the new note then goes through the same check and, if needed, the one repair, exactly like any other note.
+        diagnostics.event({'source': 'server', 'stage': 'report_fresh_attempt_after_empty', 'status': 'success', 'error_code': None})
+        return await _checked_quick_text(context, task, options, user=user, encounter_id=encounter_id, _fresh_attempt=True)
     if qa.get('passed') is False:
         from .quick_report_repair import repair_quick_report_once
         return await repair_quick_report_once(context, task, options, draft, qa,
