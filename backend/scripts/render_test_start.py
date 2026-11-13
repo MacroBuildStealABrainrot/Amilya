@@ -85,7 +85,7 @@ def main():
         # A separate process, fixed inputs and a durable once-only claim. Never
         # activate provider execution in this public HTTP application's settings.
         try:
-            long_run = env.get('AMILYA_RENDER_SYNTHETIC_PROBE') == 'report-haiku-v10'
+            long_run = env.get('AMILYA_RENDER_SYNTHETIC_PROBE') in ('report-haiku-v10', 'noisy-visit-v11')
             probe = subprocess.run([sys.executable, str(root / 'scripts/render_synthetic_probe.py')],
                                    cwd=root, env=env, capture_output=True, timeout=540 if long_run else 240)
             for line in probe.stdout.decode('utf-8', errors='replace').splitlines():
@@ -97,6 +97,9 @@ def main():
                         or re.fullmatch(r'AMILYA_REPORT_COMPARE_KEY case=[1-4] A=(?:current|haiku) B=(?:current|haiku)', line) \
                         or line == 'AMILYA_REPORT_COMPARE status=BLOCKED':
                     # Fixed fictional visits only; generated text is synthetic training output.
+                    print(line, flush=True)
+                elif re.fullmatch(r'AMILYA_NOISY_VISIT run=[1-9] variant=(?:old|new) stage=(?:quick_draft|quick_qa|quick_repair|final) status=(?:OK|PASS|FAIL) code=[A-Z0-9_]{1,40} ms=\d{1,9} effort=(?:low|medium|high|none) out_tokens=\d{1,9} data_b64=[A-Za-z0-9+/=]{0,20000}', line):
+                    # One fixed made-up noisy visit only; every word printed comes from that invented visit.
                     print(line, flush=True)
         except (subprocess.TimeoutExpired, OSError):
             print('AMILYA_SYNTHETIC_PROBE status=FAIL code=TIMEOUT', flush=True)
