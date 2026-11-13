@@ -63,3 +63,23 @@ def test_running_out_of_room_twice_ends_the_report_and_nothing_partial_is_used(g
         report(gateway, [completion(NOTE, finish='length'), completion(NOTE, finish='length')], 'length-twice')
     assert failure.value.status_code == 502 and (failure.value.headers or {}).get('X-WCP-Error') == 'OUTPUT_LIMIT'
     assert len(gateway.http.calls) == 2
+
+
+LONG = {'case_facts': [], 'rejected_claims_do_not_reinstate': [], 'untrusted_sources': [
+    {'kind': 'audio', 'text': 'Thank you. How was he overnight? He was up twice. ' * 60}]}
+
+
+def test_long_visit_recordings_can_have_their_own_writer_and_nothing_else_changes(gateway):
+    import json
+    gateway.config.ai_model_all = 'minimax/minimax-m3'
+    long_text, short_text = json.dumps(LONG), json.dumps(CONTEXT)
+    assert providers.long_visit_recording(long_text) and not providers.long_visit_recording(short_text)
+    summary = json.dumps({'untrusted_sources': [{**LONG['untrusted_sources'][0], 'source_role': "Clinician's own spoken summary"}]})
+    assert not providers.long_visit_recording(summary) and not providers.long_visit_recording('not json')
+    # Switch off (the default): every step stays on the one chosen model.
+    assert providers.configured_route('quick_draft', long_text)['model'] == 'minimax/minimax-m3'
+    gateway.config.ai_model_long_visit = 'anthropic/claude-haiku-5.5'
+    assert providers.configured_route('quick_draft', long_text)['model'] == 'anthropic/claude-haiku-5.5'
+    assert providers.configured_route('quick_repair', long_text)['model'] == 'anthropic/claude-haiku-5.5'
+    assert providers.configured_route('quick_draft', short_text)['model'] == 'minimax/minimax-m3'
+    assert providers.configured_route('consult', long_text)['model'] == 'minimax/minimax-m3'

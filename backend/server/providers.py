@@ -894,6 +894,21 @@ def simple_note_template(content):
     return isinstance(data, dict) and data.get('template') in SIMPLE_NOTE_TEMPLATES and not data.get('untrusted_layout_preferences')
 
 
+LONG_VISIT_WORDS = 500
+
+
+def long_visit_recording(content):
+    """True when the spoken sources (not the clinician's own short summary) hold a long whole-visit conversation."""
+    try:
+        data = json.loads(content) if isinstance(content, str) else {}
+    except (ValueError, TypeError):
+        return False
+    sources = data.get('untrusted_sources') if isinstance(data, dict) else None
+    words = sum(len(str(source.get('text') or '').split()) for source in sources or []
+                if isinstance(source, dict) and source.get('kind') == 'audio' and not source.get('source_role'))
+    return words >= LONG_VISIT_WORDS
+
+
 def configured_route(task, content):
     """Keep automatic effort selection while honoring the owner's model settings."""
     route = select_route(TASK_FAMILIES.get(task, task), content)
@@ -914,6 +929,8 @@ def configured_route(task, content):
     else: selected = settings.model_extraction
     if getattr(settings, 'ai_model_all', ''): selected = settings.ai_model_all  # one model for every step (owner's choice)
     if task == 'quick_qa' and getattr(settings, 'ai_model_qa', ''): selected = settings.ai_model_qa  # test-only: accuracy check on its own model
+    if task in {'quick_draft', 'quick_repair'} and getattr(settings, 'ai_model_long_visit', '') and long_visit_recording(content):
+        selected = settings.ai_model_long_visit  # test-only: long whole-visit recordings get their own writer
     if selected not in MODEL_PRICES:
         raise preflight_error(503, 'Configured AI model is not in the approved price registry')
     return {**route, 'model': selected, 'reason': 'configured_' + task, 'effort_reason': route.get('reason')}
