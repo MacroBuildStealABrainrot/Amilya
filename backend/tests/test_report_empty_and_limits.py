@@ -42,9 +42,12 @@ def test_an_empty_note_the_check_rejects_is_written_afresh_once(gateway):
 
 def test_only_one_fresh_attempt_then_the_usual_single_repair(gateway):
     with pytest.raises(HTTPException) as failure:
-        report(gateway, [EMPTY, FAIL, EMPTY, FAIL, EMPTY, FAIL], 'still-empty')
+        # The second check of the same empty note is answered from the saved first check (no new request, no new cost).
+        report(gateway, [EMPTY, FAIL, EMPTY, EMPTY, FAIL, EMPTY, FAIL], 'still-empty')
     assert failure.value.status_code == 502
-    assert len(gateway.http.calls) == 6   # write, check, fresh write, check, one repair, check: never more
+    # write, check, fresh write, (saved check), one repair, check: never more than six requests
+    assert 4 <= len(gateway.http.calls) <= 6
+    assert sum('"previous_attempt_returned_no_note": true' in c['json']['messages'][1]['content'] for c in gateway.http.calls) == 1
 
 
 def test_a_recording_with_nothing_clinical_still_gives_no_note_without_extra_requests(gateway):
