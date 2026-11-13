@@ -929,7 +929,9 @@ def configured_route(task, content):
     else: selected = settings.model_extraction
     if getattr(settings, 'ai_model_all', ''): selected = settings.ai_model_all  # one model for every step (owner's choice)
     if task == 'quick_qa' and getattr(settings, 'ai_model_qa', ''): selected = settings.ai_model_qa  # test-only: accuracy check on its own model
-    if task in {'quick_draft', 'quick_repair'} and getattr(settings, 'ai_model_long_visit', '') and long_visit_recording(content):
+    if task in {'quick_draft', 'quick_repair'} and getattr(settings, 'ai_model_report', ''):
+        selected = settings.ai_model_report  # owner's choice: every report is written by this model
+    elif task in {'quick_draft', 'quick_repair'} and getattr(settings, 'ai_model_long_visit', '') and long_visit_recording(content):
         selected = settings.ai_model_long_visit  # test-only: long whole-visit recordings get their own writer
     if selected not in MODEL_PRICES:
         raise preflight_error(503, 'Configured AI model is not in the approved price registry')

@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     ai_model_qa: str = ''
     # Test-only: the note WRITER for long whole-visit recordings (empty = no change). MiniMax was unreliable on them (2026-11-13).
     ai_model_long_visit: str = ''
+    # Owner choice (2026-11-13): when set, the report WRITER and its repair use this model for every report (empty = no change).
+    ai_model_report: str = ''
     # Owner choice (2026-11-02): false = never show the "Check before saving or sending" box on a report.
     show_report_alerts: bool = True
     provider_timeout_seconds: int = 60
@@ -91,7 +93,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','ai_model_qa','ai_model_long_visit','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','ai_model_qa','ai_model_long_visit','ai_model_report','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():
