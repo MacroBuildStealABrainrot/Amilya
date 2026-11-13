@@ -30,6 +30,8 @@ QUALITATIVE_HTTP_VERSION = 'photo-words-v7'
 COMPARISON_VERSION = 'photo-cost-v8'
 REPORT_COMPARISON_VERSION = 'report-haiku-v10'
 NOISY_VISIT_VERSION = 'noisy-visit-v11'   # made-up noisy home visit through the report steps, every step printed
+NOISY_VISIT_AFTER_VERSION = 'noisy-visit-v12'   # the same visit again after the fix (each label runs once only)
+NOISY_VISIT_VERSIONS = (NOISY_VISIT_VERSION, NOISY_VISIT_AFTER_VERSION)
 HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION, COMPARISON_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
@@ -39,7 +41,8 @@ MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031
            QUALITATIVE_HTTP_VERSION: 'b06c33fe-beca-5be5-b86c-925d72b3a997',
            COMPARISON_VERSION: '2755c513-29b4-5f9c-b1d1-070793e7041a',
            REPORT_COMPARISON_VERSION: 'b7e3d915-6c42-5f08-8a1d-2e9f4c7b0a36',
-           NOISY_VISIT_VERSION: '4f0c2a6e-91d3-5b7a-8e24-6c1d9a3f5b72'}
+           NOISY_VISIT_VERSION: '4f0c2a6e-91d3-5b7a-8e24-6c1d9a3f5b72',
+           NOISY_VISIT_AFTER_VERSION: '8a51d3c7-2e6f-5d90-b4a8-17c3e9f0d264'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -267,13 +270,13 @@ def main():
             raise ConfigurationError('PROBE_OPT_IN_REQUIRED')
         if not env.get('OPENROUTER_API_KEY') or env.get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1') != 'https://openrouter.ai/api/v1':
             raise ConfigurationError('PROBE_PROVIDER_REQUIRED')
-        if version in HTTP_VERSIONS or version in (REPORT_COMPARISON_VERSION, NOISY_VISIT_VERSION):
+        if version in HTTP_VERSIONS or version in (REPORT_COMPARISON_VERSION, *NOISY_VISIT_VERSIONS):
             from render_owner_activation import APPROVAL_END, check_key
             now = time.time()
             deadline = int(env.get('AMILYA_RENDER_OWNER_TEST_UNTIL', str(APPROVAL_END)))
             if not now < deadline <= APPROVAL_END:
                 raise ConfigurationError('TEST_WINDOW_CLOSED')
-            if version in (COMPARISON_VERSION, REPORT_COMPARISON_VERSION, NOISY_VISIT_VERSION) and now + 300 >= deadline:
+            if version in (COMPARISON_VERSION, REPORT_COMPARISON_VERSION, *NOISY_VISIT_VERSIONS) and now + 300 >= deadline:
                 raise ConfigurationError('TEST_WINDOW_TOO_SHORT')
             check_key(env, deadline, now)
         if not claim_once(env):
@@ -291,7 +294,7 @@ def main():
                 OPENROUTER_SPEECH_ENABLED='true' if version == AUDIO_HTTP_VERSION else 'false',
                 OPENROUTER_REQUIRE_ZDR='true',
                 # The noisy-visit reproduction keeps the test server's own waiting time, so it fails the same way.
-                PROVIDER_TIMEOUT_SECONDS=env.get('PROVIDER_TIMEOUT_SECONDS', '60') if version == NOISY_VISIT_VERSION else '45',
+                PROVIDER_TIMEOUT_SECONDS=env.get('PROVIDER_TIMEOUT_SECONDS', '60') if version in NOISY_VISIT_VERSIONS else '45',
                 MODEL_EXTRACTION='openai/gpt-6.1-sol' if version in HTTP_VERSIONS or version == EXTRACTION_VERSION else 'openai/gpt-6-luna',
                 MODEL_VISION='openai/gpt-6.1-sol',
                 MODEL_DOCUMENTATION='openai/gpt-6.1-sol', MODEL_FRONTIER='openai/gpt-6-astra')
@@ -328,10 +331,10 @@ def main():
                 account.period_start, account.period_end = int(time.time()) - 60, int(time.time()) + 3600
                 account.plan_micros = 1_000_000  # fixture balance only; no payment or subscription
                 db.commit()
-            if version == NOISY_VISIT_VERSION:
+            if version in NOISY_VISIT_VERSIONS:
                 from render_noisy_visit_probe import reproduce
                 try:
-                    return 0 if reproduce(actor) else 1
+                    return 0 if reproduce(actor, **({'variants': ('old', 'old', 'new', 'new', 'new')} if version == NOISY_VISIT_AFTER_VERSION else {})) else 1
                 finally:
                     engine.dispose()
             if version == REPORT_COMPARISON_VERSION:
