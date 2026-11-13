@@ -929,6 +929,7 @@ def configured_route(task, content):
     else: selected = settings.model_extraction
     if getattr(settings, 'ai_model_all', ''): selected = settings.ai_model_all  # one model for every step (owner's choice)
     if task == 'image' and getattr(settings, 'ai_model_image', ''): selected = settings.ai_model_image  # wound photos keep their own model
+    if task in {'consult', 'assistant', 'review'} and getattr(settings, 'ai_model_consult', ''): selected = settings.ai_model_consult  # Ask Consultant / clinical review
     if task == 'quick_qa' and getattr(settings, 'ai_model_qa', ''): selected = settings.ai_model_qa  # test-only: accuracy check on its own model
     if task in {'quick_draft', 'quick_repair'} and getattr(settings, 'ai_model_report', ''):
         selected = settings.ai_model_report  # owner's choice: every report is written by this model

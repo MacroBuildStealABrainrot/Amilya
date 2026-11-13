@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     ai_model_report: str = ''
     # Owner's wound-photo choice stays in force when one model is forced for every other step (2026-11-13: MiniMax read a photo as "nothing visible").
     ai_model_image: str = ''
+    # Owner choice (2026-11-13): Ask Consultant and the clinical review use this model even when one model is forced elsewhere (empty = no change).
+    ai_model_consult: str = ''
     # Owner choice (2026-11-02): false = never show the "Check before saving or sending" box on a report.
     show_report_alerts: bool = True
     provider_timeout_seconds: int = 60
@@ -95,7 +97,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','ai_model_qa','ai_model_long_visit','ai_model_report','ai_model_image','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','ai_model_qa','ai_model_long_visit','ai_model_report','ai_model_image','ai_model_consult','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():
