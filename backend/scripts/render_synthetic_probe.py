@@ -32,7 +32,7 @@ REPORT_COMPARISON_VERSION = 'report-haiku-v10'
 NOISY_VISIT_VERSION = 'noisy-visit-v11'   # made-up noisy home visit through the report steps, every step printed
 NOISY_VISIT_AFTER_VERSION = 'noisy-visit-v12'   # the same visit again after the fix (each label runs once only)
 NOISY_VISIT_LONG_WRITER_VERSION = 'noisy-visit-v13'   # the same visit with the long-visit writer (Claude Haiku)
-NOISY_VISIT_VERSIONS = (NOISY_VISIT_VERSION, NOISY_VISIT_AFTER_VERSION, NOISY_VISIT_LONG_WRITER_VERSION)
+NOISY_VISIT_VERSIONS = (NOISY_VISIT_VERSION, NOISY_VISIT_AFTER_VERSION, NOISY_VISIT_LONG_WRITER_VERSION, 'noisy-visit-v14', 'noisy-visit-v15')
 HTTP_VERSIONS = (HTTP_VERSION, AUDIO_HTTP_VERSION, PHOTO_HTTP_VERSION, WOUND_HTTP_VERSION, QUALITATIVE_HTTP_VERSION, COMPARISON_VERSION)
 MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031b3802',
            HTTP_VERSION: 'd98f0af3-886d-50bc-9adb-e02ab812ea02',
@@ -44,7 +44,8 @@ MARKERS = {VERSION: MARKER, EXTRACTION_VERSION: 'bd2440cf-fb76-5294-aedf-dd7c031
            REPORT_COMPARISON_VERSION: 'b7e3d915-6c42-5f08-8a1d-2e9f4c7b0a36',
            NOISY_VISIT_VERSION: '4f0c2a6e-91d3-5b7a-8e24-6c1d9a3f5b72',
            NOISY_VISIT_AFTER_VERSION: '8a51d3c7-2e6f-5d90-b4a8-17c3e9f0d264',
-           NOISY_VISIT_LONG_WRITER_VERSION: 'c2e7f4a9-5b18-5c63-9d07-3a8b6e1f4d95'}
+           NOISY_VISIT_LONG_WRITER_VERSION: 'c2e7f4a9-5b18-5c63-9d07-3a8b6e1f4d95',
+           'noisy-visit-v14': '1d9b6f3e-7a42-5e81-a3c5-90f2d4b7e618', 'noisy-visit-v15': '6e3a8c1f-4d75-5b29-8f60-2b9d7c4a1e53'}
 TEXT = ('Fictional training visit, no real patient: the clinician removed the old '
         'dressing, cleansed the wound with normal saline, and applied a foam dressing. '
         'The fictional patient reported no pain during the dressing change.')
@@ -336,7 +337,7 @@ def main():
             if version in NOISY_VISIT_VERSIONS:
                 from render_noisy_visit_probe import reproduce
                 try:
-                    if version == NOISY_VISIT_LONG_WRITER_VERSION:
+                    if version not in (NOISY_VISIT_VERSION, NOISY_VISIT_AFTER_VERSION):
                         from server import providers
                         providers.settings.ai_model_long_visit = 'anthropic/claude-haiku-5.5'
                     return 0 if reproduce(actor, **({} if version == NOISY_VISIT_VERSION else {'variants': ('new', 'new', 'new', 'old', 'old')})) else 1

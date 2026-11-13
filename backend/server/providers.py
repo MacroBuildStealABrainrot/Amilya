@@ -1223,6 +1223,8 @@ async def _checked_quick_text(context, task, options, *, user, encounter_id, _fr
     qa = await routed('quick_qa', json.dumps({**content, 'proposed_draft': draft['text'], 'proposed_status': draft.get('status', 'ready'), 'proposed_ui_alerts': draft.get('ui_alerts', []),
         **({'free_source_check_findings': coverage} if coverage else {})},
         ensure_ascii=False, default=str), user=user, encounter_id=encounter_id, max_tokens=1000)
+    from .source_coverage import real_discrepancies
+    qa = {**qa, 'discrepancies': real_discrepancies(qa.get('discrepancies'))}
     from .source_coverage import photo_finding_losses
     # A finding the photo showed must never silently disappear from the note: it always triggers the one repair.
     defects = quality_defects(draft['text'], context) + photo_finding_losses(draft['text'], context, draft.get('ui_alerts'))

@@ -230,3 +230,15 @@ def photo_finding_losses(report: str, context: dict, alerts=None) -> list[str]:
         if in_photo and not any(re.search(p, report, re.I) or re.search(p, alert_text, re.I) for p in patterns):
             losses.append(f'The photo assessment found {label}, but the note leaves it out; add it as a photo finding.')
     return losses
+
+
+# A check item that the checker itself ends by calling acceptable is not a defect (made-up noisy visit 2026-11-13: the
+# check listed lines such as "...which is supported; acceptable." and each one counted against the note).
+_SELF_ACCEPTED = re.compile(r"(?i)(?:\bacceptable|\bno discrepancy is raised[^.;]*|\bno major error there|\bwhich is consistent)\s*[.;]?\s*$")
+
+
+def real_discrepancies(items):
+    """The check's findings without the ones it concluded were acceptable. Wording is never changed; nothing is added."""
+    if not isinstance(items, list):
+        return items
+    return [item for item in items if not (isinstance(item, str) and _SELF_ACCEPTED.search(item.strip()))]

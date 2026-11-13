@@ -85,7 +85,7 @@ def main():
         # A separate process, fixed inputs and a durable once-only claim. Never
         # activate provider execution in this public HTTP application's settings.
         try:
-            long_run = env.get('AMILYA_RENDER_SYNTHETIC_PROBE') in ('report-haiku-v10', 'noisy-visit-v11', 'noisy-visit-v12', 'noisy-visit-v13')
+            long_run = env.get('AMILYA_RENDER_SYNTHETIC_PROBE') in ('report-haiku-v10', 'noisy-visit-v11', 'noisy-visit-v12', 'noisy-visit-v13', 'noisy-visit-v14', 'noisy-visit-v15')
             probe = subprocess.run([sys.executable, str(root / 'scripts/render_synthetic_probe.py')],
                                    cwd=root, env=env, capture_output=True, timeout=540 if long_run else 240)
             for line in probe.stdout.decode('utf-8', errors='replace').splitlines():

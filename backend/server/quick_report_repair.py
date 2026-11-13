@@ -28,7 +28,7 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
         'untrusted_failed_draft': initial_draft['text'], 'untrusted_qa_feedback': feedback,
         'repair_attempt': 1}
     repaired = await routed('quick_repair', json.dumps(repair_input, ensure_ascii=False, default=str),
-        user=user, encounter_id=encounter_id, max_tokens=8000 if len(json.dumps(context,ensure_ascii=False))>20000 else 2400)
+        user=user, encounter_id=encounter_id, max_tokens=8000)  # 2,400 ran out on a long visit and lost the whole report (made-up noisy visit 2026-11-13: 3 of 5 runs); unused allowance is not billed
     from .documentation import clean_generated_layout
     repaired = clean_generated_layout(repaired, options, context)
     # The recheck receives the original source context, not QA feedback or the
@@ -40,6 +40,8 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     from . import diagnostics
     diagnostics.faithfulness(checked.get('passed') is True and checked.get('discrepancies')==[] and not quality_defects(repaired['text'],context),len(checked.get('discrepancies',[])),'after_repair')
     from .source_coverage import coverage_defects, strong_findings, clarify_alerts, photo_finding_losses
+    from .source_coverage import real_discrepancies
+    checked = {**checked, 'discrepancies': real_discrepancies(checked.get('discrepancies'))}
     remaining = [str(item)[:300] for item in (checked.get('discrepancies') or []) if str(item).strip()]
     import re
     # A remaining point that names an invented, wrong, contradicted or misattributed fact is serious, whatever its wording.

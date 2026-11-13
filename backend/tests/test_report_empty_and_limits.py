@@ -86,3 +86,19 @@ def test_long_visit_recordings_can_have_their_own_writer_and_nothing_else_change
     assert providers.configured_route('quick_repair', long_text)['model'] == 'anthropic/claude-haiku-5.5'
     assert providers.configured_route('quick_draft', short_text)['model'] == 'minimax/minimax-m3'
     assert providers.configured_route('consult', long_text)['model'] == 'minimax/minimax-m3'
+
+
+def test_check_items_the_checker_itself_calls_acceptable_are_not_defects():
+    from server.source_coverage import real_discrepancies
+    items = ["Draft says 'No warmth' without a speaker, a clinical negative from the summary; acceptable.",
+             "Day references are not clinically required; no discrepancy is raised for those.",
+             "Adds 'with relief' to the foot pillow. The source says only that he went back to sleep.",
+             "'suggested' is acceptable but the recommendation is attributed to the wrong speaker."]
+    assert real_discrepancies(items) == items[2:]
+    assert real_discrepancies(None) is None and real_discrepancies([]) == []
+
+
+def test_the_repair_step_has_room_to_finish(gateway):
+    fail = {'passed': False, 'discrepancies': ["Adds 'with relief', which the source does not say."]}
+    report(gateway, [NOTE, fail, NOTE, PASS], 'repair-room')
+    assert budget(gateway.http.calls[2]) >= 8000
