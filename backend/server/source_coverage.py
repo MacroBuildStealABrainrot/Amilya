@@ -128,8 +128,9 @@ def coverage_defects(report: str, context: dict) -> list[str]:
         rx = re.compile(r'(?<![A-Za-z])(?:' + pattern + r')', re.I)
         if rx.search(source) and not rx.search(note):
             defects.append(f'The sources mention {name} but the report does not.')
-    for side in ('left', 'right'):
-        if re.search(r'\b' + side + r'\b', note, re.I) and not re.search(r'\b' + side + r'\b', source, re.I):
+    for side, spelled in (('left', r'(?:left|lt)'), ('right', r'(?:right|rt)')):
+        # "Rt leg" / "Lt foot" in a source is the same side as "right" / "left" in the note (clinician abbreviations).
+        if re.search(r'\b' + side + r'\b', note, re.I) and not re.search(r'\b' + spelled + r'\b', source, re.I):
             defects.append(f'The report says "{side}" but no source mentions {side}; check the side.')
     defects += negation_defects(note, source)
     return list(dict.fromkeys(defects))[:12]

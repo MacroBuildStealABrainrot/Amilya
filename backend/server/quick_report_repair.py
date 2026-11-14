@@ -7,11 +7,18 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 import json
+import re
 from typing import Any
 
 from .report_errors import TerminalReportError
 
 REVIEW_FAILURE = 'The report did not pass source-faithfulness review. Your original source and editor text remain available.'
+
+
+# A remaining point that names an invented, wrong, contradicted or misattributed fact is serious, whatever its wording.
+GRAVE_REMAINING_POINT = re.compile(r'invent|fabricat|unsupported|not (?:in|found in|present in|supported by|stated in) (?:the |any )?source|'
+    r'absent from|wrong|incorrect|contradict|opposite|mismatch|attribut|hallucin|never (?:said|mentioned)|'
+    r'different (?:patient|client|visit)|negation|laterality|\bsides?\b', re.I)
 
 
 async def repair_quick_report_once(context: dict, task: str, options: dict,
@@ -45,9 +52,7 @@ async def repair_quick_report_once(context: dict, task: str, options: dict,
     remaining = [str(item)[:300] for item in (checked.get('discrepancies') or []) if str(item).strip()]
     import re
     # A remaining point that names an invented, wrong, contradicted or misattributed fact is serious, whatever its wording.
-    grave = re.compile(r'invent|fabricat|unsupported|not (?:in|found in|present in|supported by|stated in) (?:the |any )?source|'
-                       r'absent from|wrong|incorrect|contradict|opposite|mismatch|attribut|hallucin|never (?:said|mentioned)|'
-                       r'different (?:patient|client|visit)|negation|laterality|side', re.I)
+    grave = GRAVE_REMAINING_POINT
     serious = (strong_findings(coverage_defects(repaired['text'], context)) or quality_defects(repaired['text'], context)
                or any(grave.search(item) for item in remaining))
     if (checked.get('passed') is not True or remaining) and not serious and checked.get('passed') is False and 1 <= len(remaining) <= 3:
