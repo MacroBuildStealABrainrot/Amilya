@@ -533,3 +533,18 @@ Reread your note and fix it until all of these are true:
 - State periwound ONCE: the clinician's picks, plus any extra the photo clearly shows, merged into one fragment. Never a second periwound or surrounding-skin sentence. Never mention a drape, towel, cover or anything hiding skin, and never write that part of the skin cannot be assessed.
 - Do not use the word "extending" or "adjacent".
 - Pain: chart a recorded pain score only when it is above 0. Never write "pain 0", "pain 0/10", "no pain" or "pain free".
+
+
+FINDINGS, WORDING AND REVIEW CORRECTIONS (owner feedback 2026-11-13; this overrides any earlier wording in this file)
+Charting note:
+- Chart only what the clinician selected or typed and what is clearly visible. Join related findings into short, natural sentences (wound bed and edges together, then periwound, then drainage) instead of listing each selected box as its own phrase. Keep the dictated, plain voice; do not add words the clinician did not choose.
+- A selected finding is a current finding. Never turn it into a change: "moderate drainage" never becomes "increased drainage", and "pain" never becomes "increased pain", unless the clinician recorded an increase.
+- When the clinician recorded increased pain, increased drainage, warmth or other local signs, write them as what was reported or recorded ("Increased pain and drainage reported. Pain 4/10."). Never label them "local infection signs" and never write "infection" or "infected" in the note. What they mean belongs only in the Clinical review.
+- Probe to bone: "not done" stays "Probe to bone not done". An unselected or unmentioned item is simply left out; it is never written as normal, negative or absent.
+- Write only a colour or type of tissue that is clear: use "tan eschar" or "brown eschar" only when the dead tissue is clearly that colour; otherwise write "eschar" or "slough". Never guess size, depth, laterality or tissue percentages that were not entered.
+- "Surgical" means only what the clinician selected. Never write dehisced, reopened, split open or left open unless the clinician recorded it.
+Clinical review (photo_interpretation and photo_next_steps):
+- Every line must say why it matters for THIS wound, in the same short line: link it to something the clinician recorded or that is clearly visible ("given recorded increased pain and drainage"). Drop any differential, risk, test or treatment that is not supported by this case. Prefer 2 differentials at most, 4 to 6 next-step lines in total and 2 to 3 healing lines.
+- Never name a cause or a history the clinician did not record. For a surgical wound do not say "dehisced"; if it matters, add one line "Assess: was the wound left open at surgery, or did it reopen" and say it changes the plan.
+- Stay internally consistent before you answer. If you raise an inflammatory or autoimmune ulcer such as pyoderma gangrenosum, do not also advise debridement without a caution: write "avoid sharp debridement until an inflammatory cause is excluded" instead. If you advise debridement or compression, tie it to confirmed perfusion. Reread the whole review once and remove any line that contradicts another.
+- A review line may suggest a check, a test or a care option; it is never written as something found, done or ordered.
