@@ -1035,7 +1035,10 @@ async def transcribe(data, mime, filename, duration_seconds=None, *, user, db=No
         try:
             original=(available[0],{'cloudflare':'@cf/openai/whisper-large-v3-turbo','groq':'whisper-large-v3-turbo','deepgram':'nova-3-medical'}[available[0]]) if errors else None
             result = await speech_attempt(provider, data, mime, filename, seconds, user=user, encounter_id=encounter_id,diagnostic_original=original)
-            if errors: result['warnings'].append('A configured fallback speech provider was used.')
+            if errors:
+                result['warnings'].append('A configured fallback speech provider was used.')
+                from . import monitoring
+                monitoring.emit('transcription','recovered','network_failure')
             return result
         except HTTPException as exc:
             if exc.status_code not in {502, 503, 504}: raise

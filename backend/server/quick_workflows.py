@@ -177,6 +177,9 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
             warnings.append('A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording.')
             from . import diagnostics
             diagnostics.event({'source':'server','stage':'report_source_recovery','status':'success','error_code':result['recovery']['cause']})
+            from . import monitoring
+            monitoring.emit('ai_extraction','failed','extraction_failed')
+            monitoring.emit('report','recovered','fallback_without_ai')
     else:
         result = documentation.source_report(context, payload.template, clinical.fact_phrase)
     db.refresh(encounter)
