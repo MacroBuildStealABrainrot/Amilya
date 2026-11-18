@@ -74,12 +74,42 @@ class AppState(application:Application):AndroidViewModel(application) {
     var autoStartRecording by mutableStateOf(false)
     /** Message from the recorder (microphone taken by a call, visit recorded in parts) to show again with the finished report. */
     private var recordingNotice:String?=null
+    /** The visit a pending attachment warning belongs to: another visit's warning is never used for this one. */
+    private var recordingNoticeVisit:String?=null
+    /** The warnings shown with the displayed draft, saved with it so they are still there when the visit is reopened. */
+    private var draftNotice:String?=null
     var recordingConsent by mutableStateOf(false)
+    /**
+     * The clinician confirmed the client's consent to record by a TAP (phone dialog, or the watch's Record visit button).
+     * A spoken answer never counts, because the app cannot tell the nurse's voice from nearby speech. The details are kept
+     * per visit so every recording of the visit (including a recovered one) is sent with how and when consent was confirmed.
+     */
+    fun confirmRecordingConsent(method:String){
+        require(method in CONSENT_METHODS)
+        recordingConsent=true
+        if(encounterId.isNotBlank())runCatching{vault.write("consent-record-$encounterId",obj("method" to method,"confirmed_at" to now(),"wording" to CONSENT_WORDING).toString())}
+    }
     fun prepareRecordingContext(owner:String){
         bindDiagnostics()
         if(quickMode=="document" && !voiceCorrection && !voiceMessage)case?.let{vault.write("recording-context-$owner",obj("owner" to user?.str("id"),"case" to it,"template" to editorTemplate).toString())}
     }
     fun refreshRecordingJobs(){recordingJobs=recordingRecovery.list(user?.str("id")?:"sample")}
+    var recoveryActionId by mutableStateOf<String?>(null); private set
+    fun discardRecovery(job:JSONObject){
+        val owner=user?.str("id")?:return
+        val id=job.str("id")
+        if(id.isBlank() || job.str("owner")!=owner || recoveryActionId!=null)return
+        if(RecordingService.state.value.recording){notice="Stop the current recording before discarding unfinished work.";return}
+        recoveryActionId=id
+        viewModelScope.launch{
+            val discarded=withContext(Dispatchers.IO){runCatching{recordingRecovery.discard(id,owner)}.getOrDefault(false)}
+            if(user?.str("id")==owner){
+                refreshRecordingJobs()
+                notice=if(discarded)"Unfinished recording deleted from this device." else "This unfinished recording could not be deleted."
+            }
+            if(recoveryActionId==id)recoveryActionId=null
+        }
+    }
     private fun publishRecordingJob(job:JSONObject){
         if(job.str("owner")!=(user?.str("id")?:"sample"))return
         recordingJobs=(listOf(job)+recordingJobs.filter{it.str("id")!=job.str("id")}).sortedByDescending{it.optLong("updated_at")}
@@ -125,24 +155,41 @@ class AppState(application:Application):AndroidViewModel(application) {
     var demo by mutableStateOf(false); private set
     var loading by mutableStateOf(false); private set
     var quickMode by mutableStateOf<String?>(null); private set
+    /** True for one recording started with "Record, text only": keep the words, do not make a report. */
+    var textOnlyNext by mutableStateOf(false)
+    /** True for one recording started with "Add a spoken summary": the clinician's own account, which outranks a noisy visit recording. */
+    var summaryNext by mutableStateOf(false)
     var consultantMessages by mutableStateOf<List<JSONObject>>(emptyList()); private set
+    /** Done on Ask Consultant asks whether to turn the conversation into a report instead of losing it. */
+    var consultantReportPrompt by mutableStateOf(false)
+    private var reportFromConsultation=false
     var consultantDraft by mutableStateOf(""); private set
     var consultantReset by mutableIntStateOf(0); private set
     var transfer by mutableStateOf<JSONObject?>(null)
     var voiceCommandsOpen by mutableStateOf(false)
+    /** Set by the voice command "Send": the report screen opens its Send choices. Nothing is sent without a tap. */
+    var sendRequested by mutableStateOf(false)
     var voiceInstruction by mutableStateOf("")
     var voiceCorrection by mutableStateOf(false); private set
     var voiceMessage by mutableStateOf(false); private set
     var reportLength by mutableStateOf("concise")
     var taskLabel by mutableStateOf("Working"); private set
-    var error by mutableStateOf<String?>(null)
+    private var errorFeedback by mutableStateOf(FeedbackMessage())
+    var error: String?
+        get() = errorFeedback.text
+        set(value) { errorFeedback = errorFeedback.replace(value) }
+    val errorMessageSequence get() = errorFeedback.sequence
     var retryAvailable by mutableStateOf(false); private set
     var retryAtMillis by mutableLongStateOf(0); private set
     private var failedAction:(()->Unit)?=null
     private var taskRecovery:(()->Unit)?=null
     private var taskPurpose:String?=null
     private var consecutiveFailures=0
-    var notice by mutableStateOf<String?>(null)
+    private var noticeFeedback by mutableStateOf(FeedbackMessage())
+    var notice: String?
+        get() = noticeFeedback.text
+        set(value) { noticeFeedback = noticeFeedback.replace(value) }
+    val noticeMessageSequence get() = noticeFeedback.sequence
     var screen by mutableStateOf("welcome")
     var dark by mutableStateOf(vault.read("theme") != "light")
     var patients by mutableStateOf<List<JSONObject>>(emptyList()); private set
@@ -151,6 +198,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     var billing by mutableStateOf(JSONObject()); private set
     var audit by mutableStateOf<List<JSONObject>>(emptyList()); private set
     var documentAlerts by mutableStateOf<List<String>>(emptyList()); private set
+    /** How many of [documentAlerts] (at the start of the list) are medication, dose, side or measurement warnings. */
+    var documentAlertSafetyCount by mutableIntStateOf(0); private set
     var assessmentReview by mutableStateOf<JSONObject?>(null)
     var assessmentRevision by mutableIntStateOf(0); private set
     var assessmentEncounter by mutableStateOf(""); private set
@@ -181,13 +230,14 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun hash(text:String)=MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it.toInt() and 255)}
     private fun now()=Instant.now().toString()
     private fun clearClinical(){
+        shiftStorageProblem=false
         processingRecording=null;recordingConsent=false;autoStartRecording=false
-        documentAlerts=emptyList();assessmentReview=null;assessmentEncounter=""
+        documentAlerts=emptyList();documentAlertSafetyCount=0;assessmentReview=null;assessmentEncounter=""
         voiceMessage=false;dismissError()
         draftGeneration++;draftJob?.cancel();editorOwner=null;restoring=true
         quickMode=null;consultantMessages=emptyList();consultantDraft="";voiceCorrection=false;voiceInstruction="";transfer=null;case=null;patients=emptyList();encounters=emptyList();billing=JSONObject();audit=emptyList();answer=null
         editor="";editorTemplate="nursing";customName="";customInstructions="";savedId=null;amendId=null;amendReason=""
-        editorCaseRevision=0;localRevision++;hasRecoverableDraft=false;notice=null;restoring=false
+        editorCaseRevision=0;localRevision++;hasRecoverableDraft=false;notice=null;draftNotice=null;restoring=false
     }
     private fun metadataChanged(){if(!restoring){vault.write("preferred-format-${user?.str("id")?:"sample"}",editorTemplate);savedId=null;localRevision++;persistEditor()}}
     fun updateTemplate(value:String){editorTemplate=value}
@@ -204,7 +254,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun snapshotDraft(){persistEditor();if(editor.isNotBlank() && savedId==null){vault.write(storeKey("draft-recovery"),draftJson().toString());hasRecoverableDraft=true}}
     fun restorePreviousDraft(){
         val d=vault.read(storeKey("draft-recovery"))?.let{runCatching{JSONObject(it)}.getOrNull()} ?: return
-        val old=draftJson();vault.write(storeKey("draft"),d.toString());restoreDraft();vault.write(storeKey("draft-recovery"),old.toString());hasRecoverableDraft=true;screen="editor"
+        val old=draftJson();vault.write(storeKey("draft"),d.toString());restoreDraft();notice=noticeForShownReport(draftNotice);vault.write(storeKey("draft-recovery"),old.toString());hasRecoverableDraft=true;screen="editor"
     }
     private fun matchesEditor(d:JSONObject)=d.str("text")==editor && d.str("template")==editorTemplate && d.str("amends_id")==amendId.orEmpty() &&
         d.str("reason")==amendReason && (editorTemplate!="custom" || d.optJSONObject("custom_template")?.let{it.str("name")==customName.trim()&&it.str("instructions")==customInstructions.trim()}==true)
@@ -226,7 +276,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                 if(e is CancellationException)throw e
                 if(taskPurpose in listOf("audio","report"))runCatching{recordingStage("FAILED_RETRYABLE")}
                 val hasRecording=activeRecording()?.let{it.isFile && it.length()>128}==true
-                val readable=clinicianError(e,taskPurpose)+if(hasRecording && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
+                val readable=clinicianError(e,taskPurpose)+if(hasRecording && e !is ReportRetryException && e !is java.net.SocketException && e !is java.net.UnknownHostException && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
                 if(e is ApiException && e.status==401){persistEditor();api.clear();clearClinical();demo=false;user=null;legalRequired=false;screen="login"}
                 if(e is ApiException && e.status==428)legalRequired=true
                 consecutiveFailures++
@@ -243,7 +293,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         }
     }
     init {
-        viewModelScope.launch{while(isActive){delay(15000);val owner=user?.str("id");if(owner!=null&&!demo)DeveloperDiagnostics.flush(api,vault,owner)}}
+        viewModelScope.launch{while(isActive){delay(15000);val owner=user?.str("id");if(owner!=null&&!demo){runCatching{DeveloperDiagnostics.startSession(getApplication(),vault,owner)};DeveloperDiagnostics.flush(api,vault,owner)}}}
         // Processing follows capture state, including while the Activity is locked/backgrounded.
         // A fresh process never auto-submits an interrupted or previously completed recording.
         viewModelScope.launch {
@@ -255,7 +305,7 @@ class AppState(application:Application):AndroidViewModel(application) {
                     val file=File(capture.filePath)
                     val owner=vault.read("recording-owner-${file.name}")
                     // Keep a microphone-interruption or long-visit message visible after the report appears.
-                    recordingNotice=capture.notice;capture.notice?.let{notice=it}
+                    recordingNotice=capture.notice;recordingNoticeVisit=encounterId;capture.notice?.let{notice=it}
                     if(file.path!=cancelledRecordingPath && vault.read("wear-cancel-${file.name}")==null && owner=="${user?.str("id")}:$encounterId" && quickMode=="document" && !voiceCorrection && !voiceMessage && recordingConsent && capture.error==null){
                         upload(file,"audio/mp4","audio")
                     }else refreshRecordingJobs()
@@ -308,7 +358,13 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun toggleTheme(){dark=!dark;vault.write("theme",if(dark)"dark" else "light")}
     private fun setSession(s:JSONObject){val incoming=s.optJSONObject("user") ?: throw ApiException(502,"The server did not return a valid account.");if(demo || user?.str("id")!=incoming.str("id")){persistEditor();clearClinical()};demo=false;user=incoming;if(vault.read("pin-owner")!=incoming.str("id")){pinLock.clear();vault.write("pin-owner",incoming.str("id"));locked=true};if(!pinLock.configured)locked=true;legalRequired=s.optBoolean("requires_legal_acceptance");vault.write("cached-account",obj("user" to incoming,"requires_legal_acceptance" to legalRequired).toString());refreshRecordingJobs()}
     suspend fun refreshSession(){setSession(api.call("/auth/session") as JSONObject)}
-    fun login(email:String,password:String)=runTask {persistEditor();clearClinical();demo=false;user=null;api.clear();setSession(api.call("/auth/login","POST",obj("email" to email.trim(),"password" to password)) as JSONObject);screen="home";refreshHomeInBackground()}
+    fun login(email:String,password:String)=runTask("Signing in") {persistEditor();clearClinical();demo=false;user=null;api.clear()
+        // The free test server sleeps when idle and can take up to a minute to wake. Say so instead of looking stuck.
+        coroutineScope {
+            val waking=if(BuildConfig.ISOLATED_TEST)launch{delay(6_000);taskLabel="Waking up the test server. This can take up to a minute."}else null
+            try{setSession(try{api.call("/auth/login","POST",obj("email" to email.trim(),"password" to password)) as JSONObject}catch(e:ApiException){if(e.status==401)throw IllegalArgumentException("Email or password is incorrect. Check them and try again.") else throw e})}finally{waking?.cancel()}
+        }
+        screen="home";refreshHomeInBackground()}
     fun signup(email:String,password:String,name:String,workspace:String)=runTask {persistEditor();clearClinical();demo=false;user=null;api.clear();val version=config.str("legal_version");setSession(api.call("/auth/signup","POST",obj("email" to email.trim(),"password" to password,"display_name" to name,"workspace_name" to workspace,"accept_terms" to true,"terms_version" to version,"privacy_version" to version)) as JSONObject);refreshHome();screen="home"}
     fun acceptLegal()=runTask {api.call("/auth/accept-legal","POST",obj("accept_terms" to true,"terms_version" to config.str("legal_version"),"privacy_version" to config.str("legal_version")));legalRequired=false;refreshHome();screen="home"}
     suspend fun refreshHome(){
@@ -319,7 +375,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             val e=async{(api.call("/work")as JSONArray).objects()}
             val b=async{api.call("/billing")as JSONObject}
             val people=p.await();val work=e.await();val credits=b.await()
-            if(user?.str("id")==owner && !demo){patients=people;encounters=work;billing=credits}
+            if(user?.str("id")==owner && !demo){patients=people;encounters=work;billing=credits;rememberShiftMetadata()}
         }
     }
     fun refresh()=runTask {if(user==null){config=api.call("/config") as JSONObject}else if(case!=null && screen !in listOf("home","saved","account","new")){reloadCase()}else refreshHome()}
@@ -335,8 +391,9 @@ class AppState(application:Application):AndroidViewModel(application) {
         persistEditor();voiceCorrection=false;voiceMessage=false;voiceInstruction=""
         case=if(demo)JSONObject((demoCases[id]?:throw IllegalArgumentException("Sample encounter not found.")).toString()) else api.call("/encounters/$id") as JSONObject
         answer=null;audit=emptyList();restoreDraft();restoreQuick();screen=quickDestination();refreshRecordingJobs()
+        if(reviewPending){reviewPending=false;notice=null;chooseQuickMode("consultant");screen="consultant";autoReview=true}
     }
-    suspend fun reloadCase(){if(!demo){if(encounterId.startsWith("local-") && RecordingService.state.value.recording){notice="Recording continues on this device. Refresh after stopping.";return};ensureRemoteDocument();case=api.call("/encounters/$encounterId") as JSONObject;val e=case!!.getJSONObject("encounter");encounters=(listOf(e)+encounters.filter{it.str("id")!=e.str("id")}).sortedByDescending{it.str("updated_at")}}}
+    suspend fun reloadCase(){if(!demo){if(encounterId.startsWith("local-") && RecordingService.state.value.recording){notice="Recording continues on this device. Refresh after stopping.";return};ensureRemoteDocument();case=api.call("/encounters/$encounterId") as JSONObject;val e=case!!.getJSONObject("encounter");encounters=(listOf(e)+encounters.filter{it.str("id")!=e.str("id")}).sortedByDescending{it.str("updated_at")};rememberShiftCase()}}
     fun createEncounter(patientId:String?,name:String,external:String,woundId:String?,woundLabel:String,title:String,onPatient:(String)->Unit,onWound:(String)->Unit)=runTask {
         persistEditor();quickMode=null;voiceCorrection=false;voiceMessage=false;voiceInstruction="";answer=null;audit=emptyList()
         if(demo){
@@ -370,7 +427,13 @@ class AppState(application:Application):AndroidViewModel(application) {
         case=api.call("/encounters/"+created.str("id")) as JSONObject
         vault.remove(creationKey);restoreDraft();screen="encounter"
     }
-    private fun warnings(result:JSONObject){val messages=result.optJSONArray("warnings");if(messages!=null&&messages.length()>0)notice=prettyValue(messages)}
+    private fun warnings(result:JSONObject){
+        // Standing reminders the clinician already knows (review before use) are not repeated after every step.
+        val messages=result.optJSONArray("warnings")?:return
+        val kept=(0 until messages.length()).map{messages.optString(it)}.filter{it.isNotBlank() && !routineReminder(it)}
+            .map{if(Regex("\\[(AI_PAUSED|AI_NOT_CONFIGURED)").containsMatchIn(it))"AI processing is temporarily unavailable. Your recording is saved safely. Try again later." else it}.distinct()
+        if(kept.isNotEmpty())notice=kept.joinToString("\n")
+    }
     private fun canonical(value:Any?):String=when(value){
         is JSONObject->value.keys().asSequence().toList().sorted().joinToString(prefix="{",postfix="}"){JSONObject.quote(it)+":"+canonical(value.opt(it))}
         is JSONArray->(0 until value.length()).joinToString(prefix="[",postfix="]"){canonical(value.opt(it))}
@@ -380,17 +443,32 @@ class AppState(application:Application):AndroidViewModel(application) {
         val identity=JSONObject(payload.toString());if(intent=="save")identity.remove("expected_revision")
         return storeKey("pending-$intent-"+hash(canonical(identity)))
     }
-    private suspend fun mutation(intent:String,path:String,payload:JSONObject):JSONObject{
-        val storage=journalKey(intent,payload)
-        val record=vault.read(storage)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: obj("key" to UUID.randomUUID().toString(),"payload" to JSONObject(payload.toString()))
-        vault.write(storage,record.toString())
-        record.optJSONObject("response")?.let{return JSONObject(it.toString())}
-        try{
-            val response=api.call(path,"POST",record.getJSONObject("payload"),record.str("key")) as JSONObject
-            record.put("response",response);vault.write(storage,record.toString());return response
-        }catch(e:ApiException){if(!e.ambiguous && e.status in listOf(400,402,403,404,409,413,415,422,429,502,503))vault.remove(storage);throw e}
+    private val vaultStore=object:CodeStore{
+        override fun read(key:String)=vault.read(key)
+        override fun write(key:String,value:String)=vault.write(key,value)
+        override fun remove(key:String)=vault.remove(key)
     }
-    private fun acknowledge(intent:String,payload:JSONObject){vault.remove(journalKey(intent,payload))}
+    private val journal=RequestJournal(vaultStore,{UUID.randomUUID().toString()})
+    /** The warnings of each SAVED report, kept with that report so opening it from Saved versions shows its own warnings again. */
+    private val savedAlerts get()=DocumentAlertNotes(vaultStore){storeKey("doc-alerts-$it")}
+    private val savedNotices get()=DocumentNotices(vaultStore){storeKey("doc-notice-$it")}
+    /** Notes written by older builds were JSON: read them once so a request already in flight keeps its code. */
+    private fun legacyRecord(raw:String):RequestRecord?=runCatching{val o=JSONObject(raw);RequestRecord(o.getString("key"),o.getJSONObject("payload").toString(),o.optJSONObject("response")?.toString())}.getOrNull()
+    private suspend fun mutation(intent:String,path:String,payload:JSONObject,keepCodeOnServerError:Boolean=false,storageName:String?=null):JSONObject{
+        val storage=storageName?:journalKey(intent,payload)
+        val record=journal.open(storage,payload.toString(),::legacyRecord)
+        record.response?.let{return JSONObject(it)}
+        try{
+            val response=api.call(path,"POST",JSONObject(record.payload),record.code) as JSONObject
+            journal.saveAnswer(storage,record,response.toString());return response
+        }catch(e:ApiException){
+            // AI report: keep the SAME request code for every retry, also after the app is closed and reopened, so a report the
+            // server already finished is sent back without a new AI call or charge. See reportCodeKept.
+            journal.afterError(storage,path,keepCodeOnServerError,e.status,e.ambiguous,e.reportState)
+            throw e
+        }
+    }
+    private fun acknowledge(intent:String,payload:JSONObject){journal.forget(journalKey(intent,payload))}
     private fun mergeSource(r:JSONObject){case=mergeEvidenceResponse(case ?: throw IllegalStateException("No open encounter"),r)}
     fun addEvidence(payload:JSONObject)=runTask {
         ensureRemoteDocument()
@@ -408,7 +486,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         val key="capture-${user?.str("id")}-${encounterId}-$kind"
         vault.remove(key);vault.remove("$key-mime");vault.remove("$key-review")
     }
-    fun upload(file:File,mime:String,kind:String,photoReview:JSONObject?=null):Unit=runTask(when(kind){"audio"->"Transcribing your recording";"photo"->"Assessing your photo";else->"Reading your document"},purpose=kind,retry={upload(file,mime,kind,photoReview)}) {uploadNow(file,mime,kind,photoReview)}
+    fun upload(file:File,mime:String,kind:String,photoReview:JSONObject?=null):Unit=runTask(when(kind){"audio"->"Transcribing recording";"photo"->"Assessing your photo";else->"Reading your document"},purpose=kind,retry={upload(file,mime,kind,photoReview)}) {uploadNow(file,mime,kind,photoReview)}
     private suspend fun uploadNow(file:File,mime:String,kind:String,photoReview:JSONObject?=null){
         if(kind=="audio" && quickMode=="document" && !voiceCorrection && !voiceMessage){rememberRecording(file,mime);processingRecording=file;recordingStage("WAITING_FOR_UPLOAD")}
         ensureRemoteDocument()
@@ -419,18 +497,30 @@ class AppState(application:Application):AndroidViewModel(application) {
         fun photoEvent(stage:String,status:String){if(kind=="photo" && uploadOwner!=null && photoJob!=null)runCatching{DeveloperDiagnostics.photo(vault,uploadOwner,photoJob,file,stage,photoStart,status)}}
         photoEvent("photo_source","success")
         val digest=withContext(Dispatchers.IO){val md=MessageDigest.getInstance("SHA-256");file.inputStream().use{input->val b=ByteArray(8192);while(true){val n=input.read(b);if(n<0)break;md.update(b,0,n)}};md.digest().joinToString(""){"%02x".format(it.toInt() and 255)}}
+        // Paid AI work already done is reused: the same recording or photo already in this visit is never sent again.
+        if(!demo && !voiceCorrection && !voiceMessage && kind in listOf("audio","photo") && case?.items("evidence")?.any{it.str("kind")==kind && it.optJSONObject("metadata")?.str("media_hash")==digest}==true){
+            notice="This was already processed. The existing result is being used."
+            screen=if(quickMode=="consultant")"consultant" else if(editor.isNotBlank())"editor" else "encounter";return
+        }
         val captureKind=if(kind=="audio" && voiceMessage)"message"else if(kind=="audio" && voiceCorrection)"correction"else if(kind=="document")"file"else kind
         val identity=obj("file" to file.name,"hash" to digest,"mime" to mime,"kind" to kind,"photo_review" to photoReview)
+        // The note and wound details are part of the photo request: an unchanged retry reuses the same request (no
+        // second charge), while changed entries make a new request.
+        val sentNote=if(kind=="photo")photoNote.trim().take(4000) else ""
+        val sentDetails=if(kind=="photo" && !photoDetails.isEmpty())photoDetails.toJson() else null
+        if(sentNote.isNotBlank())identity.put("clinician_note",sentNote)
+        if(sentDetails!=null)identity.put("clinician_findings",sentDetails)
         if(captureKind in listOf("message","correction"))identity.put("purpose",captureKind)
         val keyName=storeKey("upload-"+hash(canonical(identity)));val key=vault.read(keyName) ?: UUID.randomUUID().toString().also{vault.write(keyName,it)}
         if((voiceCorrection || voiceMessage) && kind=="audio"){
             val r=if(demo)obj("text" to if(voiceMessage)"What else would you want to know?"else "Make the report more concise.","warnings" to JSONArray().put("Sample only. No transcription was performed."))else uploadResponse(keyName){api.multipart("/encounters/$encounterId/transcribe-$captureKind",file,mime,mapOf("consent" to "true"),key)}
             require(demo || r.optInt("case_revision")==revision){"Your sources changed. Your recording is saved; review the current conversation before trying again."}
-            if(voiceMessage){updateConsultantDraft(listOf(consultantDraft,r.str("text")).filter{it.isNotBlank()}.joinToString("\n\n"));consultantReset++}
+            if(voiceMessage && voicePhotoNote)updatePhotoNote(listOf(photoNote,r.str("text")).filter{it.isNotBlank()}.joinToString(" "))
+            else if(voiceMessage){updateConsultantDraft(listOf(consultantDraft,r.str("text")).filter{it.isNotBlank()}.joinToString("\n\n"));consultantReset++}
             else voiceInstruction=r.str("text")
             warnings(r);vault.remove(keyName);clearCaptureSelection(captureKind)
             if(file.canonicalFile.parentFile==File(getApplication<Application>().filesDir,"recordings").canonicalFile && file.extension=="m4a")RecordingService.clearPending(getApplication(),file.absolutePath)
-            screen=if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;return
+            screen=if(voicePhotoNote)photoNoteReturn else if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;voicePhotoNote=false;return
         }
         if(demo){val copy=JSONObject(case.toString());val id=UUID.randomUUID().toString();copy.getJSONArray("evidence").put(obj("id" to id,"kind" to kind,"text" to "Synthetic preview: no AI request was sent.","created_at" to now(),"metadata" to obj("filename" to file.name,"mime" to mime,"media_hash" to digest,"raw_media_retained" to false,"photo_review" to photoReview)));copy.getJSONObject("encounter").put("revision",revision+1);case=copy;vault.write(storeKey("source-$id"),file.absolutePath);notice="Capture kept on this device. No provider request was sent."}
         else {
@@ -444,8 +534,8 @@ class AppState(application:Application):AndroidViewModel(application) {
             val r=try {
                 uploadResponse(keyName){
                     if(kind=="audio" && file.extension.lowercase() in listOf("m4a","mp4"))
-                        AudioChunks(api,vault).transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
-                    else api.upload(encounterId,file,mime,kind,key,photoReview)
+                        AudioChunks(api,vault).apply{summary=summaryNext && quickMode=="document"}.transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
+                    else api.upload(encounterId,file,mime,kind,key,photoReview,sentNote.ifBlank{null},sentDetails)
                 }.also { if(kind=="photo")requireValidPhotoUpload(it) }
             }catch(e:Exception){
                 photoEvent("photo_retained",if(file.isFile && file.length()>0)"success"else "failed")
@@ -455,6 +545,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             if(kind=="photo" && (uploadOwner!=user?.str("id") || uploadEncounter!=encounterId))
                 throw ApiException(409,"The active visit changed. Reopen the original visit to see its photo assessment.")
             photoEvent("photo_request","success")
+            if(kind=="photo")photoEntriesSent=hash(sentNote+"|"+(sentDetails?.toString()?:""))
             r.optJSONObject("evidence")?.str("id")?.let{vault.write(storeKey("source-$it"),file.absolutePath)}
             mergeSource(r);warnings(r);screen="encounter"
             if(visitParts.size>1)visitParts.drop(position+1).forEachIndexed{index,part->transcribeVisitPart(part,mime,VisitPosition(position+index+2,visitParts.size,visitId))}
@@ -509,8 +600,16 @@ class AppState(application:Application):AndroidViewModel(application) {
         consultantDraft=vault.read(storeKey("consult-draft"))?:"";consultantReset++
     }
     fun chooseQuickMode(mode:String){quickMode=mode;vault.write(storeKey("quick-mode"),mode)}
+    var autoReview by mutableStateOf(false)
+    private var reviewPending=false
+    /** Diagnostics and Write Order are Document with a ready-made format. The choice is not saved as the default. */
+    fun startDocumentAs(format:String){startQuick("document");if(!loading&&case!=null)templateValue=format}
+    /** Review Case: pick a saved visit, then the consultant reviews it automatically. */
+    fun beginCaseReview(){if(loading)return;reviewPending=true;notice="Choose the visit to review.";screen="saved"}
     fun startQuick(mode:String){
         if(loading)return
+        reviewPending=false
+        reportFromConsultation=false;consultantReportPrompt=false
         processingRecording=null
         recordingConsent=false
         if(mode=="document" && !demo){
@@ -533,12 +632,13 @@ class AppState(application:Application):AndroidViewModel(application) {
         check(user?.str("id")==owner && encounterId==local){"The active visit changed. Reopen your saved recording to continue."}
         vault.write(cache,response.toString())
         DeveloperDiagnostics.link(vault,owner,local,response.getJSONObject("encounter").str("id"))
+        forgetShiftVisit(local)
         case=response;editorOwner=storeKey("draft");chooseQuickMode(mode);updateTemplate(format)
         bindDiagnostics()
         persistEditor()
         processingRecording?.let{file->vault.write("recording-owner-${file.name}","$owner:$encounterId");recordingRecovery.remember(file,owner,response,format)}
     }
-    private fun startRemoteQuick(mode:String)=runTask("Opening ${if(mode=="consultant")"Wound Consultant" else mode}") {
+    private fun startRemoteQuick(mode:String)=runTask("Opening ${if(mode=="consultant")"Ask Consultant" else mode}") {
         require(mode in listOf("document","photo","consultant"))
         persistEditor();voiceCorrection=false;voiceMessage=false;voiceInstruction=""
         val key="quick-start-${user?.str("id")?:"sample"}-$mode"
@@ -556,9 +656,86 @@ class AppState(application:Application):AndroidViewModel(application) {
         screen=quickDestination()
     }
     var deleteWorkId by mutableStateOf<String?>(null)
+    /** Own name for a saved visit. Kept only on this phone (encrypted vault), never sent to the server or into diagnostics. */
+    var renameWorkId by mutableStateOf<String?>(null)
+    private var visitNameTick by mutableStateOf(0)
+    private fun visitNameKey(id:String)="visit-name-${user?.str("id") ?: "sample"}-$id"
+    fun visitName(id:String):String{visitNameTick;return runCatching{vault.read(visitNameKey(id)).orEmpty()}.getOrDefault("")}
+    fun renameVisit(id:String,name:String){
+        val clean=name.trim().take(60)
+        runCatching{if(clean.isBlank())vault.remove(visitNameKey(id)) else vault.write(visitNameKey(id),clean)}
+        visitNameTick++;renameWorkId=null
+    }
     var closeWorkPrompt by mutableStateOf(false)
+    // End-of-shift reads only local copies. These hooks observe data already returned by existing routes.
+    private val shiftCache by lazy { ShiftSummaryCache(vaultStore) { vault.names() } }
+    private var shiftStorageProblem = false
+    private fun shiftOwner() = user?.str("id")?.takeIf { it.isNotBlank() }
+    private fun shiftVisit(row:JSONObject, reportsKnown:Boolean=false, reports:List<ShiftReport> = emptyList()):ShiftVisit? {
+        val owner=shiftOwner()?:return null
+        val id=row.str("id").takeIf { it.isNotBlank() }?:throw IllegalStateException("A visit could not be checked.")
+        val earlier=shiftCache.read(owner,id)
+        val started=shiftVisitStart(row.str("created_at"),earlier?.startedAt,row.str("updated_at"))
+            ?: throw IllegalStateException("A visit date could not be checked.")
+        return ShiftVisit(id,row.str("title").ifBlank { "Visit" },started,row.optInt("revision"),reportsKnown,reports)
+    }
+    private fun rememberShiftMetadata() {
+        val owner=shiftOwner()?:return
+        try {
+            val zone=java.time.ZoneId.systemDefault();val today=java.time.LocalDate.now(zone)
+            encounters.forEach { row ->
+                val created=storedInstant(row.str("created_at"))
+                if(created==null || created.atZone(zone).toLocalDate()==today)
+                    shiftVisit(row)?.let { shiftCache.metadata(owner,it,today,zone) }
+            }
+        } catch (_:Exception) { shiftStorageProblem=true }
+    }
+    private fun rememberShiftCase(confirmedWarningDocumentId:String?=null) {
+        val owner=shiftOwner()?:return
+        val data=case?:return
+        val row=data.optJSONObject("encounter")?:return
+        try {
+            val previous=shiftCache.read(owner,row.str("id"))
+            if(previous!=null && previous.revision>row.optInt("revision"))return
+            val latest=data.items("documents").maxWithOrNull(compareBy<JSONObject>{it.optInt("version")}.thenBy{it.str("id")})
+            val reports=listOfNotNull(latest).map { d ->
+                val id=d.str("id")
+                // Read this visit's own saved records, never the global banner or another visit's alerts.
+                val keyFor:(String)->String={ kind -> "$kind-$owner-${row.str("id")}" }
+                val previousReport=previous?.reports?.firstOrNull { it.id==id }
+                val notice=DocumentNotices(vaultStore) { keyFor("doc-notice-$it") }.read(id) ?: previousReport?.notice
+                val alerts=DocumentAlertNotes(vaultStore) { keyFor("doc-alerts-$it") }.read(id)?.first ?: previousReport?.alerts.orEmpty()
+                ShiftReport(id,d.optInt("version"),d.str("status"),d.str("text"),notice,alerts,
+                    id==confirmedWarningDocumentId || previousReport?.warningRecordKnown==true)
+            }
+            val zone=java.time.ZoneId.systemDefault();val today=java.time.LocalDate.now(zone)
+            shiftVisit(row,data.has("documents"),reports)?.let { shiftCache.remember(owner,it,today,zone) }
+        } catch (_:Exception) { shiftStorageProblem=true }
+    }
+    private fun forgetShiftVisit(id:String) {
+        val owner=shiftOwner()?:return
+        try { shiftCache.remove(owner,id) } catch (_:Exception) { shiftStorageProblem=true }
+    }
+    fun openShiftSummary() {
+        if(loading || RecordingService.state.value.recording)return
+        screen="shift_summary"
+    }
+    internal fun shiftSummarySnapshot(today:java.time.LocalDate,zone:java.time.ZoneId):ShiftSummaryPlan? {
+        val owner=shiftOwner()?:return null
+        return try {
+            rememberShiftMetadata();rememberShiftCase()
+            if(shiftStorageProblem)return null
+            if(case!=null)persistEditor()
+            val visits=shiftCache.today(owner,today,zone)
+            // The clinician's own newer edits kept on this phone (not yet saved to the server) are the report as written.
+            val edits=visits.mapNotNull{v->vault.read("draft-$owner-${v.id}")?.let{runCatching{JSONObject(it).str("text")}.getOrNull()}?.takeIf{it.isNotBlank()}?.let{v.id to it}}.toMap()
+            planShiftSummary(applyPhoneEdits(visits,edits),today,zone)
+        } catch (_:Exception) { null }
+    }
     fun isSavedWork(row:JSONObject)=row.str("storage_state")=="saved" || row.optJSONObject("draft_data")?.str("retention")=="saved"
     private fun eraseLocalWork(id:String){
+        runCatching{vault.remove(visitNameKey(id))}
+        forgetShiftVisit(id)
         recordingRecovery.complete(id,user?.str("id")?:"sample");refreshRecordingJobs()
         val context=getApplication<Application>();val owner="${user?.str("id")}:$id"
         // Only remove copies inside this app's private directories, never gallery originals.
@@ -598,9 +775,19 @@ class AppState(application:Application):AndroidViewModel(application) {
         encounters=encounters.filter{it.str("id") !in ids};deleteWorkId=null;screen="saved";refreshHome()
         notice="Deleted from active app storage. Copies already exported or retained in backups are outside this deletion."
     }
-    fun saveWorkAndClose()=runTask("Saving work"){
+    fun saveWorkAndClose()=runTask("Saving report…"){
+        viewModelScope.launch{delay(8000);if(loading && taskLabel=="Saving report…")taskLabel="Still saving. Your report is safe on this device."}
         ensureRemoteDocument()
-        if(editor.isNotBlank() && savedId==null)saveDocumentNow()
+        if(editor.isNotBlank() && savedId==null) {
+            // Keep the close dialog open when a photo has changed the source revision.
+            // No automatic approval of clinical changes or loss of the edited draft.
+            try { saveDocumentNow() }
+            catch(e:Exception) {
+                closeWorkPrompt=true
+                persistEditor()
+                throw e
+            }
+        }
         if(!demo)api.call("/work/$encounterId/save","POST",JSONObject())
         case?.getJSONObject("encounter")?.put("storage_state","saved")?.getJSONObject("draft_data")?.put("retention","saved")
         recordingRecovery.complete(encounterId,user?.str("id")?:"sample");refreshRecordingJobs()
@@ -621,6 +808,53 @@ class AppState(application:Application):AndroidViewModel(application) {
         quickMode=null;screen="home";notice=null;dismissError();if(demo)publishDemo()
     }
     fun quickConsultant(){if(loading)return;chooseQuickMode("consultant");screen="consultant";notice=null;dismissError()}
+    /** Done on Ask Consultant: offer a report first when there is a conversation to keep. */
+    fun finishConsultant(){
+        if(loading)return
+        if(showsReportChoicesOnDone(quickMode,consultantMessages.isNotEmpty(),editor.isBlank())){consultantReportPrompt=true;return}
+        doneQuick()
+    }
+    fun closeConsultantWithoutReport(){consultantReportPrompt=false;doneQuick()}
+    /** Writes the selected report type from the whole consultation: questions, answers and attached photos and files. */
+    fun reportFromConsultant(format:String,withConversation:Boolean=true):Unit=runTask("Creating report",purpose="report",retry={reportFromConsultant(format,withConversation)}){
+        consultantReportPrompt=false;reportFromConsultation=withConversation
+        recordingNotice=unreadableAttachments();recordingNoticeVisit=encounterId
+        val modeBefore=quickMode
+        updateTemplate(format);chooseQuickMode("document")
+        try{draftQuick(true,format)}catch(e:Throwable){
+            // A failed report must not strand the nurse on the Document screen: Done on Ask Consultant must offer the choices again.
+            quickMode=modeAfterFailedConsultantReport(modeBefore,editor.isBlank(),quickMode);throw e
+        }
+    }
+    /**
+     * The nurse's own choice to leave the conversation out: ONCE, an earlier unfinished (maybe paid) report is put aside, so the report that
+     * appears is the one the notice describes. Try again after a failure then repeats [reportFromConsultant] and keeps the NEW request's code.
+     */
+    fun reportWithoutConversation(format:String){
+        if(loading)return
+        journal.abandonPointer(storeKey("pending-report"))
+        vault.write(storeKey("left-out-choice"),"1")   // remembered on the phone: the notice must survive closing the app before the note returns
+        reportFromConsultant(format,withConversation=false)
+    }
+    /** True when an earlier AI report of this visit was sent and may already be written and paid for. */
+    fun earlierReportWaiting():Boolean=!demo && journal.pendingFor(storeKey("pending-report"),revision.toString(),::legacyRecord)!=null
+    /** True when the whole Ask Consultant conversation can go into a report (see [consultationFits]). */
+    fun consultationFitsNow()=consultationFits(consultantMessages.map{it.str("content")}.filter{it.isNotBlank()})
+    /** Names every attached photo or file that could not be read, so it is never silently left out. */
+    private fun unreadableAttachments():String?{
+        val sources=case?.items("evidence").orEmpty().filter{it.str("kind") in listOf("photo","document","result")}
+        val photos=sources.filter{it.str("kind")=="photo"};val files=sources.filter{it.str("kind")!="photo"}
+        // A photo keeps no text of its own. The server only saves a photo it assessed, so a saved photo
+        // is missing from the report only when the assessment asked for a retake.
+        val missing=photos.mapIndexedNotNull{i,it->
+            val retake=it.optJSONObject("metadata")?.optJSONObject("photo_quality")?.optBoolean("retake_required")==true
+            if(retake)"Photo ${i+1} (it could not be assessed)" else null
+        }+files.mapIndexedNotNull{i,it->
+            val name=it.optJSONObject("metadata")?.str("filename").orEmpty().ifBlank{"File ${i+1}"}
+            if(it.str("text").isBlank())"$name (it could not be read)" else null
+        }
+        return if(missing.isEmpty())null else "Not included in the report: ${missing.joinToString("; ")}. These attachments are still kept with this work."
+    }
     fun finishPhotoAssessment(){if(loading)return;notice=null;dismissError();when(quickMode){"consultant"->screen="consultant";"document"->screen=if(editor.isBlank())"document_capture"else "editor";else->doneQuick()}}
     fun photoLayout():List<JSONObject>{
         val photos=case?.items("evidence").orEmpty().filter{it.str("kind")=="photo"}
@@ -645,15 +879,19 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     fun retakePhoto(){if(loading)return;clearCaptureSelection("photo");notice=null;dismissError();screen="photo"}
     fun updateConsultantDraft(text:String){consultantDraft=text;vault.write(storeKey("consult-draft"),consultantDraft)}
-    fun sendConsultant(message:String):Unit=runTask("Wound Consultant is responding",purpose="consultant",retry={sendConsultant(message)}) {
+    fun sendConsultant(message:String):Unit=runTask("Consultant is responding",purpose="consultant",retry={sendConsultant(message)}) {
         ensureRemoteDocument()
         val text=message.trim();require(text.isNotBlank()&&text.length<=2000){"Enter a question within 2,000 characters."}
         val pending=consultantMessages.lastOrNull()?.let{it.str("role")=="user"&&it.str("content")==text}==true
         val history=if(pending)consultantMessages.dropLast(1)else consultantMessages
         if(!pending){consultantMessages=consultantMessages+obj("id" to UUID.randomUUID().toString(),"role" to "user","content" to text);vault.write(storeKey("consult-chat"),JSONArray(consultantMessages).toString())}
+        // Send the report exactly as it is on screen (including unsaved edits) so a review never checks an older version.
+        if(editorOwner==storeKey("draft"))persistEditor()
+        val onScreen=editor.takeIf{editorOwner==storeKey("draft") && it.isNotBlank() && it.length<=60000}
         val payload=obj("message" to text,"history" to JSONArray(boundedConsultHistory(history).map{obj("role" to it.str("role"),"content" to it.str("content"))}))
+        if(onScreen!=null)payload.put("current_report",onScreen)
         val sourceRevision=revision;val intent="consult-$sourceRevision"
-        val reply=if(demo)obj("answer" to "This is the local sample. In a connected visit, Wound Consultant can start with your question and the information you choose to add. No model was called.","case_revision" to revision)else mutation(intent,"/encounters/$encounterId/consult",payload)
+        val reply=if(demo)obj("answer" to "This is the local sample. In a connected visit, Ask Consultant can start with your question and the information you choose to add. No model was called.","case_revision" to revision)else mutation(intent,"/encounters/$encounterId/consult",payload)
         require(reply.optInt("case_revision")==revision){"Your sources changed. Ask again using the current sources."}
         consultantMessages=consultantMessages+obj("id" to UUID.randomUUID().toString(),"role" to "assistant","content" to reply.str("answer"),"effort" to reply.str("effort_level"))
         vault.write(storeKey("consult-chat"),JSONArray(consultantMessages.takeLast(100)).toString());updateConsultantDraft("");consultantReset++
@@ -667,7 +905,8 @@ class AppState(application:Application):AndroidViewModel(application) {
             if(quality?.optBoolean("retake_required")==true){screen="photo_assessment";return}
         }
         when(quickMode){
-            "document"->{screen="document_capture";if(kind in listOf("audio","typed","transcript") && editor.isBlank())draftQuick(true)}
+            "document"->{screen="document_capture";val textOnly=textOnlyNext;if(kind=="audio")textOnlyNext=false
+                if(kind=="audio" && summaryNext){summaryNext=false;if(editor.isNotBlank())notice="Your spoken summary was added. Open the report and generate it again to include it."};if(!textOnly && kind in listOf("audio","typed","transcript") && editor.isBlank())draftQuick(true)}
             "photo"->screen="photo_assessment"
             "consultant"->screen="consultant"
         }
@@ -677,29 +916,72 @@ class AppState(application:Application):AndroidViewModel(application) {
         recordingStage("GENERATING_REPORT");Performance.start("report_request")
         // Once a source is accepted, retry only drafting, never its successful upload.
         taskRecovery("report"){reformatOrRetry(ai,format)}
-        taskLabel=if(ai)"Preparing and checking your report"else "Preparing your draft"
-        val start=localRevision;val sourceRevision=revision;val intent="quick-report-$sourceRevision"
+        taskLabel=if(ai)"Creating report"else "Preparing your draft"
+        val start=localRevision;val sourceRevision=revision
         val payload=obj("template" to format,"use_ai" to ai,"preferred_length" to reportLength)
         if(format=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
-        val response=if(demo)sampleDocument(case!!,format)
-            else try{mutation(intent,"/encounters/$encounterId/quick-report",payload)}catch(e:ApiException){
-                if(!ai || e.status !in listOf(402,429,502,503,504))throw e
-                // The failed AI draft is never promoted. Reuse acknowledged original sources.
-                // A distinct stable identity prevents a failed AI replay from blocking local drafting.
-                val recovered=mutation("$intent-source-only","/encounters/$encounterId/quick-report",JSONObject(payload.toString()).put("use_ai",false))
-                recovered.put("ui_alerts",JSONArray().put(obj("field" to "review","message" to "AI generation or checking could not complete. This source-only draft has not passed an AI check. Review the original source before using it.")))
-                recovered.put("warnings",JSONArray().put("A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording."))
-                recovered
+        // An unfinished (maybe already paid) AI report of this visit is resumed exactly as it was sent, with its own request code,
+        // even if the settings are different now (for example after reopening the app, when "include the conversation" starts off).
+        val pointer=storeKey("pending-report")
+        val earlier=if(ai && !demo)journal.pendingFor(pointer,sourceRevision.toString(),::legacyRecord) else null
+        // The conversation is sent whole or not at all: it is never shortened, never cut to its newest messages, and never silently left out.
+        val chat=if(reportFromConsultation && earlier==null)consultantMessages.filter{it.str("content").isNotBlank()} else emptyList()
+        if(chat.isNotEmpty() && !consultationFits(chat.map{it.str("content")})){
+            reportFromConsultation=false   // the next Generate report is then the nurse's own choice to go without it
+            throw IllegalArgumentException(CONSULTATION_TOO_LONG_MESSAGE)
+        }
+        val consultation=chat.map{obj("role" to (if(it.str("role")=="user")"user" else "assistant"),"content" to it.str("content"))}
+        if(consultation.isNotEmpty())payload.put("consultation",JSONArray(consultation))
+        var intent="quick-report-$sourceRevision"+if(consultation.isEmpty())"" else "-consult-"+hash(canonical(JSONArray(consultation))).take(16)
+        if(earlier!=null){
+            val sent=JSONObject(earlier.second.payload)
+            for(k in payload.keys().asSequence().toList())payload.remove(k)
+            for(k in sent.keys())payload.put(k,sent.get(k))
+        }
+        val reportFormat=payload.optString("template",format)
+        var reportStorage=earlier?.first?:journalKey(intent,payload)
+        if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
+        val leftOutKey=storeKey("left-out-$reportStorage")
+        // An unreadable-attachment warning is saved with the request too, so recovering after the app was fully closed still names it.
+        val attachKey=storeKey("attach-warn-$reportStorage")
+        val ownAttachmentNotice=attachmentNoticeForVisit(recordingNoticeVisit,encounterId,recordingNotice)
+        if(ai && !demo)ownAttachmentNotice?.let{vault.write(attachKey,it)}
+        if(ai && !demo && earlier==null && vault.read(storeKey("left-out-choice"))!=null){vault.write(leftOutKey,"1");vault.remove(storeKey("left-out-choice"))}
+        fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage);vault.remove(leftOutKey);vault.remove(attachKey)}
+        suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
+            if(e.status!=422 || !payload.has("consultation"))throw e
+            // The server refused the conversation. Never write the report without it on our own: stop and say so.
+            // Keep the note AND the pointer: this try says nothing about an earlier try that may have finished and been charged, and every later
+            // Generate report must recover that request, never quietly start a new, charged one. Leaving it behind is the nurse's own choice.
+            throw IllegalArgumentException(CONSULTATION_REFUSED_MESSAGE)
+        }
+        val response=if(demo)sampleDocument(case!!,reportFormat)
+            else try{
+                // One quiet automatic retry: a report the checker rejected or a busy service often succeeds the second time.
+                try{request()}catch(first:ApiException){
+                    if(!ai || first.status !in listOf(502,503,504))throw first
+                    taskLabel="Still writing the report"
+                    request()
+                }
+            }catch(e:ApiException){
+                if(!ai || e.status !in listOf(429,502,503,504))throw e
+                // The failed AI draft is never shown, and the raw transcript is not offered as a report.
+                // Sources stay saved; Try again redoes only the report (set by taskRecovery above).
+                throw ReportRetryException(if(e.status==429)"Too many reports at once, so the report was NOT generated. Wait a moment, then tap Try again. Your recording and transcript are saved."
+                    else "The report was NOT generated this time, so there is no report to review. Your recording and its transcript are saved. Tap Try again to write the report.")
             }
         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed during generation. Your edits were preserved."}
-        if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return}
-        snapshotDraft();restoring=true;editorTemplate=format;restoring=false
-        vault.write("preferred-format-${user?.str("id")?:"sample"}",format)
+        if(!acceptDocumentResult(response)){if(!demo)reportDone();return}
+        snapshotDraft();restoring=true;editorTemplate=reportFormat;restoring=false
+        vault.write("preferred-format-${user?.str("id")?:"sample"}",reportFormat)
         Performance.end("report_request");val persistStarted=Performance.now()
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
-        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response);recordingNotice?.let{extra->notice=listOfNotNull(notice,extra).joinToString("\n");recordingNotice=null};persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)acknowledge(intent,payload);Performance.start("report_ui");screen="editor"
+        editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;notice=null;warnings(response)
+        // The omission warning goes ALONGSIDE the server's warnings (never over them), and all of them are saved with the draft.
+        notice=combineReportNotices(!payload.has("consultation") && vault.read(leftOutKey)!=null,notice,ownAttachmentNotice?:vault.read(attachKey));recordingNotice=null;recordingNoticeVisit=null
+        draftNotice=notice;persistEditor();recordingStage("REPORT_READY");Performance.record("report_state",persistStarted);if(!demo)reportDone();Performance.start("report_ui");screen="editor"
     }
-    fun quickReport(ai:Boolean=true)=runTask(if(ai)"Preparing your report" else "Preparing a source-based draft"){draftQuick(ai)}
+    fun quickReport(ai:Boolean=true)=runTask(if(ai)"Creating report" else "Preparing a source-based draft"){draftQuick(ai)}
     private fun reformatOrRetry(ai:Boolean,format:String)=runTask("Preparing your report"){draftQuick(ai,format)}
     fun reformatQuick(format:String)=runTask("Changing report format"){draftQuick(true,format)}
     fun applyVoiceCorrection():Unit=runTask("Applying your correction",purpose="report",retry={applyVoiceCorrection()}){
@@ -711,10 +993,19 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!acceptDocumentResult(response)){if(!demo)acknowledge(intent,payload);return@runTask}
         snapshotDraft();editor=response.str("text");savedId=null;editorCaseRevision=response.optInt("case_revision",revision);localRevision++;persistEditor();if(!demo)acknowledge(intent,payload);voiceCorrection=false;voiceInstruction="";warnings(response);screen="editor"
     }
+    /** Says what is actually missing instead of a generic refusal. */
+    private fun missingInfoMessage():String{
+        val kinds=case?.items("evidence")?.map{it.str("kind")}.orEmpty()
+        return when{
+            kinds.isEmpty()->"Nothing has been added yet. Record or type the assessment and treatment, then generate the note."
+            kinds.all{it=="photo"}->"The current source only contains a photo. Add assessment or treatment information (record it or type it) before generating the nursing note."
+            else->"The sources added so far do not contain enough assessment or treatment information to write a note. Add what you assessed or did, then generate again."
+        }
+    }
     private fun acceptDocumentResult(result:JSONObject):Boolean {
-        documentAlerts=result.items("ui_alerts").map{it.str("message")}.filter{it.isNotBlank()}
+        orderedReportAlerts(result.items("ui_alerts").map{it.str("field") to it.str("message")}).let{(all,safety)->documentAlerts=all;documentAlertSafetyCount=safety}
         if(result.str("status","ready")!="ready" || result.str("text").isBlank()){
-            notice=result.str("ui_message").ifBlank{"Not enough visit information to generate this document."}
+            notice=result.str("ui_message").let{m->if(m.isBlank() || m.startsWith("Not enough visit information")) missingInfoMessage() else m}
             return false
         }
         return true
@@ -745,9 +1036,79 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!demo)acknowledge(intent,payload)
     }
     fun cancelVoiceCorrection(){if(RecordingService.state.value.recording)return;voiceCorrection=false;voiceInstruction="";screen="editor";dismissError()}
-    fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();screen="record"}
-    fun recordConsultantMessage(){if(loading)return;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();screen="record"}
+    fun fixByVoice(){if(loading)return;persistEditor();voiceCorrection=true;voiceMessage=false;dismissError();autoStartRecording=true;screen="record"}
+    // ---------- Photo assessment: the clinician's own words, and the two-part result (owner request 2026-11-05) ----------
+    /** What the clinician typed or said about the wound. Kept on this phone only; sent once with the note request. */
+    var photoNote by mutableStateOf(""); private set
+    var photoChartNote by mutableStateOf<String?>(null); private set
+    var photoConsultReview by mutableStateOf<String?>(null); private set
+    var photoNoteAlerts by mutableStateOf<List<String>>(emptyList()); private set
+    var photoResultVisit by mutableStateOf<String?>(null); private set
+    var photoDetails by mutableStateOf(PhotoDetails()); private set
+    /** Fingerprint of the note and details that already went to the server with a photo of this visit. */
+    private var photoEntriesSent:String?=null
+    fun updatePhotoDetails(details:PhotoDetails){photoDetails=details;photoNoteVisit=encounterId;runCatching{vault.write(storeKey("photo-details"),details.toStored())}}
+    private var voicePhotoNote=false
+    private var photoNoteReturn="photo_assessment"
+    private var photoNoteVisit:String?=null
+    fun updatePhotoNote(text:String){photoNote=text.take(4000);photoNoteVisit=encounterId;runCatching{vault.write(storeKey("photo-note"),photoNote)}}
+    fun loadPhotoNote(){
+        if(photoResultVisit!=encounterId){photoChartNote=null;photoConsultReview=null;photoNoteAlerts=emptyList()}
+        val saved=runCatching{vault.read(storeKey("photo-note"))}.getOrNull()
+        // A note typed before the first photo belongs to the visit that photo starts (its address changes once it is sent).
+        val carried=photoNoteVisit?.let{it==encounterId || it.startsWith("local-")}==true
+        photoNote=saved ?: if(carried)photoNote else ""
+        val savedDetails=runCatching{vault.read(storeKey("photo-details"))}.getOrNull()
+        photoDetails=if(savedDetails!=null)PhotoDetails.fromStored(savedDetails) else if(carried)photoDetails else PhotoDetails()
+        if(saved==null && carried && photoNote.isNotBlank())updatePhotoNote(photoNote)
+        if(savedDetails==null && carried && !photoDetails.isEmpty())updatePhotoDetails(photoDetails)
+        if(!carried && saved==null)photoEntriesSent=null
+    }
+    fun recordPhotoNote(){if(loading)return;photoNoteReturn=if(screen=="photo")"photo" else "photo_assessment";voiceCorrection=false;voiceMessage=true;voicePhotoNote=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
+    /**
+     * Part 1: a charting note from the photo findings plus the clinician's own words (the normal report pipeline, so the
+     * source check runs). Part 2: a consultant review from Ask Consultant. Part 2 is AI suggestions and is never charted.
+     */
+    fun photoNoteAndReview():Unit=runTask("Writing the charting note and consultant review",purpose="report",retry={photoNoteAndReview()}){
+        ensureRemoteDocument()
+        val visit=encounterId;val sourceRevision=revision;val note=photoNote.trim().take(4000)
+        // Entries already sent with a photo are stored with that photo on the server and reach the note from there.
+        val alreadySent=photoEntriesSent==hash(note+"|"+(if(photoDetails.isEmpty())"" else photoDetails.toJson().toString()))
+        val turns=if(note.isBlank() || alreadySent)JSONArray() else JSONArray().put(obj("role" to "user","content" to note))
+        val reportPayload=obj("template" to "nursing","use_ai" to true,"preferred_length" to "concise","consultation" to turns)
+        val reportIntent="photo-note-$sourceRevision-"+hash(note).take(16)
+        val report=if(demo)obj("text" to "Sample charting note. No AI request was sent.","case_revision" to revision)else mutation(reportIntent,"/encounters/$visit/quick-report",reportPayload,keepCodeOnServerError=true)
+        require(encounterId==visit && report.optInt("case_revision")==revision){"Your photos changed. Create the note again."}
+        val text=report.str("text").trim()
+        require(text.isNotBlank()){report.str("ui_message").ifBlank{"A charting note could not be written from these photos. Add your notes and try again."}}
+        photoChartNote=text;photoResultVisit=visit
+        photoNoteAlerts=report.items("ui_alerts").map{it.str("message")}.filter{it.isNotBlank()}
+        if(!demo)acknowledge(reportIntent,reportPayload)
+        val question=("Consultant review of this photo assessment"+(if(note.isNotBlank())", with my notes: "+note else "")+
+            ". Give the likely picture, what it may be concerning for, what to check next, dressing categories that fit, red flags and when to escalate.").take(2000)
+        val consultPayload=obj("message" to question,"history" to JSONArray(),"current_report" to text)
+        val consultIntent="photo-review-$sourceRevision-"+hash(question).take(16)
+        val reply=if(demo)obj("answer" to "Sample consultant review. No AI request was sent.","case_revision" to revision)else mutation(consultIntent,"/encounters/$visit/consult",consultPayload)
+        require(encounterId==visit){"The active visit changed."}
+        photoConsultReview=reply.str("answer").trim().ifBlank{null}
+        if(!demo)acknowledge(consultIntent,consultPayload)
+    }
+    /** Part 1 into the normal report editor, to edit, save or add to the end-of-shift list. Part 2 is never copied in. */
+    fun openPhotoNoteAsReport(){
+        val note=photoChartNote?:return
+        if(loading)return
+        chooseQuickMode("document");editorOwner=storeKey("draft");updateTemplate("nursing");snapshotDraft();editor=note;savedId=null;localRevision++;persistEditor();screen="editor"
+    }
+    fun recordConsultantMessage(){if(loading)return;voicePhotoNote=false;voiceCorrection=false;voiceMessage=true;notice=null;dismissError();autoStartRecording=true;screen="record"}
     fun cancelVoiceMessage(){if(RecordingService.state.value.recording)return;voiceMessage=false;notice=null;dismissError();screen="consultant"}
+    /** Send > Computer: saves the current wording first if needed, then makes a one-time link and code. */
+    fun sendToComputer()=runTask("Preparing secure link"){
+        require(!demo){"Secure links are available after signing in. Use Another app or Copy for this sample."}
+        val saved=case?.items("documents")?.firstOrNull{it.str("id")==savedId}
+        if(saved==null || saved.str("text")!=editor || saved.str("template")!=editorTemplate)saveDocumentNow()
+        val id=savedId;require(id!=null){"Save the report before sending it to a computer."}
+        transfer=api.call("/transfers","POST",obj("document_ids" to JSONArray(listOf(id)))) as JSONObject
+    }
     fun sendReports(all:Boolean=false)=runTask("Preparing secure transfer"){
         require(!demo){"Secure transfer is available after signing in. Sample reports can be shared as PDF or text."}
         val documents=if(all){
@@ -767,21 +1128,26 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun ask(question:String)=runTask("Kosmo is reviewing your question") {answer=if(demo)obj("answer" to "This sample is local. In a connected encounter, Kosmo uses this case's evidence to answer your question. No model was called in this preview.","case_revision" to revision)else api.call("/encounters/$encounterId/assistant","POST",obj("question" to question)) as JSONObject}
     fun edit(text:String){editor=text;savedId=null;localRevision++;draftJob?.cancel();val key=editorOwner ?: return;val generation=++draftGeneration;val data=draftJson().toString();draftJob=viewModelScope.launch{delay(150);try{withContext(Dispatchers.IO){synchronized(vault){if(generation==draftGeneration)vault.write(key,data)}}}catch(e:Exception){if(e is CancellationException)throw e;notice="Local draft recovery could not be saved."}}}
     fun persistEditor(){val key=editorOwner ?: return;if(key!=storeKey("draft"))return;draftGeneration++;draftJob?.cancel();try{vault.write(key,draftJson().toString())}catch(_:Exception){notice="The local draft could not be saved on this device."}}
-    private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts))
+    private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts),"ui_alert_safety_count" to documentAlertSafetyCount,"ui_notice" to draftNotice.orEmpty())
     private fun restoreDraft(){
-        assessmentReview=null;documentAlerts=emptyList()
+        rememberShiftCase()
+        assessmentReview=null;documentAlerts=emptyList();documentAlertSafetyCount=0
         draftGeneration++;draftJob?.cancel();restoring=true;editorOwner=storeKey("draft")
         val d=vault.read(editorOwner!!)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: if(case?.optJSONObject("encounter")?.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank())case?.items("documents")?.maxByOrNull{it.optInt("version")}?.let{
             obj("text" to it.str("text"),"template" to it.str("template"),"saved_id" to it.str("id"),"case_revision" to it.optInt("case_revision"),"amends_id" to it.str("amends_id"),"reason" to it.str("reason"),"custom_name" to it.optJSONObject("custom_template")?.str("name"),"custom_instructions" to it.optJSONObject("custom_template")?.str("instructions"))
         }else null
+        draftNotice=d?.optString("ui_notice","")?.ifBlank{null}
         editor=d?.str("text") ?: "";editorTemplate=d?.str("template","nursing") ?: "nursing";editorCaseRevision=d?.optInt("case_revision",revision) ?: revision
         documentAlerts=d?.optJSONArray("ui_alerts")?.let{a->(0 until a.length()).map{a.optString(it)}}?:emptyList()
+        // Older drafts did not store the count: re-check their wording so a safety warning is never shown as a plain one.
+        documentAlertSafetyCount=if(d?.has("ui_alert_safety_count")==true)d!!.optInt("ui_alert_safety_count")else orderedReportAlerts(documentAlerts.map{"" to it}).let{(all,n)->documentAlerts=all;n}
         savedId=d?.str("saved_id")?.ifBlank{null};amendId=d?.str("amends_id")?.ifBlank{null};amendReason=d?.str("reason") ?: "";customName=d?.str("custom_name")?:"";customInstructions=d?.str("custom_instructions")?:""
         if(savedId!=null && case?.items("documents")?.none{it.str("id")==savedId && matchesEditor(it)}!=false)savedId=null
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
+        draftNotice?.let{notice=it}
     }
-    fun newDocument(){if(loading)return;snapshotDraft();documentAlerts=emptyList();restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();documentAlerts=emptyList();restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun newDocument(){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);val alertsOfThisReport=savedAlerts.read(d.str("id"));documentAlerts=alertsOfThisReport?.first?:emptyList();documentAlertSafetyCount=alertsOfThisReport?.second?:0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {
@@ -795,11 +1161,24 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(d.str("status")=="signed")c.getJSONObject("encounter").put("status","signed")
         case=c
     }
-    fun saveDocument()=runTask("Saving exact document") {saveDocumentNow()}
+    fun saveDocument()=runTask("Saving report…") {saveDocumentNow()}
     private suspend fun saveDocumentNow() {
         ensureRemoteDocument()
         require(editor.isNotBlank()&&editor.length<=60000){"Enter document text within 60,000 characters."}
         require(amendId==null||amendReason.isNotBlank()){"An amendment requires a reason."}
+        // Photo uploads advance encounter revision. Keep edited text intact.
+        if(!demo) {
+            // Refresh once before saving, including when an upload acknowledgement
+            // was received but the local encounter revision has not caught up.
+            persistEditor()
+            reloadCase()
+            if(editorCaseRevision != revision) {
+                closeWorkPrompt=false
+                notice="A photo or other source changed this visit. Your report is preserved. Review the updated sources and select the current revision before saving."
+                screen="editor"
+                throw IllegalStateException("Review the updated sources before saving your report.")
+            }
+        }
         val before=localRevision
         val p=obj("text" to editor,"template" to editorTemplate,"expected_revision" to editorCaseRevision,"amends_id" to amendId,"reason" to amendReason.ifBlank{null})
         if(editorTemplate=="custom"){require(customName.trim().length in 1..120 && customInstructions.trim().length in 1..2000){"Enter a custom template name and layout instructions."};p.put("custom_template",obj("name" to customName.trim(),"instructions" to customInstructions.trim()))}
@@ -813,7 +1192,8 @@ class AppState(application:Application):AndroidViewModel(application) {
                 "created_at" to now(),"fact_snapshot" to JSONArray(case?.items("facts")?.filter{it.str("confirmation_state")=="confirmed"}?:emptyList<JSONObject>()))
         }else mutation("save","/encounters/$encounterId/documents",p)
         mergeDocument(d)
-        if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision")}
+        if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");savedNotices.save(d.str("id"),draftNotice);savedAlerts.save(d.str("id"),documentAlerts,documentAlertSafetyCount)}
+        rememberShiftCase(if(before==localRevision&&matchesEditor(d))d.str("id")else null)
         persistEditor();if(!demo)acknowledge("save",p)
         notice=if(demo)"Saved in the synthetic preview." else "Exact document saved to your workspace."
         refreshAcknowledged()
@@ -828,14 +1208,14 @@ class AppState(application:Application):AndroidViewModel(application) {
         require((case?.optJSONArray("conflicts")?.length()?:0)==0){"Resolve conflicting confirmed findings before signing."}
         val result=if(demo)JSONObject(saved.toString()).put("status","signed").put("case_revision",revision+1).put("signed_case_revision",revision+1).put("signed_at",now()).put("signed_by",user?.str("id"))
         else api.call("/documents/"+saved.str("id")+"/sign","POST",obj("content_hash" to saved.str("content_hash"),"acknowledge_review" to true,"expected_case_revision" to revision)) as JSONObject
-        mergeDocument(result);editorCaseRevision=result.optInt("case_revision");persistEditor();notice=if(demo)"Signed in synthetic preview only."else"Signed version preserved.";refreshAcknowledged()
+        mergeDocument(result);rememberShiftCase();editorCaseRevision=result.optInt("case_revision");persistEditor();notice=if(demo)"Signed in synthetic preview only."else"Signed version preserved.";refreshAcknowledged()
     }
     fun history()=runTask {audit=if(demo)listOf(obj("action" to "sample.encounter_opened","created_at" to "Synthetic preview"))else(api.call("/encounters/$encounterId/audit")as JSONArray).objects();screen="history"}
     fun logout()=runTask {
         persistEditor();var revokeFailed=false
         if(!demo)try{api.call("/auth/logout","POST",JSONObject())}catch(e:Exception){if(e is CancellationException)throw e;revokeFailed=true}
         externalCapture.endSession();api.clear();vault.remove("cached-account");pinLock.clear();locked=false;clearClinical();demo=false;user=null;legalRequired=false;screen="welcome"
-        api.diagnosticJob=null;DeveloperDiagnostics.clear()
+        api.diagnosticJob=null;DeveloperDiagnostics.clear();runCatching{DeveloperDiagnostics.clearStored(vault)}
         if(revokeFailed)notice="Signed out on this device. The server session could not be revoked while disconnected."
     }
     override fun onCleared(){wearBridge.close();getApplication<Application>().unregisterReceiver(screenLockReceiver);persistEditor();super.onCleared()}

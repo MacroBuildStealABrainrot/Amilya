@@ -56,7 +56,7 @@ class PinLock(private val vault: Vault) {
     val signal=remember(owner){CancellationSignal()}
     fun biometrics(){
         try{
-            val builder=BiometricPrompt.Builder(context).setTitle("Unlock WoundCoPilot").setNegativeButton("Use PIN",context.mainExecutor){_,_->}
+            val builder=BiometricPrompt.Builder(context).setTitle("Unlock Amilya").setNegativeButton("Use PIN",context.mainExecutor){_,_->}
             if(Build.VERSION.SDK_INT>=29)builder.setConfirmationRequired(false)
             builder.build().authenticate(signal,context.mainExecutor,object:BiometricPrompt.AuthenticationCallback(){
                 override fun onAuthenticationSucceeded(result:BiometricPrompt.AuthenticationResult){if(!signal.isCanceled && s.user?.str("id")==owner)s.unlock()}
@@ -82,7 +82,7 @@ class PinLock(private val vault: Vault) {
     }
     Page {
         Spacer(Modifier.height(48.dp))
-        Text(if(pinLock.configured) "Unlock WoundCoPilot" else "Set your 4-digit PIN",style=MaterialTheme.typography.headlineMedium)
+        Text(if(pinLock.configured) "Unlock Amilya" else "Set your 4-digit PIN",style=MaterialTheme.typography.headlineMedium)
         Text(if(first.isNotEmpty())"Enter the PIN again." else if(pinLock.configured)"Your account is still signed in." else "Use this PIN when you return to the app.")
         OutlinedTextField(pin,{pin=it.mapNotNull{c->c.digitToIntOrNull()?.toString()}.joinToString("").take(4)},enabled=!checking,label={Text("PIN")},visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),singleLine=true,modifier=Modifier.fillMaxWidth())
         if(checking)Text("Unlocking…")

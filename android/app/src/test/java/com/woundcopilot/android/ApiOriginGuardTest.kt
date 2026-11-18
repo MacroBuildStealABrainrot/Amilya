@@ -28,4 +28,34 @@ class ApiOriginGuardTest {
         assertTrue(isAllowedApiOrigin(production, debug = true, sandbox = false))
         assertTrue(isAllowedApiOrigin(local, debug = true, sandbox = false))
     }
+    @Test fun repairOnlyAllowsExactRepairEndpoint() {
+        assertTrue(isAllowedApiOrigin(REPAIR_API_ORIGIN, true, false, true))
+        for (url in listOf(PRODUCTION_API_ORIGIN, LOCAL_TEST_API_ORIGIN, "https://example.com/api/v1", REPAIR_API_ORIGIN + "/x")) {
+            assertFalse(isAllowedApiOrigin(url, true, false, true))
+        }
+        assertFalse(isAllowedApiOrigin(REPAIR_API_ORIGIN, true, true, true))
+        assertFalse(isAllowedApiOrigin(REPAIR_API_ORIGIN, true, false))
+    }
+    @Test fun renderTestAllowsOnlyItsExactHttpsEndpoint() {
+        assertTrue(isAllowedApiOrigin(RENDER_TEST_API_ORIGIN, true, false, false, true))
+        assertTrue(isAllowedApiOrigin(RENDER_TEST_API_ORIGIN, false, false, false, true))
+        for (url in listOf(PRODUCTION_API_ORIGIN, REPAIR_API_ORIGIN, LOCAL_TEST_API_ORIGIN,
+            "https://example.com/api/v1", RENDER_TEST_API_ORIGIN + "/", RENDER_TEST_API_ORIGIN + "/x",
+            "http://amilya-repair-test.onrender.com/api/v1", "https://amilya-repair-test.onrender.com:443/api/v1",
+            "https://amilya-repair-test.onrender.com.evil.example/api/v1")) {
+            assertFalse(url, isAllowedApiOrigin(url, true, false, false, true))
+        }
+    }
+    @Test fun otherBuildsCannotAccidentallyUseRender() {
+        assertFalse(isAllowedApiOrigin(RENDER_TEST_API_ORIGIN, true, false))
+        assertFalse(isAllowedApiOrigin(RENDER_TEST_API_ORIGIN, false, false))
+        assertFalse(isAllowedApiOrigin(RENDER_TEST_API_ORIGIN, true, false, true))
+        assertFalse(isAllowedApiOrigin(RENDER_TEST_API_ORIGIN, true, true))
+    }
+    @Test fun contradictoryRenderFlagsFailClosed() {
+        for (url in listOf(RENDER_TEST_API_ORIGIN, LOCAL_TEST_API_ORIGIN, REPAIR_API_ORIGIN, PRODUCTION_API_ORIGIN)) {
+            assertFalse(isAllowedApiOrigin(url, true, true, false, true))
+            assertFalse(isAllowedApiOrigin(url, true, false, true, true))
+        }
+    }
 }

@@ -40,7 +40,7 @@ class RecordingWorkflowTest {
         call("/test/config",obj("live" to false,"reset" to true,"failure" to "quick-report","delay" to .2,"open_delay" to .5))
         compose.runOnIdle{s.startQuick("document")};idle()
         compose.onNodeWithText("Record").performClick()
-        compose.onNodeWithText("Confirm and record").performClick()
+        compose.onNodeWithText("Yes, record").performClick()
         compose.waitUntil(15_000){RecordingService.state.value.recording}
         val path=RecordingService.state.value.filePath!!
         result("capture-marker",obj("path" to path,"seconds" to seconds))
@@ -90,7 +90,7 @@ class RecordingWorkflowTest {
         val started=Performance.now()
         compose.runOnIdle{s.startQuick("document")}
         compose.onNodeWithText("Record").assertIsEnabled().performClick()
-        compose.onNodeWithText("Confirm and record").performClick()
+        compose.onNodeWithText("Yes, record").performClick()
         compose.waitUntil(15_000){RecordingService.state.value.recording}
         val path=RecordingService.state.value.filePath!!
         Thread.sleep(45_000);RecordingService.stop(inst.targetContext)

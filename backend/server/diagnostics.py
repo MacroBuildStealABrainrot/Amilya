@@ -4,10 +4,10 @@ Rows use independent short transactions so business rollbacks cannot erase failu
 Client observations are explicitly distinguished from server/provider observations.
 """
 from __future__ import annotations
-import asyncio, contextvars, logging, math, time, uuid
+import asyncio, contextvars, json, logging, math, time, uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import JSON, DateTime, String, Float, select, delete, exists, cast, create_engine
@@ -27,7 +27,8 @@ active=contextvars.ContextVar('diagnostic_context',default=None)
 log=logging.getLogger('woundcopilot.diagnostics')
 write_failures=0
 _last_prune=0.0
-TASKS={'transcription','audio_verification','nursing','soap','sbar','physician_update','referral_letter','handoff','custom','photo_assessment','ask_consultant','deep_review','clinical_review','document_save','recording','extract','document','quick_refine','improve_report','improve_assessment','external_flow','wear_control','unknown'}
+provider_log=logging.getLogger('woundcopilot.provider')
+TASKS={'transcription','audio_verification','nursing','soap','sbar','physician_update','referral_letter','handoff','diagnostics','medical_order','custom','photo_assessment','ask_consultant','deep_review','clinical_review','document_save','recording','extract','document','quick_refine','improve_report','improve_assessment','external_flow','wear_control','unknown'}
 ERRORS={'HTTP_ERROR':'Upstream HTTP rejection','TIMEOUT':'Operation timed out','CONNECTION_FAILED':'Provider connection failed','CANCELLED':'Operation cancelled','INVALID_RESPONSE':'Response validation failed','INTERNAL_ERROR':'Operation failed','REQUEST_REJECTED':'Request rejected'}
 
 class DiagnosticRequest(Base):
@@ -94,6 +95,9 @@ def event(data,event_id=None):
     c=active.get()
     if not c or not c['user']:return
     if data.get('status')=='failed':c['failure_stage']=data.get('stage')
+    if data.get('source')=='server':
+        from . import sentry_relay
+        sentry_relay.server_stage(data)
     # Callers construct a closed technical schema. Never accept external dicts here.
     persist(lambda db:db.add(DiagnosticEvent(id=event_id or str(uuid.uuid4()),request_id=c['id'],job_id=c['job_id'],workspace_id=c['user'][0],user_id=c['user'][1],data=data)))
 
@@ -120,6 +124,34 @@ def saved_document(document_id,generation_id):
 
 def safe_number(value):
     return value if type(value) in (int,float) and math.isfinite(value) and 0<=value<1e12 else None
+
+def cloud_event(data):
+    """Closed metadata only; remains available if diagnostic DB writes fail."""
+    from .providers import MODEL_PRICES, SPEECH_MODEL_IDS, TASK_FILES, photo_error_headers, known_model_id, FINISH_REASONS
+    c=active.get()
+    if not c:return
+    try:request_id=str(uuid.UUID(str(c['id'])))
+    except (ValueError,TypeError):return
+    stage=data.get('stage')
+    if stage not in set(TASK_FILES) | {'transcription','audio_verification'}:return
+    record={'event':'ai_provider','request_id':request_id,'stage':stage,
+            'status':data.get('status') if data.get('status') in {'success','failed','cancelled'} else 'unknown'}
+    for key in ('selected_model','reported_model'):
+        value=data.get(key)
+        record[key]=value if known_model_id(value) and (key=='reported_model' or value in MODEL_PRICES or value in SPEECH_MODEL_IDS) else None
+    value=data.get('provider')
+    record['provider']=value if value in {'openrouter','cloudflare','groq','deepgram'} else None
+    for key in ('http_status','duration_ms','retry_count','max_output_tokens'):
+        record[key]=safe_number(data.get(key))
+    finish=data.get('finish_reason')
+    if isinstance(finish,str) and finish in FINISH_REASONS:record['finish_reason']=finish
+    code=data.get('error_code')
+    record['error_code']=code if code in ERRORS else None
+    if 'failure_reason' in data:
+        record['error_category']=photo_error_headers(data)['X-WCP-Error']
+    provider_log.info(json.dumps(record,sort_keys=True,separators=(',',':')))
+    from . import sentry_relay
+    sentry_relay.provider_failure(record)
 
 @contextmanager
 def measure(stage):
@@ -152,9 +184,9 @@ async def post(client,url,*,provider,model,stage,retry=0,fallback=False,original
                 data['cost_usd']=safe_number(usage.get('cost'))
                 if data['cost_usd'] is not None:data['cost_basis']='provider_reported'
             # Provider metadata is untrusted too: never copy arbitrary returned strings.
-            from .providers import MODEL_PRICES
+            from .providers import known_model_id
             reported=raw.get('model')
-            data['reported_model']=reported if isinstance(reported,str) and reported in MODEL_PRICES else None
+            data['reported_model']=reported if known_model_id(reported) else None
             data['reported_model_unrecognized']=reported is not None and data['reported_model'] is None
             if 'error' in raw or raw.get('success') is False:
                 data['status']='failed'
@@ -175,8 +207,14 @@ async def post(client,url,*,provider,model,stage,retry=0,fallback=False,original
             row=db.get(DiagnosticEvent,event_id)
             if row:row.data=data
         if active.get() and active.get()['user']:persist(save)
+        cloud_event(data)
 
 def outcome(stage,model,provider,success,usage,normalized,billed):
+    cloud_event({'stage':stage,'selected_model':model,'reported_model':usage.get('reported_model'),
+        'provider':provider,'status':'success' if success else 'failed',
+        **({} if success else {'failure_reason':usage.get('failure_reason')}),
+        'http_status':usage.get('upstream_status'), 'max_output_tokens':usage.get('max_output_tokens'),
+        'finish_reason':usage.get('finish_reason')})
     if stage == 'image':
         from .providers import photo_error_headers
         event({'source':'server','stage':'photo_result','selected_model':model,'provider':provider,
@@ -188,7 +226,7 @@ def outcome(stage,model,provider,success,usage,normalized,billed):
 def faithfulness(passed,count,phase):
     event({'source':'server','stage':'source_faithfulness_'+phase,'status':'success' if passed else 'failed','finished_at':timestamp(),'defect_count':count,'error_code':None if passed else 'SOURCE_FAITHFULNESS_FAILED'})
 
-ClientStage=Literal['photo_source','photo_request','photo_retained','photo_state','recording_captured','recording_stopped','local_save','upload_pending','upload','transcription_request','transcript_assembly','generation_request','report_state','report_display','report_save','retry','recording_retained','recording_unavailable','cleanup','audio_preparation','processing_total','external_started','external_returned','external_cancelled','external_saved','external_failed','app_background','app_foreground','lock_suppressed_trusted_flow','lock_required_device','lock_required_background','lock_required_timeout','watch_start_requested','watch_start_confirmed','watch_stop_requested','watch_stop_confirmed','watch_cancel_requested','watch_open_phone','watch_status_sync','watch_command_failed','watch_connected','watch_disconnected']
+ClientStage=Literal['photo_source','photo_request','photo_retained','photo_state','recording_captured','recording_stopped','local_save','upload_pending','upload','transcription_request','transcript_assembly','generation_request','report_state','report_display','report_save','retry','recording_retained','recording_unavailable','cleanup','audio_preparation','processing_total','external_started','external_returned','external_cancelled','external_saved','external_failed','app_background','app_foreground','lock_suppressed_trusted_flow','lock_required_device','lock_required_background','lock_required_timeout','watch_start_requested','watch_start_confirmed','watch_stop_requested','watch_stop_confirmed','watch_cancel_requested','watch_open_phone','watch_status_sync','watch_command_failed','watch_connected','watch_disconnected','app_crash','app_not_responding','app_restart','network_failure','report_share','monitoring_test']
 class ClientEvent(BaseModel):
     model_config=ConfigDict(extra='forbid')
     id:uuid.UUID
@@ -206,6 +244,13 @@ class ClientEvent(BaseModel):
     recording_exists:bool|None=None
     storage:Literal['app_private','encrypted_verified','unknown']='unknown'
     retry_count:int=Field(default=0,ge=0,le=1000)
+    # Technical crash details only: exception CLASS name and code locations "package.Class.method:line". Never messages.
+    crash_type:str|None=Field(default=None,max_length=120,pattern=r'^[A-Za-z0-9_.$]{1,120}$')
+    crash_frames:list[Annotated[str,Field(max_length=200,pattern=r'^[A-Za-z0-9_.$<>]{1,190}:[0-9]{1,6}$')]]|None=Field(default=None,max_length=30)
+    exit_reason:Literal['CRASH','CRASH_NATIVE','ANR','LOW_MEMORY','EXCESSIVE_RESOURCE_USAGE','INITIALIZATION_FAILURE','SIGNALED','OTHER']|None=None
+    http_status:int|None=Field(None,ge=100,le=599)  # the server's answer code on a failed phone request (test build only)
+    failure_code:Literal['PROCESSING_IN_PROGRESS','TRANSCRIPTION_TIMEOUT','REPORT_GENERATION_TIMEOUT','NETWORK_TIMEOUT','NETWORK_UNAVAILABLE','TRANSCRIPTION_FAILED','REPORT_GENERATION_FAILED','BACKEND_FAILED','REQUEST_FAILED','RESPONSE_PARSE_FAILED']|None=None
+    app_version:str|None=Field(default=None,max_length=40,pattern=r'^[A-Za-z0-9_.\-]{1,40}$')
 
 class ClientBatch(BaseModel):
     model_config=ConfigDict(extra='forbid')
@@ -232,6 +277,8 @@ def upload_events(payload:ClientBatch,user:User=Depends(current_user)):
             db.execute(insert(DiagnosticEvent).values(id=str(item.id),request_id=None,job_id=str(item.job_id),workspace_id=user.workspace_id,user_id=user.id,data={**data,'source':'device_reported',**({'origin':'WEAR_OS'} if item.flow_type=='WEAR_OS' else {})}).on_conflict_do_nothing(index_elements=['id']))
             admitted=db.get(DiagnosticEvent,str(item.id))
             if admitted.user_id!=user.id:raise HTTPException(409,'Diagnostic identity conflict')
+            from . import sentry_relay
+            sentry_relay.client_event(item)
             offline_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'diagnostic-device:'+user.id+':'+str(item.job_id)))
             db.execute(insert(DiagnosticRequest).values(id=offline_id,job_id=str(item.job_id),workspace_id=user.workspace_id,user_id=user.id,task='photo_assessment' if item.stage.startswith('photo_') else 'wear_control' if item.flow_type=='WEAR_OS' else 'external_flow' if item.flow_type else 'recording',data={}).on_conflict_do_nothing(index_elements=['id']))
             row=db.scalar(select(DiagnosticRequest).where(DiagnosticRequest.id==offline_id).with_for_update())
@@ -276,3 +323,5 @@ def detail(request_id:uuid.UUID,user:User=Depends(require_admin)):
         origin=row.data.get('generation_request_id',row.id)
         generation=[e for e in data if e['request_id']==origin and e.get('source') in {'provider','replay'} and e.get('stage') in {'quick_draft','quick_refine','quick_repair','improve_report','draft'}]
         return {'request_id':row.id,'job_id':row.job_id,'task':row.task,**row.data,'last_generation_model':generation[-1].get('selected_model') if generation else None,'generation_request_id':origin if generation else None,'client_retry_count':sum(e.get('stage')=='retry' for e in data),'provider_retry_count':sum(e.get('source')=='provider' and e.get('retry_count',0)>0 for e in data),'events':data}
+
+

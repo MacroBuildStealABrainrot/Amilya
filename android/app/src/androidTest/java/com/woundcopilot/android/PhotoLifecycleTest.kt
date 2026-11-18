@@ -23,6 +23,7 @@ class PhotoLifecycleTest {
         compose.runOnIdle{s=ViewModelProvider(compose.activity)[AppState::class.java]}
         compose.waitUntil(15000){!s.loading}
         check(s.user==null){"Use an isolated test installation"}
+        compose.runOnIdle{s.externalCapture.clear();if(s.locked)s.unlock()}
         compose.runOnIdle{
             AppState::class.java.getDeclaredMethod("setSession",JSONObject::class.java).apply{isAccessible=true}.invoke(s,obj("user" to obj("id" to "synthetic-photo-lifecycle","workspace_id" to "synthetic")))
             AppState::class.java.getDeclaredMethod("setCase",JSONObject::class.java).apply{isAccessible=true}.invoke(s,DemoData.caseData());s.screen="photo";s.unlock()
@@ -68,7 +69,7 @@ class PhotoLifecycleTest {
         compose.runOnIdle{
             assertTrue(s.externalCapture.begin(ExternalKind.PERMISSION,"audio","audio"))
             s.externalCapture.background(false,false);assertFalse(s.locked)
-            s.externalCapture.deviceLocked();assertTrue(s.locked)
+            s.externalCapture.deviceLocked();assertFalse(s.locked)
             assertFalse(s.externalCapture.permissionReturned());s.externalCapture.foreground(false);assertTrue(s.locked)
         }
     }
@@ -110,7 +111,7 @@ class PhotoLifecycleTest {
             flow.clear();s.unlock()
             assertTrue(flow.begin(ExternalKind.CAMERA,"photo","photo"))
             val reconstructed=ExternalCapture(s,compose.activity,compose.activity.lifecycleScope)
-            reconstructed.background(false,false);assertTrue(s.locked)
+            reconstructed.background(false,false);assertFalse(s.locked)
             reconstructed.clear();flow.clear()
         }
     }

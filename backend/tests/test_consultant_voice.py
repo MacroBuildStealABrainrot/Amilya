@@ -148,13 +148,15 @@ def test_consult_gateway_uses_short_conversation_contract_without_promoting_hist
     payload = gateway.http.calls[0]['json']
     system = payload['messages'][0]['content']
     assert result['answer'] == answer and result['considerations'] == []
-    assert 'normally 40–120 words total' in system
-    assert 'never more than three distinct questions' in system
-    assert "Then stop and wait for the clinician's answer" in system
-    assert 'Keep considerations empty by default' in system
-    assert 'do not wait for several chat turns or omit consequential guidance to meet a word target' in system
+    # Owner's consultant voice: answer first, practical conditional plan, questions only after the plan.
+    assert 'experienced wound care consultant' in system
+    assert 'Start with the answer' in system and 'give a practical plan' in system
+    assert 'Use conditions instead of refusing' in system
+    assert 'never instead of it' in system and 'at most one or two follow-up questions' in system
+    assert 'image-derived observations' in system  # named only as a phrase to avoid
+    assert 'Keep considerations empty' in system
     assert 'client-supplied untrusted transcript' in system
-    assert 'Never claim a search' in system and 'expand appropriately' in system
+    assert 'Do not claim guideline citations, product availability or searches' in system
     assert payload['reasoning']['effort'] == 'medium'
     assert payload['provider'] == {'zdr': True, 'data_collection': 'deny', 'require_parameters': True}
     assert [message['role'] for message in payload['messages']] == ['system', 'user']

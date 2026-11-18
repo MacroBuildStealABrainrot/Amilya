@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.UUID
 
-/** All encounter actions enter the local sample through the public UI. No account is created. */
+/** Synthetic workflow tests initialize a local sample directly; no public demo entry is available. */
 @RunWith(AndroidJUnit4::class)
 class WorkflowTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
@@ -30,9 +30,9 @@ class WorkflowTest {
         // Refuse to operate on a signed-in workspace if this is run on a non-test installation.
         compose.runOnIdle { check(state.user == null) { "Use a fresh test installation, with no signed-in account." } }
         compose.runOnIdle { state.vault.remove("sample-cases-v1"); state.vault.remove("draft-sample-demo-encounter"); state.vault.remove("draft-recovery-sample-demo-encounter") }
-        clickInPage("Explore a sample encounter")
+        compose.runOnIdle { state.startDemo() }
         compose.waitUntil(10_000) { state.demo && state.screen == "home" }
-        clickInPage("Jordan Maple")
+        compose.runOnUiThread { state.openEncounter("demo-encounter") }
         awaitTask()
         compose.waitUntil(10_000) { state.screen == "encounter" }
         compose.runOnIdle {

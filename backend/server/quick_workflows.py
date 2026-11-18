@@ -16,11 +16,12 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from server import clinical, providers, documentation
-from server.clinical_models import Encounter, Evidence, Patient, TimelineEvent
+from server.clinical_models import ClinicalDocument, Encounter, Evidence, Patient, TimelineEvent
 from server.core import settings
 from server.db import get_db
 from server.identity import User, check_rate, current_user, require_csrf
 from server.schemas import StrictModel, TemplateSelection
+from server.report_errors import TerminalReportError
 
 router = APIRouter(tags=['quick workflows'])
 MUTATION = [Depends(require_csrf)]
@@ -36,6 +37,14 @@ class QuickStart(StrictModel):
 class QuickReport(TemplateSelection):
     use_ai: bool = True
     preferred_length: Literal['concise', 'standard', 'detailed'] = 'concise'
+    # Ask Consultant conversation kept only on the phone; sent once to write a report, never stored.
+    consultation: list['ConversationTurn'] = Field(default_factory=list, max_length=40)
+
+    @model_validator(mode='after')
+    def bounded_consultation(self):
+        if sum(len(turn.content) for turn in self.consultation) > 40000:
+            raise ValueError('Consultation exceeds 40,000 characters')
+        return self
 
 
 class ConversationTurn(StrictModel):
@@ -43,9 +52,14 @@ class ConversationTurn(StrictModel):
     content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10000)]
 
 
+QuickReport.model_rebuild()
+
+
 class ConsultRequest(StrictModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
     history: list[ConversationTurn] = Field(default_factory=list, max_length=20)
+    # The report exactly as it is on the clinician's screen right now, including edits not yet saved. Optional for older apps.
+    current_report: Annotated[str, StringConstraints(max_length=60000)] | None = None
 
     @model_validator(mode='after')
     def bounded_history(self):
@@ -94,7 +108,7 @@ def start_quick(payload: QuickStart, user: User = Depends(current_user), db: Ses
                 db.flush()
             elif patient.workspace_id != workspace_id:
                 raise HTTPException(409, 'Quick workspace identity conflict')
-            titles = {'document': 'New report', 'photo': 'Photo assessment', 'consultant': 'Wound Consultant'}
+            titles = {'document': 'New report', 'photo': 'Photo assessment', 'consultant': 'Ask Consultant'}
             encounter = Encounter(id=encounter_id, workspace_id=workspace_id, patient_id=patient_id,
                 wound_id=None, title=titles[payload.mode], status='open', revision=1, created_by=actor_id,
                 draft_data={'retention':'temporary','quick_mode': payload.mode, 'quick_request_id': str(payload.request_id)})
@@ -128,14 +142,37 @@ def _order_visit_parts(sources, rows):
     return ordered
 
 
+def _photo_entries_text(row):
+    """What the clinician typed, said or picked with a photo, as the clinician's own words (never as something seen)."""
+    entries = (row.metadata_json or {}).get('clinician_entries') if row.kind == 'photo' and isinstance(row.metadata_json, dict) else None
+    if not isinstance(entries, dict):
+        return None
+    parts = []
+    if entries.get('note'):
+        parts.append('Clinician note sent with this photo: ' + str(entries['note']))
+    if entries.get('findings_text'):
+        parts.append('Clinician-recorded findings on assessment: ' + str(entries['findings_text']) + '.')
+    for message in entries.get('differences') or []:
+        parts.append('Possible difference to confirm: ' + str(message))
+    return ' '.join(parts) or None
+
+
 def source_context(db: Session, encounter: Encounter):
     all_facts = clinical.case_facts(db, encounter)
-    facts = [fact for fact in all_facts if fact['confirmation_state'] != 'rejected']
+    facts = [fact for fact in all_facts if fact['confirmation_state'] != 'rejected'
+             and fact['name'] not in clinical.PHOTO_ADVISORY_FIELDS]
     rejected = [fact for fact in all_facts if fact['confirmation_state'] == 'rejected']
     rows = list(db.scalars(select(Evidence).where(Evidence.workspace_id == encounter.workspace_id,
         Evidence.encounter_id == encounter.id).order_by(Evidence.created_at, Evidence.id)))
-    sources = [{'id': row.id, 'kind': row.kind, 'text': row.text,
+    sources = [{'id': row.id, 'kind': row.kind, 'text': row.text if row.text is not None else _photo_entries_text(row),
                 'warnings': row.warnings, 'created_at': clinical.iso(row.created_at),
+                # The clinician's own spoken summary after the visit: their account, which outranks a noisy whole-visit recording.
+                **({'source_role': "Clinician's own spoken summary after the visit. It is the clinician's account: where it differs from "
+                    "a whole-visit recording, the summary is correct; anything only in the visit recording is used only if clearly heard."}
+                   if row.kind == 'audio' and isinstance(row.metadata_json, dict) and row.metadata_json.get('clinician_summary') else {}),
+                # Length of a recording lets the reliability check see a recording that was mostly silence.
+                **({'duration_seconds': row.metadata_json['duration_seconds']} if row.kind == 'audio' and isinstance(row.metadata_json, dict)
+                   and isinstance(row.metadata_json.get('duration_seconds'), (int, float)) else {}),
                 # A long visit recorded in parts: every part is one source; label them so they read as one visit, in order.
                 **({'recording_part': f"Part {row.metadata_json['visit_part']} of {row.metadata_json['visit_parts']} of the same visit recording"}
                    if row.kind == 'audio' and isinstance(row.metadata_json, dict) and row.metadata_json.get('visit_part') else {})}
@@ -148,6 +185,29 @@ def source_context(db: Session, encounter: Encounter):
     return context
 
 
+def current_report_context(db: Session, encounter: Encounter, on_screen: str | None):
+    """The report Ask Consultant reviews: the text on the clinician's screen if sent, else the newest saved version. Never regenerated."""
+    if on_screen and on_screen.strip():
+        return {'clinician_current_report': {'text': on_screen, 'version': 'as currently shown on the clinician\'s screen, including any unsaved edits'}}
+    latest = db.scalar(select(ClinicalDocument).where(ClinicalDocument.workspace_id == encounter.workspace_id,
+        ClinicalDocument.encounter_id == encounter.id).order_by(ClinicalDocument.version.desc()).limit(1))
+    if latest is None:
+        return {}
+    return {'clinician_current_report': {'text': latest.text, 'version': f'latest saved version {latest.version}'}}
+
+
+def consultation_context(turns):
+    """Clinician messages are the clinician's own statements; consultant replies are AI suggestions, never findings."""
+    return {
+        'how_to_use': ('clinician_message entries were written or dictated by the clinician and may be documented as the '
+                       "clinician's own information. ai_consultant_suggestion entries are AI suggestions: never document them "
+                       'as findings, assessments or care performed. Include them only if useful, in a clearly separate section '
+                       'titled "Consultant suggestions (not confirmed)".'),
+        'turns': [{'speaker': 'clinician_message' if turn.role == 'user' else 'ai_consultant_suggestion', 'text': turn.content}
+                  for turn in turns],
+    }
+
+
 def source_only_report(context, template, custom_template=None):
     return documentation.source_report(context, template, clinical.fact_phrase)['text']
 
@@ -157,7 +217,9 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
     encounter = clinical.owned(db, Encounter, encounter_id, user)
     expected = encounter.revision
     context = source_context(db, encounter)
-    if not context['case_facts'] and not any(source['text'] for source in context['untrusted_sources']):
+    if payload.consultation:
+        context['consultation'] = consultation_context(payload.consultation)
+    if not context['case_facts'] and not any(source['text'] for source in context['untrusted_sources']) and not payload.consultation:
         return {**documentation.visible_result({'text': '', 'status': 'no_content'}), 'case_revision': expected, 'template': payload.template, 'fact_snapshot': [], 'source_ids': [], 'review_required': True, 'warnings': []}
     custom_template = payload.custom_template.model_dump() if payload.custom_template else None
     warnings = ['Draft — Clinician Review Required']
@@ -166,17 +228,12 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
         try:
             result = await providers.quick_documentation(context, payload.template, payload.preferred_length,
                 custom_template=custom_template, user=user, encounter_id=encounter_id)
-        except HTTPException as error:
-            if error.status_code not in {402,429,502,503,504}:raise
-            # Never display the draft rejected by semantic QA. Recover from original source
-            # using the already-supported manual projection, including rejected/edited facts.
-            result = documentation.source_report(context, payload.template, clinical.fact_phrase)
-            result['qa'] = {'passed': False, 'status':'source_only_unchecked', 'discrepancies': []}
-            result['recovery'] = {'mode':'source_only','cause': (error.headers or {}).get('X-WCP-Error','REPORT_CHECK_OR_GENERATION_FAILED')}
-            result['ui_alerts'] = [{'field':'review','message':'AI generation or checking could not complete. This source-only draft has not passed an AI check. Review it against the original source before using it.'}]
-            warnings.append('A source-only draft was recovered. It may retain transcript noise; review speaker attribution, corrections and clinical wording.')
+        except TerminalReportError as error:
+            # The report was NOT generated. A raw transcript is never shown as if it were a finished report:
+            # the recording and transcript stay saved as sources, and the phone offers a safe Try again.
             from . import diagnostics
-            diagnostics.event({'source':'server','stage':'report_source_recovery','status':'success','error_code':result['recovery']['cause']})
+            diagnostics.event({'source':'server','stage':'report_not_generated','status':'failed','error_code':(error.headers or {}).get('X-WCP-Error','REPORT_CHECK_OR_GENERATION_FAILED')})
+            raise
     else:
         result = documentation.source_report(context, payload.template, clinical.fact_phrase)
     db.refresh(encounter)
@@ -184,7 +241,8 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
         raise HTTPException(409, 'The source changed during drafting; generate again against the current information')
     clinical.timeline(db, user, encounter_id, 'document.quick_draft', encounter_id,
         {'case_revision': expected, 'template': payload.template, 'use_ai': payload.use_ai,
-         'fact_count': len(context['case_facts']), 'source_count': len(context['untrusted_sources'])})
+         'fact_count': len(context['case_facts']), 'source_count': len(context['untrusted_sources']),
+         'consultation_turns': len(payload.consultation)})
     clinical.finish(db)
     return {**documentation.visible_result(result), 'case_revision': expected, 'template': payload.template, 'custom_template': custom_template,
             'fact_snapshot': context['case_facts'], 'source_ids': [source['id'] for source in context['untrusted_sources']],
@@ -195,7 +253,7 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
 async def consult(encounter_id: str, payload: ConsultRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
     encounter = clinical.owned(db, Encounter, encounter_id, user)
     expected = encounter.revision
-    context = source_context(db, encounter)
+    context = {**source_context(db, encounter), **current_report_context(db, encounter, payload.current_report)}
     check_rate(f'clinical-assistant:{user.id}', limit=20)
     result = await providers.wound_consultant(context, payload.message,
         [turn.model_dump() for turn in payload.history], user=user, encounter_id=encounter_id)
@@ -270,6 +328,9 @@ async def _transcribe_reviewable_audio(encounter_id: str, file: UploadFile, cons
     clinical.timeline(db, user, encounter_id, event, encounter_id,
         {'case_revision': expected, 'bytes': len(data), 'mime': mime})
     clinical.finish(db)
+    if result.get('background_suspected'):
+        # Fix by Voice and Ask Consultant messages: unrelated or foreign-language speech is never offered as the clinician's words.
+        result = {**result, 'text': '', 'needs_rerecord': True}
     review_warning = ('Review the recognized message before sending it. No message was sent and no clinical evidence was added.'
         if purpose == 'message' else 'Review the recognized correction before applying it. No clinical evidence was added.')
     return {**result, 'case_revision': expected, 'review_required': True,

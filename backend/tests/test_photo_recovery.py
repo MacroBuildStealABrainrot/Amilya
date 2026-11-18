@@ -94,3 +94,18 @@ def test_photo_capacity_retry_and_quota_classified_differently(gateway):
     assert error.value.headers['X-WCP-Retryable']=='false'
     with pytest.raises(HTTPException):assess(gateway)
     assert len(gateway.http.calls)==1
+
+
+def test_clinician_note_goes_with_the_photo_as_marked_untrusted_text(gateway):
+    gateway.http.responses=[successful()]
+    asyncio.run(providers.analyze_media(photo(),'image/png','photo',user=gateway.user,encounter_id='synthetic-encounter',
+        clinician_note='Left second toe, 3 weeks, warm on assessment.'))
+    sent=str(gateway.http.calls[0]['json']['messages'])
+    assert 'CLINICIAN_NOTE_WITH_THIS_PHOTO' in sent and 'Left second toe, 3 weeks, warm on assessment.' in sent
+    assert 'never present the clinician' in sent
+
+
+def test_photo_without_a_note_sends_no_note_block(gateway):
+    gateway.http.responses=[successful()]
+    assess(gateway)
+    assert 'CLINICIAN_NOTE_WITH_THIS_PHOTO' not in str(gateway.http.calls[0]['json']['messages'])

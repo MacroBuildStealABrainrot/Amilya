@@ -98,6 +98,7 @@ internal class HandoffRouter(
     first: FrameSink,
     private val framesPerPart: Int,
     private val openNext: (nextPart: Int) -> FrameSink,
+    private val onPartStarted: (started: FrameSink) -> Unit = {},
     private val onPartFinished: (finished: FrameSink, uniqueFrames: Int, finishedPart: Int) -> Unit = { _, _, _ -> },
     private val maxParts: Int = VisitContinuation.MAX_PARTS,
     private val retryAfterFrames: Int = VisitContinuation.RETRY_AFTER_FRAMES,
@@ -128,7 +129,8 @@ internal class HandoffRouter(
         var next: FrameSink? = null
         try {
             next = openNext(part + 1)
-            last?.let { next.write(it, it.size) }  // the repeated frame: the new part can decode its first real frame completely
+            last?.let { next.write(it, it.size) }  // validate the primer before committing any links
+            onPartStarted(next)
             val old = current
             val unique = framesInPart - primerCount
             val finishedPart = part

@@ -129,7 +129,6 @@ fun AuthScreen(state: AppState, signup: Boolean) {
             Text(if (signup) "Already have an account? Sign in" else "Create a workspace")
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))
-        TextButton(onClick = { state.startDemo() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = !state.loading) { Text("Explore a sample encounter") }
         TextButton(onClick = { support = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Need help signing in?") }
         Spacer(Modifier.height(24.dp))
     }
@@ -185,6 +184,8 @@ fun AccountScreen(state: AppState) {
             Switch(checked = state.dark, onCheckedChange = null)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        // Credits and service status are owner details; the nurse does not need them in the test app.
+        if (!com.woundcopilot.android.BuildConfig.ISOLATED_TEST) {
         SectionLabel("Workspace credits", action = if (state.demo) null else "Refresh", onAction = { state.runTask { state.refreshHome() } })
         EvidenceRail {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -195,8 +196,8 @@ fun AccountScreen(state: AppState) {
                 Text(
                     when {
                         state.demo -> "Preview actions stay separate from your account. No provider inference is requested."
-                        unlimited -> "Your account has unlimited WoundCoPilot credits."
-                        else -> "WoundCoPilot credits available in this workspace."
+                        unlimited -> "Your account has unlimited Amilya credits."
+                        else -> "Amilya credits available in this workspace."
                     },
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -219,6 +220,8 @@ fun AccountScreen(state: AppState) {
                 if (state.config.optBoolean("clinical_data_enabled")) "Use your workspace's approved data handling policies." else "This deployment is not enabled for identifiable clinical data. Use synthetic examples.",
             )
         }
+        }
+        if (!state.demo && !com.woundcopilot.android.BuildConfig.ISOLATED_TEST) com.woundcopilot.android.StoredDiagnosticsSection(state)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Help & policies")
         var automaticBiometrics by remember{mutableStateOf(state.vault.read("biometric-auto")!="false")}
@@ -238,7 +241,7 @@ fun AccountScreen(state: AppState) {
         TextButton(onClick = { signOut = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = !state.loading) {
             Text(if (state.demo) "Leave the sample" else "Sign out", color = MaterialTheme.colorScheme.error)
         }
-        Text("WoundCoPilot for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Amilya for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
     }
     if (editProfile) ProfileDialog(state) { editProfile = false }
@@ -298,6 +301,8 @@ private fun ProfileDialog(state: AppState, onDismiss: () -> Unit) {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 OutlinedTextField(name, { if (it.length <= 160) name = it }, label = { Text("Display name") }, singleLine = true, enabled = !state.loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next))
                 OutlinedTextField(profession, { if (it.length <= 160) profession = it }, label = { Text("Profession") }, singleLine = true, enabled = !state.loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next))
+                listOf(listOf("Nurse", "Doctor"), listOf("Nurse practitioner", "Other")).forEach { choices -> Row { choices.forEach { choice -> TextButton({ profession = choice }, enabled = !state.loading) { Text(choice) } } } }
+                Text("Reports and Ask Consultant use the voice and scope of your profession.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(careSetting, { if (it.length <= 160) careSetting = it }, label = { Text("Care setting") }, singleLine = true, enabled = !state.loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done))
                 Text("Your email and workspace identity stay the same.", style = MaterialTheme.typography.bodySmall)
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }

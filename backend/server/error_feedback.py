@@ -6,6 +6,7 @@ MESSAGES = {
     'MODEL_UNAVAILABLE': 'No provider endpoint matches the configured model and privacy settings. The administrator must check routing.',
     'REQUEST_INCOMPATIBLE': 'The provider rejected the request format or model parameters. The integration needs correction.',
     'PROVIDER_TIMEOUT': 'The AI provider did not respond before the timeout. Check request status before retrying.',
+    'OUTPUT_LIMIT': 'The AI response reached its output limit before completion. No partial findings were accepted. The administrator must review the output allowance.',
     'INVALID_RESPONSE': 'The AI response failed structure or clinical-data validation. Its findings were not accepted.',
     'NETWORK_UNAVAILABLE': 'The server could not connect to the AI provider. Retry when the provider connection is restored.',
     'RATE_LIMITED': 'The AI provider rate-limited the request. Wait before retrying.',
@@ -15,6 +16,8 @@ MESSAGES = {
 
 # Exact application-owned messages, never arbitrary exception/provider text.
 PREFLIGHT = {
+    'Configured AI model is not in the approved price registry': ('MODEL_CONFIGURATION_INVALID', 'The configured model is not in the reviewed model registry.'),
+    'Deep Review requires a challenger from a different model developer': ('MODEL_CONFIGURATION_INVALID', 'Deep Review needs an independently developed challenger model.'),
     'Live AI is paused until the owner activates provider execution': ('AI_PAUSED', 'AI execution is paused in server settings. The owner must enable it.'),
     'AI is not configured; manual evidence and documentation are available': ('AI_NOT_CONFIGURED', 'The server has no configured AI API key. The owner must configure it.'),
     'This provider is awaiting clinical-data privacy approval': ('PROVIDER_APPROVAL_REQUIRED', 'This provider has not been approved for clinical-data processing.'),
@@ -26,6 +29,8 @@ PREFLIGHT = {
 }
 
 def preflight_error(status, detail):
+    if detail not in PREFLIGHT:
+        return HTTPException(status, 'AI configuration needs review.', headers={'X-WCP-Error':'MODEL_CONFIGURATION_INVALID','X-WCP-Retryable':'false'})
     code, _ = PREFLIGHT[detail]
     return HTTPException(status, detail, headers={'X-WCP-Error':code,'X-WCP-Retryable':'false'})
 

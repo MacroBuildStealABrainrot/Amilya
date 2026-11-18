@@ -26,6 +26,8 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
     private var restored=pending!=null
     /** The operation the app already locked for, so it does not lock again on every resume (PIN loop). */
     private var lockedFor:String?=null
+    /** When the clinician left the app; the PIN is asked for only after [LockPolicy.AWAY_LOCK_MS] away. */
+    private var leftAt:Long?=null
     /** A photo that arrived while the PIN screen was showing; it is sent once the clinician unlocks. */
     private var deferredPhoto:JSONObject?=null
     var busy by mutableStateOf(false);private set
@@ -51,11 +53,13 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
         if(changing)return
         event("app_background")
         if(!deviceLocked && trusted()){awaitingForeground=true;event("lock_suppressed_trusted_flow")}
-        else {live=false;s.lock();event(if(deviceLocked)"lock_required_device"else"lock_required_background")}
+        else {live=false;if(leftAt==null)leftAt=clock();event(if(deviceLocked)"lock_required_device"else"lock_required_background")}
     }
     private fun trusted()=pending!=null && live && !s.locked && s.user?.str("id")==pending?.str("owner") && clock()-started in 0..TRUST_MS
     fun foreground(deviceLocked:Boolean){
         event("app_foreground")
+        val away=leftAt?.let{clock()-it};leftAt=null
+        if(LockPolicy.lockAfterAway(away))s.lock()
         val id=pending?.str("id")
         if(LockPolicy.lockForPendingOperation(deviceLocked,id,live,clock()-started,awaitingForeground,returned,lockedFor)){
             s.lock();live=false;if(id!=null)lockedFor=id;event(if(deviceLocked)"lock_required_device"else"lock_required_timeout")
@@ -66,7 +70,7 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
         // Results may be delivered before onResume. Keep their identity through that transition.
         if(returned && !busy)clear()
     }
-    fun deviceLocked(){live=false;s.lock();event("lock_required_device")}
+    fun deviceLocked(){live=false;if(leftAt==null)leftAt=clock();event("lock_required_device")}
     // Do not reuse an outstanding launch for a new account/encounter after logout.
     // Its eventual result still belongs to the original operation and cannot upload.
     fun endSession(){live=false}
@@ -85,7 +89,7 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
             LockPolicy.Deferred.SEND->{
                 deferredPhoto=null
                 val files=s.pendingPhotoFiles()
-                if(files.isNotEmpty()){s.screen=p.str("screen");s.uploadPhotos(files)}
+                if(files.isNotEmpty())s.screen=p.str("screen")
             }
         }
     }
@@ -136,13 +140,12 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
                 val matches=s.user?.str("id")==p.str("owner") && s.encounterId==p.str("encounter")
                 if(matches && !s.locked){
                     s.screen=p.str("screen")
-                    if(p.str("media")=="photo"&&!s.loading)s.uploadPhotos(s.pendingPhotoFiles())
-                    else if(p.str("media")=="photo")deferredPhoto=p   // app busy: send when the current task ends
+                    // The clinician approves the picture first: it is shown on the photo screen and only sent to the AI when they tap Use this photo.
                 }else if(matches && p.str("media")=="photo")deferredPhoto=p   // app locked: send after unlock
                 event("external_saved",p)
             }catch(e:Exception){
                 if(e is CancellationException)throw e
-                if(s.user?.str("id")==p.str("owner"))s.error="The selected file could not be prepared. The original was not changed. Try selecting it again."
+                if(s.user?.str("id")==p.str("owner"))s.error=importProblem(e)
                 event("external_failed",p)
             }finally{revision++;busy=false;if(!awaitingForeground)clear();resumeDeferredPhoto()}
         }
@@ -151,7 +154,8 @@ class ExternalCapture(private val s:AppState,private val context:Context,private
 
 /** Existing import validation, moved out of a disposable Compose callback. */
 internal fun importCapture(context:Context,uri:Uri,kind:String):Pair<File,String> {
-    val limit=when(kind){"photo"->12;"audio"->25;else->20}
+    // A gallery photo may be larger than the 12 MB sent to the server; it is shrunk below (the original is never changed).
+    val limit=when(kind){"photo"->60;"audio"->25;else->20}
     val resolver=context.contentResolver
     val mime=resolver.getType(uri)?.lowercase(java.util.Locale.ROOT)?:"application/octet-stream"
     val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use{if(it.moveToFirst())it.getString(0)?:""else ""}.orEmpty()
@@ -163,8 +167,35 @@ internal fun importCapture(context:Context,uri:Uri,kind:String):Pair<File,String
             while(true){val n=input.read(buffer);if(n<0)break;total+=n;require(total<=limit.toLong()*1024*1024);output.write(buffer,0,n)}
             require(total>0)
         }}?:error("File unavailable")
-        val detected=identifyCapture(temporary,kind,mime,name)
+        val detected=try{identifyCapture(temporary,kind,mime,name).also{if(kind=="photo")require(temporary.length()<=12L*1024*1024)}}
+            catch(e:Exception){if(kind!="photo")throw e;null}
+        if(detected==null){
+            // HEIC, a very large photo, or one above 25 megapixels (Samsung 50 MP mode): a shrunk JPEG copy is made.
+            val converted=File(directory,"photo-${UUID.randomUUID()}.jpg")
+            try{convertPhoto(temporary,converted)}catch(e:Exception){converted.delete();throw e}
+            return converted to "image/jpeg"
+        }
         val file=File(directory,"$kind-${UUID.randomUUID()}.${captureExtension(detected)}")
         check(temporary.renameTo(file));return file to detected
     }finally{temporary.delete()}
+}
+
+/** The clinician sees the real reason a chosen file was refused, not a vague message. */
+internal fun importProblem(e:Exception):String {
+    val own=(e as? IllegalArgumentException ?: e as? IllegalStateException)?.message
+    if(own!=null && own.length>25 && !own.startsWith("Failed requirement") && !own.startsWith("Check failed"))return own
+    return "This file could not be opened. If it is stored in the cloud, open it in Gallery first so it downloads to the phone, then choose it again."
+}
+
+/** A shrunk JPEG copy (longest side up to 4096 pixels, upright, no location data). The original in Gallery is not changed. */
+internal fun convertPhoto(source:File,target:File) {
+    val bitmap=try{
+        android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(source)){decoder,info,_->
+            val w=info.size.width;val h=info.size.height;val longest=maxOf(w,h)
+            if(longest>4096){val f=4096.0/longest;decoder.setTargetSize((w*f).toInt().coerceAtLeast(1),(h*f).toInt().coerceAtLeast(1))}
+            decoder.allocator=android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }catch(e:Exception){throw IllegalArgumentException("This photo could not be opened. Choose a JPEG, PNG, WebP or HEIC photo.")}
+    try{target.outputStream().use{check(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,92,it))}}finally{bitmap.recycle()}
+    require(target.length() in 1..12L*1024*1024){"This photo is too large even after shrinking it. Choose another photo."}
 }

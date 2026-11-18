@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     trusted_hosts: str = 'localhost,127.0.0.1,testserver'
     session_hours: int = 12
     allow_signup: bool = True
+    render_owner_enrollment_email: str = ''
+    render_owner_enrollment_until: int = 0
+    render_owner_test_user_id: str = ''
+    render_owner_test_until: int = 0
     clinical_data_enabled: bool = False
     legal_version: str = '2026-09-05'
     legal_business_name: str = ''
@@ -31,6 +35,7 @@ class Settings(BaseSettings):
     openrouter_base_url: str = 'https://openrouter.ai/api/v1'
     openrouter_phi_approved: bool = False
     openrouter_require_zdr: bool = True
+    openrouter_speech_enabled: bool = False
     cloudflare_api_token: str = ''
     cloudflare_account_id: str = ''
     cloudflare_phi_approved: bool = False
@@ -41,12 +46,34 @@ class Settings(BaseSettings):
     deepgram_phi_approved: bool = False
     deepgram_enabled: bool = False
     speech_provider: str = 'auto'
-    model_extraction: str = 'openai/gpt-5.6-luna'
-    model_documentation: str = 'openai/gpt-5.6-luna'
-    model_vision: str = 'openai/gpt-5.6-luna'
-    model_review: str = 'openai/gpt-5.6-sol'
-    model_frontier: str = 'openai/gpt-5.6-sol'
-    model_challenger: str = 'anthropic/claude-fable-5.1'
+    model_extraction: str = 'openai/gpt-6-luna'
+    model_documentation: str = 'openai/gpt-6.1-sol'
+    # Owner-approved (2026-10-28): Haiku writes standard notes; accuracy checks stay on model_documentation.
+    model_documentation_simple: str = 'anthropic/claude-haiku-5.5'
+    model_vision: str = 'anthropic/claude-sonnet-5.5'  # owner's choice for wound photos (2026-10-28)
+    model_review: str = 'openai/gpt-6.1-sol'
+    model_frontier: str = 'openai/gpt-6-astra'
+    model_challenger: str = 'anthropic/claude-sonnet-5.5'
+    # Owner choice (2026-11-02, test server only): false = speech-to-text + one Sonnet report, no second AI check or rewrite.
+    quick_ai_check: bool = True
+    # Owner choice (2026-11-02): cap how hard the AI thinks for everything except wound photos. '' = automatic.
+    max_reasoning_effort: str = ''
+    # Owner choice (2026-11-02): add-on buttons (Improve Report, Anything missed?) may use a cheaper model. '' = normal routing.
+    model_addon: str = ''
+    # Owner's choice (2026-11-11): when set, every AI step uses this one model (test servers). Empty = per-task settings.
+    ai_model_all: str = ''
+    # Test-only comparison switch (2026-11-11): when set, ONLY the report accuracy check uses this model. Empty = no change.
+    ai_model_qa: str = ''
+    # Test-only: the note WRITER for long whole-visit recordings (empty = no change). MiniMax was unreliable on them (2026-11-13).
+    ai_model_long_visit: str = ''
+    # Owner choice (2026-11-13): when set, the report WRITER and its repair use this model for every report (empty = no change).
+    ai_model_report: str = ''
+    # Owner's wound-photo choice stays in force when one model is forced for every other step (2026-11-13: MiniMax read a photo as "nothing visible").
+    ai_model_image: str = ''
+    # Owner choice (2026-11-13): Ask Consultant and the clinical review use this model even when one model is forced elsewhere (empty = no change).
+    ai_model_consult: str = ''
+    # Owner choice (2026-11-02): false = never show the "Check before saving or sending" box on a report.
+    show_report_alerts: bool = True
     provider_timeout_seconds: int = 60
     provider_execution_enabled: bool = False
     # Stuck-credit recovery (1.8.5-test10, development only; OFF by default). See STUCK-REQUEST-LEASE-PLAN.md.
@@ -70,7 +97,7 @@ class Settings(BaseSettings):
     stripe_api_version: str = '2026-08-26.dahlia'
     billing_enabled: bool = False
 
-    @field_validator('model_extraction','model_documentation','model_vision','model_review','model_frontier','model_challenger')
+    @field_validator('model_extraction','model_documentation','model_documentation_simple','model_addon','ai_model_all','ai_model_qa','ai_model_long_visit','ai_model_report','ai_model_image','ai_model_consult','model_vision','model_review','model_frontier','model_challenger')
     @classmethod
     def valid_model(cls, v: str) -> str:
         if 'contributor' in v.lower():
@@ -96,3 +123,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

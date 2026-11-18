@@ -12,9 +12,10 @@ Name = Literal['wound_measurement', 'wound_location', 'pain', 'exudate', 'odour'
                'offloading_assessment', 'compression', 'treatment_performed', 'patient_education',
                'narrative', 'vascular_test', 'lab', 'culture', 'imaging', 'history', 'allergy',
                'medication', 'nutrition', 'mobility', 'infection_findings', 'fever', 'chills',
-               'diabetes', 'renal_disease', 'edema', 'smoking', 'pressure_exposure', 'glucose_control']
+               'diabetes', 'renal_disease', 'edema', 'smoking', 'pressure_exposure', 'glucose_control',
+               'visible_finding', 'photo_interpretation', 'photo_next_steps']
 Mode = Literal['auto', 'fast', 'advanced', 'deep']
-Template = Literal['nursing', 'soap', 'sbar', 'handoff', 'referral', 'physician_update', 'referral_letter', 'custom']
+Template = Literal['nursing', 'soap', 'sbar', 'handoff', 'referral', 'physician_update', 'referral_letter', 'diagnostics', 'medical_order', 'custom']
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
@@ -52,6 +53,11 @@ class Observation(StrictModel):
         if self.text is None and self.present is None:
             raise ValueError('An explicit observation or presence value is required')
         return self
+
+
+class PhotoTissue(StrictModel):
+    """Photo interpretation is qualitative; percentages belong to clinician input."""
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
 
 
 class Tissue(StrictModel):
@@ -209,3 +215,4 @@ class SignDocument(StrictModel):
     content_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
     acknowledge_review: Literal[True]
     expected_case_revision: int = Field(ge=1)
+

@@ -125,13 +125,13 @@ def test_the_first_piece_cannot_claim_an_overlap(quick_api, monkeypatch):
 def test_shortened_speech_loops_and_their_warnings_survive_assembly(quick_api, monkeypatch):
     api = quick_api
     _setup(api, monkeypatch, [{'text': 'Thank you.', 'segments': [], 'original_text': 'Thank you. Thank you. Thank you.',
-                               'warnings': ['The speech service repeated the same short phrase several times in a row; ...']}])
+                               'warnings': ['Some words were repeated by mistake ...']}])
     encounter = start(api)['encounter']['id']; job = str(uuid4())
     assert _part(api, encounter, job, 0, 1).status_code == 200
     evidence = api.client.post(f'/api/v1/encounters/{encounter}/audio-complete', json={'job_id': job, 'count': 1}).json()['evidence']
     assert evidence['text'] == 'Thank you.'
     assert evidence['metadata']['original_transcript'] == 'Thank you. Thank you. Thank you.'
-    assert any('repeated the same short phrase' in warning for warning in evidence['warnings'])
+    assert any('repeated by mistake' in warning for warning in evidence['warnings'])
 
 
 def test_a_ninety_minute_visit_in_two_parts_gives_one_report_with_all_the_audio(quick_api, monkeypatch):

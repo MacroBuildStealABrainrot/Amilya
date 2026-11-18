@@ -11,8 +11,12 @@ android {
         applicationId = "com.woundcopilot.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 30
-        versionName = "1.8.5-test10"
+        buildConfigField("boolean", "REPAIR_SERVER", "false")
+        buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
+        buildConfigField("boolean", "ISOLATED_TEST", "false")
+        versionCode = 82
+        versionName = "1.9.0-test46"
+        manifestPlaceholders["appLabel"] = "WoundCoPilot"
         buildConfigField("boolean", "WEAR_REMOTE_CONTROL", providers.gradleProperty("wcpWearRemoteControl").orElse("true").get())
         buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", providers.gradleProperty("wcpAllowScreenCapture").orElse("false").get())
         // Crash-resistant recorder: compiled into every build, switched ON only in sandbox. Turning it on for debug/release later is one
@@ -22,6 +26,19 @@ android {
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildFeatures { compose = true; buildConfig = true }
+    // NO signing key is kept in this public code. The old test key was published here by mistake and is retired.
+    // Public builds are signed with the automatic debug key and are never offered for download (see the CI workflow).
+    // The private installer is signed ONLY inside the private build repository, which passes the key in through these
+    // environment variables. Without them the app is simply not signed with it.
+    val privateKeystore = System.getenv("WCP_SIGN_KEYSTORE")?.let { file(it) }
+    signingConfigs {
+        if (privateKeystore != null && privateKeystore.exists()) create("privateInstaller") {
+            storeFile = privateKeystore
+            storePassword = System.getenv("WCP_SIGN_STORE_PASSWORD")
+            keyAlias = System.getenv("WCP_SIGN_KEY_ALIAS")
+            keyPassword = System.getenv("WCP_SIGN_KEY_PASSWORD")
+        }
+    }
     buildTypes {
         // Normal debug and release builds keep talking to the existing service, exactly as before.
         getByName("debug") {
@@ -45,14 +62,56 @@ android {
         // Do not use identifiable clinical data until compatibility and privacy checks are completed.
         create("pilot") {
             initWith(getByName("debug"))
-            applicationIdSuffix = ".pilot"
+            // ".pilot2": new package so it installs BESIDE the older Pilot (different signing key) without touching its data.
+            applicationIdSuffix = ".pilot2"
             versionNameSuffix = "-pilot"
+            manifestPlaceholders["appLabel"] = "Amilya Test 15"
             buildConfigField("String", "API_BASE_URL", "\"https://woundcopilot-1039151887397.us-central1.run.app/api/v1\"")
             buildConfigField("boolean", "SANDBOX", "false")
             buildConfigField("boolean", "CRASH_SAFE_RECORDING", "false")
             manifestPlaceholders["crashSafeRecording"] = "false"
             buildConfigField("boolean", "RETAIN_UNRESOLVED", "false")
             matchingFallbacks += listOf("debug")
+        }
+        // Isolated repair verification app: never replaces a recording-bearing install.
+        create("repair") {
+            initWith(getByName("pilot"))
+            // ".repair2": installs beside any older repair app (different signing key), never over it.
+            applicationIdSuffix = ".repair2"
+            buildConfigField("boolean", "REPAIR_SERVER", "true")
+            versionNameSuffix = "-server-test"
+            manifestPlaceholders["appLabel"] = "Amilya Server Test"
+            buildConfigField("String", "API_BASE_URL", "\"https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
+        // A new package keeps all existing apps, sessions and recordings separate.
+        create("renderTest") {
+            initWith(getByName("pilot"))
+            applicationIdSuffix = ".rendertest"
+            versionNameSuffix = "-render-test14"
+            buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
+            buildConfigField("boolean", "REPAIR_SERVER", "false")
+            buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
+            buildConfigField("String", "API_BASE_URL", "\"https://amilya-repair-test.onrender.com/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
+        }
+        // ISOLATED TEST APP (safety first). Talks ONLY to the isolated Render test server, which has its own empty database and
+        // refuses to start with clinical data, billing or the live database. The app checks the address of EVERY request and
+        // refuses to send anything until the server has proved it is that synthetic-only test server. It can never reach the
+        // live Cloud Run service. Its own package, so it installs beside every other build and shares no data with them.
+        create("isolatedTest") {
+            initWith(getByName("pilot"))
+            // ".isolated2": a NEW package, so it installs BESIDE the older isolated app (signed with the retired key) and never touches its data.
+            applicationIdSuffix = ".isolated2"
+            versionNameSuffix = "-isolated2"
+            manifestPlaceholders["appLabel"] = "Amilya Private Test"
+            if (signingConfigs.findByName("privateInstaller") != null) signingConfig = signingConfigs.getByName("privateInstaller")
+            buildConfigField("boolean", "ISOLATED_TEST", "true")
+            buildConfigField("boolean", "RENDER_TEST_SERVER", "true")
+            buildConfigField("boolean", "REPAIR_SERVER", "false")
+            buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
+            buildConfigField("String", "API_BASE_URL", "\"https://amilya-repair-test.onrender.com/api/v1\"")
+            matchingFallbacks += listOf("pilot", "debug")
         }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
@@ -83,6 +142,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // Test-only (never shipped): the real org.json, so data-format tests run off the phone.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.02.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
@@ -91,4 +152,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     add("sandboxImplementation", "androidx.compose.ui:ui-tooling")
     add("sandboxImplementation", "androidx.compose.ui:ui-test-manifest")
+}
+
+
+// Optional CI-only bounded-disk fixture; never used by the application runtime.
+tasks.withType<Test>().configureEach {
+    providers.environmentVariable("WCP_STORAGE_FULL_TEST_DIR").orNull?.let {
+        systemProperty("full.dir", it)
+    }
 }

@@ -50,6 +50,10 @@ fun InstrumentIcon(name: String, modifier: Modifier = Modifier, tint: Color = Ma
                 line(7f,11f,17f,6f);line(7f,13f,17f,18f)
                 listOf(p(5f,12f),p(19f,5f),p(19f,19f)).forEach{drawCircle(tint,2.5f*k,it,style=Stroke(1.65f*k))}
             }
+            "voice" -> {
+                // Sound waves: spoken commands, distinct from the recording microphone.
+                line(5f,10f,5f,14f);line(9f,7f,9f,17f);line(13f,4f,13f,20f);line(17f,8f,17f,16f);line(21f,10.5f,21f,13.5f)
+            }
             "record", "audio" -> {
                 drawRoundRect(tint,p(9f,3f),Size(6*k,12*k),CornerRadius(3*k),style=Stroke(1.65f*k))
                 drawArc(tint,0f,180f,false,p(5.5f,7f),Size(13*k,12*k),style=Stroke(1.65f*k,cap=StrokeCap.Round))
@@ -82,7 +86,12 @@ fun InstrumentIcon(name: String, modifier: Modifier = Modifier, tint: Color = Ma
             "stop" -> drawRoundRect(tint,p(6f,6f),Size(12*k,12*k),CornerRadius(2*k))
             "refresh" -> {drawArc(tint,45f,280f,false,p(4f,4f),Size(16*k,16*k),style=Stroke(1.65f*k,cap=StrokeCap.Round));path(20f to 3f,20f to 9f,14f to 9f)}
             "history" -> {drawCircle(tint,9*k,p(12f,12f),style=Stroke(1.65f*k));path(12f to 6f,12f to 12f,16f to 14f)}
-            "kosmo" -> repeat(3){n->rotate(n*60f){drawOval(tint,p(3f,7f),Size(18*k,10*k),style=Stroke(1.35f*k))}}
+            "kosmo" -> {
+                // Chat bubble with a small medical cross (Ask Consultant).
+                drawRoundRect(tint,p(3f,3.5f),Size(18*k,13.5f*k),CornerRadius(5*k),style=Stroke(1.65f*k))
+                path(8f to 17f,6.5f to 21f,12f to 17f)
+                line(12f,7f,12f,13.5f);line(8.75f,10.25f,15.25f,10.25f)
+            }
             else -> {line(5f,7f,19f,7f);line(5f,12f,19f,12f);line(5f,17f,15f,17f)}
         }
     }

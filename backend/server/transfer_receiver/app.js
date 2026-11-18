@@ -25,7 +25,7 @@
     container.replaceChildren();
     documents.forEach((report, index) => {
       const article = document.createElement('article'); article.className = 'report-card';
-      const heading = document.createElement('h2'); heading.className = 'no-print'; heading.textContent = `Report ${index + 1} · ${report.template}`;
+      const heading = document.createElement('h2'); heading.className = 'no-print'; heading.textContent = `Report ${index + 1} · ${({nursing:'Note',soap:'SOAP Note',physician_update:'Physician Update',referral_letter:'Referral Letter',sbar:'SBAR',handoff:'Handoff Report',diagnostics:'Diagnostics Summary',medical_order:'Order Draft'})[report.template] || 'Report'}`;
       const metadata = document.createElement('p'); metadata.className = 'metadata no-print';
       metadata.textContent = `Version ${report.version} · ${report.status === 'signed' ? 'Signed' : 'Draft — not signed'}${report.signed_at ? ' · Signed ' + new Date(report.signed_at).toLocaleString() : ''}`;
       const text = document.createElement('div'); text.className = 'report'; text.textContent = report.text;
@@ -36,11 +36,12 @@
         catch (_) { actionStatus.textContent = 'Copy is unavailable in this browser. Select the report text or download it.'; }
       });
       const save = document.createElement('button'); save.type = 'button'; save.className = 'secondary'; save.textContent = 'Download text';
-      save.addEventListener('click', () => download(report.text, `WoundCoPilot-report-${index + 1}.txt`));
+      save.addEventListener('click', () => download(report.text, `Amilya-report-${index + 1}.txt`));
       actions.append(copy, save); article.append(heading, metadata, text, actions); container.append(article);
     });
+    byId('download-all').hidden = documents.length === 1;  // one report already has its own Download button
     byId('intro').hidden = true; byId('unlock').hidden = true; byId('received').hidden = false;
-    byId('download-all').focus();
+    (documents.length === 1 ? byId('print') : byId('download-all')).focus();
   }
   byId('pin-form').addEventListener('submit', async event => {
     event.preventDefault();
@@ -68,7 +69,7 @@
   });
   byId('download-all').addEventListener('click', () => {
     const text = documents.length === 1 ? documents[0].text : documents.map(report => report.text).join('\n\n' + '—'.repeat(32) + '\n\n');
-    download(text, 'WoundCoPilot-reports.txt');
+    download(text, 'Amilya-reports.txt');
   });
   byId('print').addEventListener('click', () => window.print());
   function clearPage() {

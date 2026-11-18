@@ -55,38 +55,47 @@ class CrashSafeRecordingTest {
         return condition()
     }
 
+    /** The sandbox keeps encrypted segments and a placeholder; tests must use the in-memory playback handle. */
     private fun durationMillis(file: File): Long {
+        val handle = crashSafeBackend()?.sealedRecording(file)
         val r = android.media.MediaMetadataRetriever()
-        return try { r.setDataSource(file.absolutePath); r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)!!.toLong() } finally { r.release() }
+        return try {
+            if (handle != null) r.setDataSource(handle.playbackSource()) else r.setDataSource(file.absolutePath)
+            r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)!!.toLong()
+        } finally { r.release(); handle?.close() }
     }
 
-    /** Decodes the whole file with the phone's own AAC decoder and returns mono 16-bit samples. */
+    /** Decodes the in-memory audio source used by playback; no plaintext audio file is created. */
     private fun decode(file: File): ShortArray {
-        val extractor = MediaExtractor().apply { setDataSource(file.absolutePath) }
-        extractor.selectTrack(0)
-        val format = extractor.getTrackFormat(0)
-        val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!).apply { configure(format, null, null, 0); start() }
+        val handle = crashSafeBackend()?.sealedRecording(file)
+        val extractor = MediaExtractor()
+        var codec: MediaCodec? = null
         val out = ArrayList<Short>(); val info = MediaCodec.BufferInfo(); var inputDone = false; var done = false
         try {
+            if (handle != null) extractor.setDataSource(handle.playbackSource()) else extractor.setDataSource(file.absolutePath)
+            extractor.selectTrack(0)
+            val format = extractor.getTrackFormat(0)
+            codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!).apply { configure(format, null, null, 0); start() }
+            val decoder = requireNotNull(codec)
             while (!done) {
                 if (!inputDone) {
-                    val i = codec.dequeueInputBuffer(10_000)
+                    val i = decoder.dequeueInputBuffer(10_000)
                     if (i >= 0) {
-                        val size = extractor.readSampleData(codec.getInputBuffer(i)!!, 0)
-                        if (size < 0) { codec.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true }
-                        else { codec.queueInputBuffer(i, 0, size, extractor.sampleTime, 0); extractor.advance() }
+                        val size = extractor.readSampleData(decoder.getInputBuffer(i)!!, 0)
+                        if (size < 0) { decoder.queueInputBuffer(i, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true }
+                        else { decoder.queueInputBuffer(i, 0, size, extractor.sampleTime, 0); extractor.advance() }
                     }
                 }
-                val o = codec.dequeueOutputBuffer(info, 10_000)
+                val o = decoder.dequeueOutputBuffer(info, 10_000)
                 if (o >= 0) {
-                    val buf = codec.getOutputBuffer(o)!!.order(ByteOrder.LITTLE_ENDIAN)
+                    val buf = decoder.getOutputBuffer(o)!!.order(ByteOrder.LITTLE_ENDIAN)
                     buf.position(info.offset); buf.limit(info.offset + info.size)
                     while (buf.remaining() >= 2) out.add(buf.short)
-                    codec.releaseOutputBuffer(o, false)
+                    decoder.releaseOutputBuffer(o, false)
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) done = true
                 }
             }
-        } finally { codec.stop(); codec.release(); extractor.release() }
+        } finally { runCatching { codec?.stop() }; codec?.release(); extractor.release(); handle?.close() }
         return out.toShortArray()
     }
 

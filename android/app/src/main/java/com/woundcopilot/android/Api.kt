@@ -157,7 +157,7 @@ class Vault(context:Context) {
 
 
 
-internal val PHOTO_ERROR_CATEGORIES=setOf("PROVIDER_QUOTA","PROVIDER_AUTH","MODEL_UNAVAILABLE","REQUEST_INCOMPATIBLE","PROVIDER_TIMEOUT","INVALID_RESPONSE","NETWORK_UNAVAILABLE","RATE_LIMITED","PROVIDER_UNAVAILABLE","RETRY_LIMIT","RESPONSE_PROCESSING_FAILED","AI_PAUSED","AI_NOT_CONFIGURED","PROVIDER_APPROVAL_REQUIRED","PRIVACY_CONFIGURATION_REQUIRED","SECURE_STORAGE_REQUIRED","MODEL_CONFIGURATION_INVALID")
+internal val PHOTO_ERROR_CATEGORIES=setOf("PROVIDER_QUOTA","PROVIDER_AUTH","MODEL_UNAVAILABLE","REQUEST_INCOMPATIBLE","PROVIDER_TIMEOUT","OUTPUT_LIMIT","INVALID_RESPONSE","NETWORK_UNAVAILABLE","RATE_LIMITED","PROVIDER_UNAVAILABLE","RETRY_LIMIT","RESPONSE_PROCESSING_FAILED","AI_PAUSED","AI_NOT_CONFIGURED","PROVIDER_APPROVAL_REQUIRED","PRIVACY_CONFIGURATION_REQUIRED","SECURE_STORAGE_REQUIRED","MODEL_CONFIGURATION_INVALID")
 
 internal fun apiErrorMessage(value:Any?):String {
     val detail=(value as? JSONObject)?.opt("detail")
@@ -176,24 +176,104 @@ internal val AUTH_ENTRY_PATHS=setOf("/auth/login","/auth/signup","/auth/refresh"
 /** The server answers this before it does any work, so the same request can safely be sent again. */
 internal fun isCsrfRejection(status:Int,message:String)=status==403 && message.contains("request verification",ignoreCase=true)
 
-class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null):Exception(message)
+class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null,val reportState:String?=null):Exception(message)
 
 internal const val PRODUCTION_API_ORIGIN="https://woundcopilot-1039151887397.us-central1.run.app/api/v1"
+internal const val REPAIR_API_ORIGIN="https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1"
+internal const val RENDER_TEST_API_ORIGIN="https://amilya-repair-test.onrender.com/api/v1"
 internal const val LOCAL_TEST_API_ORIGIN="http://127.0.0.1:18766/api/v1"
 
+internal const val ISOLATED_TEST_HOST="amilya-repair-test.onrender.com"
+internal fun sessionKeyFor(base:String)=if(base.startsWith("https://woundcopilot-") || base.startsWith("https://$ISOLATED_TEST_HOST/"))"session" else "session-local-integration"
+
+/** Any address of the live Google Cloud Run service (including its tagged repair copy). The isolated test app never talks to these. */
+internal fun isLiveServiceUrl(url:String):Boolean{
+    val host=runCatching{java.net.URI(url).host?.lowercase()}.getOrNull()?:return false
+    return host.endsWith(".run.app") || host.contains("woundcopilot-1039151887397") || host.contains("woundcopilot-rhd7rrcqdq")
+}
+
+/**
+ * ISOLATED TEST APP, check 1 of 2 (address): every single request must go to the exact isolated test server
+ * (https, default port, exact host). Anything else, and above all any live-service address, is refused before
+ * a connection is opened.
+ */
+internal fun isolatedRequestAllowed(fullUrl:String):Boolean{
+    if(isLiveServiceUrl(fullUrl))return false
+    val uri=runCatching{java.net.URI(fullUrl)}.getOrNull()?:return false
+    return uri.scheme=="https" && uri.host==ISOLATED_TEST_HOST && uri.port==-1 && uri.userInfo==null && (uri.rawPath?:"").startsWith("/api/v1/")
+}
+
+/**
+ * ISOLATED TEST APP, check 2 of 2 (server identity): before anything is sent, the server must say about itself that it is
+ * the synthetic-only test server. Only the isolated Render test service sends a `synthetic_test` block, and only with
+ * `patient_data_allowed: false`; the live service does not. A missing or different answer means: send nothing.
+ */
+internal fun isIsolatedTestServer(config:JSONObject?):Boolean{
+    if(config==null)return false
+    val marker=config.optJSONObject("synthetic_test")
+    fun flag(o:JSONObject?,name:String):Boolean?=if(o!=null && o.has(name) && o.opt(name) is Boolean)o.getBoolean(name)else null
+    return isolatedServerAnswer(marker!=null,flag(marker,"patient_data_allowed"),flag(config,"clinical_data_enabled"),
+        if(config.has("isolated_test_server"))flag(config,"isolated_test_server")?:false else null)
+}
+
+/** The decision itself, on plain values (a missing value is null). Every unclear answer means "not the isolated test server". */
+internal fun isolatedServerAnswer(hasSyntheticMarker:Boolean,patientDataAllowed:Boolean?,clinicalDataEnabled:Boolean?,declaresIsolated:Boolean?):Boolean{
+    if(!hasSyntheticMarker || patientDataAllowed!=false || clinicalDataEnabled!=false)return false
+    // The newer test server also declares itself explicitly; when the answer is present it must be true.
+    return declaresIsolated==null || declaresIsolated
+}
+
+/** Consent is confirmed only by a tap: on the phone, or on the watch's Record visit button. */
+internal val CONSENT_METHODS=setOf("phone_tap","watch_tap")
+/** Version of the consent wording shown to the clinician (CaptureScreen consent dialog). */
+internal const val CONSENT_WORDING="tap-client-agreed-v1"
+
+/** Form fields that tell the server how consent was confirmed. Empty when nothing valid was recorded (the server then stores "not_recorded"). */
+internal fun consentFormFields(method:String?,confirmedAt:String?,wording:String?):Map<String,String>{
+    if(method !in CONSENT_METHODS)return emptyMap()
+    val out=linkedMapOf("consent_method" to method!!)
+    if(!confirmedAt.isNullOrBlank() && confirmedAt.length<=40 && Regex("[0-9T:.+\\-Z]+").matches(confirmedAt))out["consent_confirmed_at"]=confirmedAt
+    if(!wording.isNullOrBlank() && Regex("[a-z0-9-]{1,40}").matches(wording))out["consent_wording"]=wording
+    return out
+}
+
+/** Paths the isolated test app may use BEFORE the server has proved it is the isolated test server: reading its public description only. */
+internal fun isIsolationProbe(method:String,path:String)=method=="GET" && (path=="/config" || path=="/health")
+
 /** Which server addresses a build may talk to. The sandbox build allows ONLY the fake test server on this PC. */
-internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean):Boolean{
+internal fun isAllowedApiOrigin(url:String,debug:Boolean,sandbox:Boolean,repair:Boolean=false,renderTest:Boolean=false,isolated:Boolean=false):Boolean{
+    if(isolated) return !sandbox && !repair && url==RENDER_TEST_API_ORIGIN && isolatedRequestAllowed(url+"/")
+    if(renderTest) return !sandbox && !repair && url==RENDER_TEST_API_ORIGIN
     val local=url==LOCAL_TEST_API_ORIGIN || url=="http://localhost:18766/api/v1"
-    return if(sandbox) local else url==PRODUCTION_API_ORIGIN || (debug && local)
+    return if(sandbox) local else if(repair) url==REPAIR_API_ORIGIN else url==PRODUCTION_API_ORIGIN || (debug && local)
 }
 
 class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
     @Volatile var diagnosticJob:String?=null
     @Volatile var diagnosticGeneration:String?=null
 
-    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX)) { "Unsupported API origin." } }
+    val base=baseUrl.also { require(isAllowedApiOrigin(it,BuildConfig.DEBUG,BuildConfig.SANDBOX,BuildConfig.REPAIR_SERVER,BuildConfig.RENDER_TEST_SERVER,BuildConfig.ISOLATED_TEST)) { "Unsupported API origin." } }
 
-    private val sessionKey=if(base.startsWith("https://woundcopilot-"))"session" else "session-local-integration"
+    /** Isolated test app only: set once the server has proved it is the synthetic-only test server (see [isIsolatedTestServer]). */
+    @Volatile private var isolatedServerVerified=false
+    private val isolationLock=Any()
+
+    /** Isolated test app: refuse before connecting unless the address is the test server AND (for anything but reading its description) it has proved its identity. */
+    private fun enforceIsolation(path:String,method:String){
+        if(!BuildConfig.ISOLATED_TEST)return
+        if(!isolatedRequestAllowed(base+path))throw ApiException(421,"This test app only talks to the isolated test server. Nothing was sent.")
+        if(isIsolationProbe(method,path) || isolatedServerVerified)return
+        synchronized(isolationLock){
+            if(isolatedServerVerified)return
+            val config=runCatching{execute("/config","GET",null,"application/json",null,true) as? JSONObject}.getOrNull()
+            if(!isIsolatedTestServer(config))throw ApiException(421,"This test app could not confirm it is connected to the isolated test server, so nothing was sent.")
+            isolatedServerVerified=true
+        }
+    }
+
+    // The isolated test server is the only server a test build talks to, so its sign-in is kept under the same name the
+    // app checks when it starts. Before this, a test build forgot the sign-in whenever Android closed the app (owner report).
+    private val sessionKey=sessionKeyFor(base)
 
     @Volatile private var cookie=vault.read(sessionKey) ?: ""
 
@@ -210,7 +290,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
     }
 
-    suspend fun upload(encounter:String,file:File,mime:String,kind:String,key:String,photoReview:JSONObject?=null):JSONObject {
+    suspend fun upload(encounter:String,file:File,mime:String,kind:String,key:String,photoReview:JSONObject?=null,clinicianNote:String?=null,clinicianFindings:JSONObject?=null):JSONObject {
 
         val fields=mutableMapOf("kind" to kind)
 
@@ -218,11 +298,24 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
         if(kind=="photo" && photoReview!=null)fields["photo_review"]=photoReview.toString()
 
+        // The clinician's own words about the wound go WITH the photo, so the photo assessment can use them.
+        if(kind=="photo" && !clinicianNote.isNullOrBlank())fields["clinician_note"]=clinicianNote.trim().take(4000)
+
+        if(kind=="photo" && clinicianFindings!=null && clinicianFindings.length()>0)fields["clinician_findings"]=clinicianFindings.toString()
+
         return multipart("/encounters/$encounter/upload",file,mime,fields,key)
 
     }
 
 
+
+    /** Adds how the clinician confirmed consent (tap, time, wording) to every recording upload of that visit. */
+    private fun withConsentRecord(path:String,fields:Map<String,String>):Map<String,String>{
+        if(fields["consent"]!="true")return fields
+        val encounter=Regex("^/encounters/([^/]+)/").find(path)?.groupValues?.get(1)?:return fields
+        val record=runCatching{vault.read("consent-record-$encounter")?.let{JSONObject(it)}}.getOrNull()?:return fields
+        return fields+consentFormFields(record.optString("method"),record.optString("confirmed_at"),record.optString("wording"))
+    }
 
     suspend fun multipart(path:String,file:File,mime:String,fields:Map<String,String>,key:String):JSONObject = withContext(Dispatchers.IO) {
 
@@ -234,7 +327,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
         val name=file.name.replace(Regex("[^a-zA-Z0-9._-]"),"_")
 
-        val form=fields.entries.joinToString(""){(field,value)->
+        val form=withConsentRecord(path,fields).entries.joinToString(""){(field,value)->
 
             require(Regex("[a-zA-Z0-9_]+").matches(field)) { "Invalid upload field." }
 
@@ -254,7 +347,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
         require(!mime.contains('\r') && !mime.contains('\n')) { "Invalid file content type." }
         val boundary="Wcp"+java.util.UUID.randomUUID().toString()
         val safeName=name.replace(Regex("[^a-zA-Z0-9._-]"),"_")
-        val form=fields.entries.joinToString(""){(field,value)->
+        val form=withConsentRecord(path,fields).entries.joinToString(""){(field,value)->
             require(Regex("[a-zA-Z0-9_]+").matches(field)) { "Invalid upload field." }
             "--$boundary\r\nContent-Disposition: form-data; name=\"$field\"\r\n\r\n$value\r\n"
         }
@@ -265,6 +358,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
     private fun execute(path:String,method:String,data:ByteArray?,type:String,key:String?, renewed:Boolean=false):Any {
 
         require(path.startsWith('/') && !path.startsWith("//")) { "Use a relative API path." }
+        enforceIsolation(path,method)
 
         if(!renewed){
             val nowMs=System.nanoTime()/1_000_000
@@ -283,6 +377,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
         val perfStarted=Performance.now()
         val perfStage=when{path.endsWith("/audio-parts")->"transcription_request";path.endsWith("/audio-complete")->"transcript_assembly";path.endsWith("/quick-report")->"report_network";path.endsWith("/documents")&&method=="POST"->"report_save_network";path.endsWith("/quick/start")->"encounter_creation";path.startsWith("/auth/")->"session_request";else->"api_request"}
         var perfStatus="failed"
+        var perfHttp:Int?=null   // the server's answer code on a failure, sent as a safe technical tag on the test build
 
         try {
 
@@ -290,6 +385,8 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
 
             c.setRequestProperty("Accept","application/json")
             c.setRequestProperty("X-WCP-Client","android")
+            // Lets any server that is NOT the isolated test server refuse this app's requests (server-side guard).
+            if(BuildConfig.ISOLATED_TEST)c.setRequestProperty("X-Amilya-Build","isolated-test")
 
             if(requestCookie.isNotBlank())c.setRequestProperty("Cookie",requestCookie+if(path.startsWith("/auth/") && refreshToken.isNotBlank())"; $refreshToken" else "")
             if(diagnosticRequestJob!=null && !path.startsWith("/diagnostics"))c.setRequestProperty("X-Diagnostic-Job",diagnosticRequestJob)
@@ -315,6 +412,8 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
             if(status==401 && !renewed && path!="/auth/refresh" && path!="/auth/login" && refreshToken.isNotBlank()) {
                 c.disconnect()
                 synchronized(renewalLock){if(cookie==requestCookie)execute("/auth/refresh","POST","{}".toByteArray(),"application/json",null,true)}
+                // Not a failure: the sign-in was renewed and the same request is sent again, which records its own result.
+                perfStatus="SESSION_RENEWED"
                 return execute(path,method,data,type,key,true)
             }
 
@@ -337,7 +436,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
                 }
 
                 val pending=status==409 && message.contains("already processing or awaiting reconciliation")
-                throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599})
+                throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599},reportState=c.getHeaderField("X-Amilya-Report-State"))
 
             }
 
@@ -349,6 +448,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
             perfStatus="ok";return value ?: JSONObject()
 
         } catch(e:Exception){
+            perfHttp=(e as? ApiException)?.status?.takeIf{it in 100..599}
             if(perfStatus!="RESPONSE_PARSE_FAILED")perfStatus=when{
                 e is ApiException && e.status==409 && e.ambiguous -> "PROCESSING_IN_PROGRESS"
                 e is java.net.SocketTimeoutException || e is ApiException && e.status==504 -> when(perfStage){"transcription_request"->"TRANSCRIPTION_TIMEOUT";"report_network"->"REPORT_GENERATION_TIMEOUT";else->"NETWORK_TIMEOUT"}
@@ -359,7 +459,7 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
                 else -> "REQUEST_FAILED"
             }
             throw e
-        } finally {Performance.record(perfStage,perfStarted,perfStatus,diagnosticRequestJob?:"unbound",diagnosticClientRequest);c.disconnect()}
+        } finally {Performance.record(perfStage,perfStarted,perfStatus,diagnosticRequestJob?:"unbound",diagnosticClientRequest,perfHttp);c.disconnect()}
 
     }
 

@@ -14,7 +14,7 @@ class ProcessingService:Service(){
         manager.createNotificationChannel(NotificationChannel("processing","Report processing",NotificationManager.IMPORTANCE_LOW))
         val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification=Notification.Builder(this,"processing").setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("WoundCoPilot").setContentText("Preparing your work").setContentIntent(open).setOngoing(true).setVisibility(Notification.VISIBILITY_PRIVATE).build()
+            .setContentTitle("Amilya").setContentText("Preparing your work").setContentIntent(open).setOngoing(true).setVisibility(Notification.VISIBILITY_PRIVATE).build()
         if(android.os.Build.VERSION.SDK_INT>=29)startForeground(4202,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)else startForeground(4202,notification)
         return START_NOT_STICKY
     }

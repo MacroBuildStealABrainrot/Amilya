@@ -20,4 +20,7 @@ internal fun formatLocalTime(value: String, zone: ZoneId, use24Hour: Boolean, lo
         .withZone(zone).format(instant)
 }
 
+/** Some saved records keep their time as milliseconds since 1970. Turn that into a normal date, or nothing if it is missing. */
+internal fun epochMillisAsStoredTime(millis: Long): String? = if (millis > 0L) Instant.ofEpochMilli(millis).toString() else null
+
 @Composable fun localTime(value: String): String = formatLocalTime(value,ZoneId.systemDefault(),android.text.format.DateFormat.is24HourFormat(LocalContext.current))

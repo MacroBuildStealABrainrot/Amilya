@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -16,58 +17,116 @@ import java.time.format.DateTimeFormatter
     LaunchedEffect(s.user?.str("id")){s.refreshRecordingJobs()}
     StartScreen(
         recovery={
-            s.recordingJobs.take(3).forEachIndexed{index,job->
-                TextButton({s.resumeRecording(job)},enabled=!s.loading){Text(if(job.str("resume_from")=="REPORT_READY")"Review recovered report ${index+1}"else "Resume saved recording ${index+1}")}
+            val pending = s.recordingJobs.filter { it.str("resume_from") != "REPORT_READY" }
+            val reports = s.recordingJobs.filter { it.str("resume_from") == "REPORT_READY" }
+            if (pending.isNotEmpty()) {
+                TextButton({ s.resumeRecording(pending.first()) }, enabled = !s.loading) {
+                    Text("${pending.size} recording${if (pending.size == 1) "" else "s"} not finished")
+                }
+                if (pending.size > 1) DetailDisclosure("Other unfinished recordings", "${pending.size - 1} more") {
+                    pending.drop(1).forEachIndexed { index, job ->
+                        TextButton({ s.resumeRecording(job) }, enabled = !s.loading) { Text("Open unfinished recording ${index + 2}") }
+                    }
+                }
             }
-            if(s.recordingJobs.size>3)DetailDisclosure("More saved recordings","${s.recordingJobs.size-3} more"){
-                s.recordingJobs.drop(3).forEachIndexed{index,job->TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Resume saved recording ${index+4}")}}
+            if (reports.isNotEmpty()) {
+                TextButton({ s.resumeRecording(reports.first()) }, enabled = !s.loading) { Text("Review recovered report") }
+                if (reports.size > 1) DetailDisclosure("Other recovered reports", "${reports.size - 1} more") {
+                    reports.drop(1).forEachIndexed { index, job ->
+                        TextButton({ s.resumeRecording(job) }, enabled = !s.loading) { Text("Review recovered report ${index + 2}") }
+                    }
+                }
             }
         },
-        savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}.take(4).map { e ->
-            val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
-            val name=s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name").orEmpty()
-            SimpleSavedWork(e.str("id"),if(quick || name.isBlank())e.str("title")else name,
-                if(quick)localTime(e.str("updated_at"))else e.str("title"))
+        savedWork=s.encounters.filter{it.str("storage_state") in listOf("temporary","saved")}
+            .sortedByDescending { it.str("updated_at") }.take(1).map { e ->
+            val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().lowercase()
+            val type=when(mode){
+                "photo","photo_assessment","image"->"Photo assessment"
+                "consultant","wound_consultant","ask_consultant"->"Ask Consultant"
+                "document","report","nursing"->"Visit"
+                else->"Visit"
+            }
+            val rawTitle=e.str("title").trim()
+            val custom=s.visitName(e.str("id"))
+            val title=if(custom.isNotBlank())custom else if(rawTitle.isNotBlank() && !rawTitle.equals("New report",true) && !rawTitle.equals("New encounter",true))
+                rawTitle else type
+            SimpleSavedWork(e.str("id"),title,localTime(e.str("updated_at")))
         },busy=s.loading,onDocument={s.startQuick("document")},onPhoto={s.startQuick("photo")},
-        onConsultant={s.startQuick("consultant")},onOpenWork={s.openEncounter(it)},
+        onConsultant={s.startQuick("consultant")},onDiagnostics={s.startDocumentAs("diagnostics")},onReview={s.beginCaseReview()},onOrder={s.startDocumentAs("medical_order")},onOpenWork={s.openEncounter(it)},
         onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
 }
 
 @Composable fun DocumentCaptureScreen(s:AppState){
     LaunchedEffect(Unit){withFrameNanos{};Performance.end("document_open")}
     val sources=s.case?.items("evidence").orEmpty()
+    val context=LocalContext.current
+    val spokenText=sources.filter{it.str("kind") in listOf("audio","typed","transcript")}.map{it.str("text").trim()}.filter{it.isNotEmpty()}.joinToString("\n\n")
     Page{
         InstrumentTitle("Document")
         DocumentTypeSelector(s.editorTemplate, !s.loading) { if(s.editor.isBlank()){s.updateTemplate(it);s.persistEditor()}else s.reformatQuick(it) }
-        WcpButton("Record",{s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
+        WcpButton("Record",{s.textOnlyNext=false;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
+        WcpButton("Record, text only (no report)",{s.textOnlyNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         WcpButton("Write instead",{s.screen="evidence:typed"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        // After a whole-visit recording: a short spoken summary in the clinician's own words is the most reliable source.
+        if(sources.any{it.str("kind")=="audio"})WcpButton("Add a spoken summary",{s.textOnlyNext=false;s.summaryNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
             TextButton({s.screen="photo"},enabled=!s.loading){InstrumentIcon("photo",Modifier.size(18.dp));Text("  Add photo")}
             TextButton({s.screen="upload"},enabled=!s.loading){InstrumentIcon("add",Modifier.size(18.dp));Text("  Add Files")}
         }
         if(s.editor.isNotBlank())WcpButton("Return to report",{s.screen="editor"},Modifier.fillMaxWidth(),enabled=!s.loading)
-        else if(sources.isNotEmpty())WcpButton("Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
+        else if(showsGenerateOnDocument(true,sources.size,s.earlierReportWaiting()))WcpButton(if(sources.isEmpty())"Recover earlier report" else "Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
+        if(spokenText.isNotBlank())WcpButton("Share text",{try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,spokenText)},"Share text"))}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        val audioPath=s.vault.read("capture-${s.user?.str("id")}-${s.encounterId}-audio").orEmpty()
+        if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Share recording",{try{
+            val src=java.io.File(audioPath);val dir=java.io.File(context.cacheDir,"exports").apply{mkdirs()}
+            val copy=java.io.File(dir,"visit-recording-"+System.currentTimeMillis()+"."+src.extension.ifBlank{"m4a"});src.copyTo(copy,true)
+            val uri=androidx.core.content.FileProvider.getUriForFile(context,context.packageName+".files",copy)
+            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="audio/mp4";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)},"Share recording"))
+        }catch(_:Exception){s.notice="The recording could not be shared."}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Save recording to phone",{s.notice=PhoneSave.save(context,java.io.File(audioPath),"audio/mp4")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(spokenText.isNotBlank())WcpButton("Save text to phone",{s.notice=PhoneSave.saveText(context,spokenText,"visit-text")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(spokenText.isNotBlank())WcpButton("Copy text",{try{(context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Voice to text",spokenText));s.notice="Text copied."}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(spokenText.isNotBlank() && s.editor.isBlank())WcpButton("Create report from this text",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
             sources.forEach{EvidenceItem(s,it)}
             if(s.editor.isBlank())TextButton({s.quickReport(false)},enabled=!s.loading){Text("Create draft without AI")}
         }
-        s.recordingJobs.filter{it.optJSONObject("case")?.optJSONObject("encounter")?.str("id")==s.encounterId && it.str("resume_from")!="REPORT_READY"}.forEach{job->
-            Text("Recording saved on this device.")
-            TextButton({s.resumeRecording(job)},enabled=!s.loading){Text("Retry recording")}
-        }
-        TextButton({s.doneQuick()},enabled=!s.loading){Text("Done")}
+        // Saved-recording status, Retry recording and Done removed at the owner's request;
+        // unfinished recordings remain in Saved work > Recovery & older work.
     }
 }
 
 @Composable fun QuickPhotoScreen(s:AppState){PhotoCollectionScreen(s)}
 
 @Composable fun QuickConsultantScreen(s:AppState){
+    LaunchedEffect(s.autoReview,s.loading){if(s.autoReview&&!s.loading){s.autoReview=false;s.sendConsultant(CASE_REVIEW_REQUEST)}}
     val sources=s.case?.items("evidence").orEmpty()
     ConsultantChatScreen(s.encounterId,s.consultantMessages.map{ConsultantMessage(it.str("id"),it.str("content"),it.str("role")=="user",it.str("effort"))},
         initialDraft=s.consultantDraft,draftResetKey=s.consultantReset,busy=s.loading,
         attachments=ConsultantAttachments(photoCount=sources.count{it.str("kind")=="photo"},fileCount=sources.count{it.str("kind")=="document"},recordingCount=sources.count{it.str("kind")=="audio"},otherCount=sources.count{it.str("kind") !in listOf("photo","document","audio")}),
-        onDraftChange={s.updateConsultantDraft(it)},onSend={s.sendConsultant(it)},onAddPhoto={s.screen="photo"},onAddFiles={s.screen="upload"},onRecord={s.screen="record"},onDone={s.doneQuick()},
-        onVoiceMessage={s.recordConsultantMessage()},onOpenReport=if(s.editor.isNotBlank()){{s.chooseQuickMode("document");s.screen="editor"}}else null)
+        onDraftChange={s.updateConsultantDraft(it)},onSend={s.sendConsultant(it)},onAddPhoto={s.screen="photo"},onAddFiles={s.screen="upload"},onRecord={s.screen="record"},onDone={s.finishConsultant()},
+        onVoiceMessage={s.recordConsultantMessage()},onOpenReport=if(s.editor.isNotBlank()){{s.chooseQuickMode("document");s.screen="editor"}}else null,
+        onCreateReport={s.consultantReportPrompt=true})
+    if(s.consultantReportPrompt){
+        var format by rememberSaveable{mutableStateOf(s.editorTemplate)}
+        val earlier=s.earlierReportWaiting();val fits=s.consultationFitsNow()
+        val choices=consultationChoices(earlier,fits)
+        AlertDialog(onDismissRequest={s.consultantReportPrompt=false},
+            title={Text("Create a report from this consultation?")},
+            text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+                if(earlier)Text(CONSULTATION_DIALOG_EARLIER)
+                else if(fits)Text("Your questions, the consultant's answers and your attached photos and files will be used. You can review and edit the draft before saving.")
+                else Text(CONSULTATION_DIALOG_TOO_LONG,color=MaterialTheme.colorScheme.error)
+                if(s.editor.isNotBlank())Text("Creating a new draft may replace unsaved changes in your current report. Saved versions remain available.")
+                DocumentTypeSelector(format,true){format=it}
+                if(choices.size>1)TextButton({s.reportWithoutConversation(format)}){Text("New report without the conversation")}
+                Text("Closing without a report discards this conversation.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }},
+            confirmButton={TextButton({if(choices.first()==ConsultationChoice.CREATE_WITHOUT_CONVERSATION)s.reportWithoutConversation(format) else s.reportFromConsultant(format)}){Text(when(choices.first()){
+                ConsultationChoice.RECOVER_EARLIER->"Recover earlier report";ConsultationChoice.CREATE_WITHOUT_CONVERSATION->"Create report without the conversation";else->"Create report"})}},
+            dismissButton={Row{TextButton({s.consultantReportPrompt=false}){Text("Keep talking")};TextButton({s.closeConsultantWithoutReport()}){Text("Close")}}})
+    }
 }
 
 @Composable fun ActiveTransferDialog(s:AppState){
@@ -76,7 +135,9 @@ import java.time.format.DateTimeFormatter
     val expires=localTime(transfer.str("expires_at"))
     TransferDialog(transfer.str("url"),transfer.str("code"),if(expires.isBlank())"Expires after 15 minutes. Opens once."else "Expires at $expires. Opens once.",
         onDismiss={s.transfer=null},onShare={
-            try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,"WoundCoPilot report transfer\n${transfer.str("url")}\nOne-time code: ${transfer.str("code")}\nExpires in 15 minutes. Open once in your browser.")},"Open on your work phone"))}
+            try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,"Amilya report transfer\n${transfer.str("url")}\nOne-time code: ${transfer.str("code")}\nExpires in 15 minutes. Open once in your browser.")},"Open on your work phone"))}
             catch(_:Exception){s.error="No sharing app is available. Copy the link and code from this dialog."}
         })
 }
+
+const val CASE_REVIEW_REQUEST="Give a full review of this case: the likely diagnosis and important alternatives, the treatment plan, when to escalate, and what information is missing."

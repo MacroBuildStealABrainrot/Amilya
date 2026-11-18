@@ -37,7 +37,7 @@ Actions tab > the latest run. Three jobs:
 
 Downloads at the bottom of the run page ("Artifacts"):
 
-* `amilya-apks`: `app-sandbox.apk` (the one to install for the Samsung test), plus debug, unsigned release and watch apps, with `SHA256SUMS.txt`.
+* (Public builds no longer upload any installer. The test installer is built only in the separate PRIVATE repository; see `private-installer/README-STEPS.md`.)
 * `amilya-build-evidence`: `gradle-build.log`, `build-flags.log`, unit-test and lint reports.
 * `amilya-backend-evidence`: `backend-pytest.log`.
 * `amilya-phone-test-evidence-api35`: `summary.txt`, one report folder per test group, `logcat.txt`.

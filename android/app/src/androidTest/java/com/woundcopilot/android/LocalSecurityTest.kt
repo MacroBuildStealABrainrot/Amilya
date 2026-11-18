@@ -33,7 +33,9 @@ class LocalSecurityTest{
             vault.write(captureKey,pending.path);vault.write(draft,"Synthetic old recovery");vault.write(credential,"Synthetic credential marker")
             for(key in listOf(draft,credential))File(context.noBackupFilesDir,"vault/$key").setLastModified(System.currentTimeMillis()-8*24*60*60*1000L)
             LocalRetention.clean(context)
-            assertFalse(old.exists());assertTrue(pending.exists());assertNull(vault.read(draft));assertNotNull(vault.read(credential))
+            assertFalse(old.exists());assertTrue(pending.exists())
+            if(BuildConfig.RETAIN_UNRESOLVED)assertEquals("Synthetic old recovery",vault.read(draft)) else assertNull(vault.read(draft))
+            assertNotNull(vault.read(credential))
         }finally{old.delete();pending.delete();listOf(captureKey,draft,credential).forEach(vault::remove)}
     }
 }

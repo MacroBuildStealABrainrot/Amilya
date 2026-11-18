@@ -108,11 +108,14 @@ def collect_sentry(token, since):
             result[project] = {'error': f'HTTP {error.code}'}
             continue
         recent = [i for i in issues if (i.get('lastSeen') or '') >= since.strftime('%Y-%m-%dT%H:%M:%S')]
+        # Controlled monitoring tests are not real problems.
+        recent = [i for i in recent if not any(t in (i.get('title') or '') for t in ('monitoring_test', 'MonitoringSelfTest', 'ControlledTestCrash'))]
         result[project] = {
             'issues': len(recent),
             'new': sum(1 for i in recent if (i.get('firstSeen') or '') >= since.strftime('%Y-%m-%dT%H:%M:%S')),
             'fatal': sum(1 for i in recent if i.get('level') == 'fatal'),
-            'top': [{'title': i.get('title', '')[:90], 'count': i.get('count'), 'url': i.get('permalink')} for i in recent[:3]],
+            'top': [{'title': i.get('title', '')[:90], 'count': i.get('count'), 'url': i.get('permalink'),
+                     'level': i.get('level') or 'error'} for i in recent[:5]],
         }
     return result
 
@@ -221,7 +224,7 @@ def render(data, owner=None):
                 lines.append(f"- {project}: could not read ({info['error']}).")
                 continue
             lines.append(f"- {project}: {info['issues']} problem type(s) seen in 24 hours, {info['new']} new.")
-            lines += [f"  - [{t['title']}]({t['url']}) ({t['count']} times in total)" for t in info['top']]
+            lines += [f"  - {t.get('level', 'error')}: [{t['title']}]({t['url']}) ({t['count']} times in total)" for t in info['top']]
 
     lines += ['', '## Automatic tests and fixes (last 24 hours)']
     if gh['runs']:

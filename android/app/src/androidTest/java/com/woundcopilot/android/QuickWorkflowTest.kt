@@ -66,7 +66,7 @@ class QuickWorkflowTest {
         }
         compose.onNodeWithText("Draft — Clinician Review Required").assertExists()
         compose.onNodeWithText("Improve Report").performScrollTo().assertExists()
-        compose.onNodeWithText("Improve Assessment").assertExists()
+        compose.onNodeWithText("Anything missed?").assertExists()
     }
 
     @Test fun assessmentQuestionsNeverChangeTheReportOrSources() {
@@ -177,7 +177,7 @@ class QuickWorkflowTest {
     }
 
     @Test fun consultantStartsWithQuestionAndNoEvidence() {
-        click("Wound Consultant")
+        click("Ask Consultant")
         awaitTask()
         val question = "What information would help explain delayed healing?"
         compose.onNodeWithTag("consultant-composer").performTextReplacement(question)
@@ -271,7 +271,7 @@ class QuickWorkflowTest {
         awaitTask()
         compose.runOnIdle{
             assertTrue(state.retryAvailable)
-            assertEquals("Photo analysis is temporarily unavailable. Try again shortly.",state.error)
+            assertEquals("Photo assessment: This request is temporarily limited. Wait before trying again.\nRATE_LIMITED · HTTP 429",state.error)
             state.retryFailed()
             assertEquals(0,retries)
         }
@@ -320,7 +320,10 @@ class QuickWorkflowTest {
 
     private fun click(text: String) {
         // A previous sample consultation can share its title with the primary home action.
-        compose.onAllNodesWithText(text).onFirst().performScrollTo().performClick()
+        // Home actions are icon-only; their name lives in the screen-reader label.
+        val byText = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+        (if (byText) compose.onAllNodesWithText(text) else compose.onAllNodesWithContentDescription(text, substring = true))
+            .onFirst().performScrollTo().performClick()
         compose.waitForIdle()
     }
 

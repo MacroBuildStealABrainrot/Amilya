@@ -8,7 +8,8 @@ import pytest
 from sqlalchemy import func, select
 
 from server import clinical, providers, quick_workflows as quick
-from server.clinical_models import Encounter, Evidence, Patient, TimelineEvent
+from server.report_errors import TerminalReportError
+from server.clinical_models import ClinicalDocument, Encounter, Evidence, Patient, TimelineEvent
 from test_clinical import clinical_api
 from test_providers import completion, gateway
 
@@ -151,6 +152,32 @@ def test_consult_starts_without_evidence_and_keeps_history_as_data(quick_api, mo
         assert 'Unverified prior' not in json.dumps(event.detail)
 
 
+def test_consult_reviews_the_report_on_screen_then_the_newest_saved_version(quick_api, monkeypatch):
+    case = start(quick_api, 'consultant')
+    encounter_id = case['encounter']['id']
+    seen = []
+    async def consultant(context, message, history, **kwargs):
+        seen.append(context)
+        return {'answer': 'Plan is clear.', 'considerations': [], 'usage': {}}
+    monkeypatch.setattr(providers, 'wound_consultant', consultant)
+    url = f"/api/v1/encounters/{encounter_id}/consult"
+    assert quick_api.client.post(url, json={'message': 'Review my report'}).status_code == 200
+    assert 'clinician_current_report' not in seen[-1]
+    with quick_api.sessions() as db:
+        encounter = db.get(Encounter, encounter_id)
+        for version, text in ((1, 'OLD SAVED REPORT'), (2, 'NEWEST SAVED REPORT')):
+            db.add(ClinicalDocument(workspace_id=encounter.workspace_id, encounter_id=encounter_id, text=text, template='nursing',
+                content_hash='x' * 64, version=version, case_revision=encounter.revision, fact_snapshot=[], request_hash='y' * 64,
+                created_by=encounter.created_by))
+        db.commit()
+    assert quick_api.client.post(url, json={'message': 'Review my report'}).status_code == 200
+    assert seen[-1]['clinician_current_report']['text'] == 'NEWEST SAVED REPORT'
+    response = quick_api.client.post(url, json={'message': 'Review my report again', 'current_report': 'MY UNSAVED EDIT'})
+    assert response.status_code == 200, response.text
+    assert seen[-1]['clinician_current_report']['text'] == 'MY UNSAVED EDIT'
+    assert quick_api.client.post(url, json={'message': 'x', 'current_report': 'y' * 60001}).status_code == 422
+
+
 @pytest.mark.parametrize('confirm_after_edit', [False, True])
 def test_offline_quick_draft_does_not_restore_superseded_source_values(quick_api, confirm_after_edit):
     case = start(quick_api)
@@ -210,20 +237,20 @@ def test_quick_responses_detect_concurrent_source_change(quick_api, monkeypatch,
 
 
 @pytest.mark.parametrize('status', [402, 422, 429, 502, 503, 504])
-def test_quick_report_preserves_provider_failures_and_source(quick_api, monkeypatch, status):
+@pytest.mark.parametrize('terminal', [False, True])
+def test_quick_report_preserves_provider_failures_and_source(quick_api, monkeypatch, status, terminal):
     case = start(quick_api)
     add_source(quick_api, case)
     case_id = case['encounter']['id']
     before = quick_api.client.get(f'/api/v1/encounters/{case_id}').json()
     async def failed(*args, **kwargs):
-        raise HTTPException(status, 'Synthetic provider gate')
+        error_type = TerminalReportError if terminal else HTTPException
+        raise error_type(status, 'Synthetic provider gate')
     monkeypatch.setattr(providers, 'quick_documentation', failed)
     response = quick_api.client.post(f'/api/v1/encounters/{case_id}/quick-report', json={})
-    assert response.status_code == (422 if status == 422 else 200)
-    if status != 422:
-        assert response.json()['recovery']['mode'] == 'source_only'
-        assert response.json()['qa']['passed'] is False
-        assert response.json()['ui_alerts']
+    # A failed report is never replaced by the raw transcript: the phone gets the error and offers Try again.
+    assert response.status_code == status
+    assert 'recovery' not in response.json() and 'Right heel' not in response.text
     assert quick_api.client.get(f'/api/v1/encounters/{case_id}').json() == before
 
 
@@ -296,3 +323,44 @@ def test_new_tasks_keep_strict_provider_contracts(task):
 def test_quick_routes_keep_csrf_dependency():
     for route in quick.router.routes:
         assert any(dependency.call is quick.require_csrf for dependency in route.dependant.dependencies)
+
+
+def test_ask_consultant_conversation_can_become_a_report(quick_api, monkeypatch):
+    case = start(quick_api, 'consultant')
+    add_source(quick_api, case, 'Clinician photo note: synthetic heel wound photo attached.')
+    case_id = case['encounter']['id']
+    seen = []
+    async def generate(context, template, length, **kwargs):
+        seen.append(context)
+        return {'text': 'Clinician asked about delayed healing.', 'routing': {}, 'effort_level': 'medium', 'usage': {}}
+    monkeypatch.setattr(providers, 'quick_documentation', generate)
+    turns = [{'role': 'user', 'content': 'Fictional: heel wound not healing for 6 weeks.'},
+             {'role': 'assistant', 'content': 'Consider checking offloading and nutrition.'}]
+    response = quick_api.client.post(f'/api/v1/encounters/{case_id}/quick-report',
+                                     json={'template': 'soap', 'consultation': turns})
+    assert response.status_code == 200, response.text
+    consultation = seen[0]['consultation']
+    assert [t['speaker'] for t in consultation['turns']] == ['clinician_message', 'ai_consultant_suggestion']
+    assert 'never document them' in consultation['how_to_use']
+    assert seen[0]['untrusted_sources'][0]['text'].startswith('Clinician photo note')
+    # Nothing from the conversation is stored on the server.
+    with quick_api.sessions() as db:
+        rows = list(db.scalars(select(Evidence).where(Evidence.encounter_id == case_id)))
+        assert all('heel wound not healing' not in (row.text or '') for row in rows)
+
+
+def test_consultation_alone_is_enough_for_a_report(quick_api, monkeypatch):
+    case = start(quick_api, 'consultant')
+    async def generate(context, template, length, **kwargs):
+        return {'text': 'Clinician reported a fictional leg wound.', 'routing': {}, 'effort_level': 'medium', 'usage': {}}
+    monkeypatch.setattr(providers, 'quick_documentation', generate)
+    response = quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report",
+                                     json={'consultation': [{'role': 'user', 'content': 'Fictional leg wound, 2 cm.'}]})
+    assert response.status_code == 200 and response.json()['text'].startswith('Clinician reported')
+
+
+def test_consultation_size_is_bounded(quick_api):
+    case = start(quick_api, 'consultant')
+    turns = [{'role': 'user', 'content': 'x' * 9000}] * 5
+    response = quick_api.client.post(f"/api/v1/encounters/{case['encounter']['id']}/quick-report", json={'consultation': turns})
+    assert response.status_code == 422

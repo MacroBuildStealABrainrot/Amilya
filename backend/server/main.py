@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio,logging,time,uuid
+import asyncio,logging,os,sys,time,uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI,Request
@@ -13,8 +13,15 @@ from server.db import Base,engine,SessionLocal
 from server import identity,audit,providers,transfer_models
 from server.performance import job_id as performance_job
 from server import diagnostics
+from server import isolation
+from server import sentry_relay
 
 logger=logging.getLogger('woundcopilot')
+# Cloud Run ingests one JSON object per line as structured logs. This dedicated
+# logger receives only diagnostics.cloud_event's allowlisted technical metadata.
+if not diagnostics.provider_log.handlers:
+    diagnostics.provider_log.addHandler(logging.StreamHandler(sys.stdout))
+diagnostics.provider_log.setLevel(logging.INFO)
 
 
 @asynccontextmanager
@@ -22,11 +29,23 @@ async def lifespan(app):
     settings.validate_runtime()
     if settings.auto_create_schema:
         Base.metadata.create_all(engine)
+    if os.environ.get('AMILYA_SENTRY_SELF_TEST')=='true':sentry_relay.self_test()
+    from server import report_eval
+    app.state.report_eval=report_eval.start_if_requested()
+    from server import speech_eval
+    app.state.speech_eval=speech_eval.start_if_requested()
     yield
 
 
 app=FastAPI(title='WoundCoPilot',version='6.0.0',lifespan=lifespan,docs_url='/docs' if settings.environment!='production' else None,redoc_url=None)
 app.add_middleware(TrustedHostMiddleware,allowed_hosts=[h.strip() for h in settings.trusted_hosts.split(',')])
+
+
+def _route_template(request):
+    """The route PATTERN (for example /api/v1/quick/{encounter_id}/audio-parts), never the real path with IDs."""
+    route=request.scope.get('route')
+    path=getattr(route,'path',None)
+    return path if isinstance(path,str) else 'unmatched'
 
 
 @app.middleware('http')
@@ -41,18 +60,34 @@ async def boundary(request:Request,call_next):
     except ValueError:oversize=True
     operation_key=request.headers.get('idempotency-key')
     invalid_key=operation_key is not None and (not operation_key.strip() or len(operation_key)>128)
+    exception_reported=False
     operation_token=providers.request_operation.set(operation_key if not invalid_key and operation_key is not None else request_id)
     try:
-        if invalid_key:response=JSONResponse({'detail':'Idempotency-Key must contain 1 to 128 characters'},status_code=422)
+        # Safety boundary: a request from the isolated test app is refused here, before its body is read,
+        # unless this server is the isolated test server.
+        if isolation.refuses(request.headers):response=JSONResponse({'detail':'This server does not accept the isolated test app. Nothing was stored.'},status_code=421)
+        elif invalid_key:response=JSONResponse({'detail':'Idempotency-Key must contain 1 to 128 characters'},status_code=422)
         elif oversize:response=JSONResponse({'detail':'Upload exceeds the 30 MB request limit.'},status_code=413)
         else:response=await call_next(request)
     except asyncio.CancelledError:
         diagnostics.finish(499);diagnostics.active.reset(diagnostic_token)
         raise
-    except Exception:
-        logger.error('request_failed request_id=%s method=%s',request_id,request.method)
+    except Exception as exc:
+        # Record only the exception CLASS, never str(exc), traceback, input or PHI.
+        # The existing request ID allows correlation with Cloud Run request metadata.
+        error_class = type(exc).__name__
+        if error_class not in {'TimeoutError', 'ConnectionError', 'ValueError',
+                              'RuntimeError', 'OSError', 'KeyError', 'TypeError'}:
+            error_class = 'OtherError'
+        logger.error('request_failed request_id=%s method=%s error_class=%s',
+                     request_id,request.method,error_class)
+        exception_reported=sentry_relay.server_exception(exc,_route_template(request))
         response=JSONResponse({'detail':'The request could not be completed. Refresh the case to check its current state.','request_id':request_id},status_code=500)
     finally:providers.request_operation.reset(operation_token);performance_job.reset(performance_token)
+    if not exception_reported:
+        _context=diagnostics.active.get() or {}
+        _error=response.headers.get('X-WCP-Error')
+        sentry_relay.http_status(response.status_code,_route_template(request),_error if _error and sentry_relay._SAFE.match(_error) else None,_context.get('failure_stage') or (_context.get('task') if _context.get('task')!='unknown' else None))
     diagnostics.finish(response.status_code)
     diagnostics.active.reset(diagnostic_token)
     response.headers.update({
@@ -81,12 +116,27 @@ def health():
 
 @app.get('/api/v1/config')
 def public_config():
+    owner_enrollment = False
+    if not settings.allow_signup:
+        from .render_enrollment import configured, is_open
+        if configured():
+            with SessionLocal() as db:
+                owner_enrollment = is_open(db)
     def capability(enabled,reason):return {'enabled':bool(enabled),'reason':'' if enabled else reason}
     ai=bool(settings.provider_execution_enabled and settings.openrouter_api_key)
-    speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key))
+    from . import render_owner_test
+    if render_owner_test.required():
+        ai = ai and render_owner_test.available()
+    speech=bool(settings.provider_execution_enabled and (settings.cloudflare_account_id and settings.cloudflare_api_token or settings.groq_api_key or settings.deepgram_enabled and settings.deepgram_api_key
+        or settings.openrouter_speech_enabled and settings.openrouter_api_key))
+    if render_owner_test.required(): speech = speech and render_owner_test.available()
     paused='Live assistance is configured but paused while the owner completes provider activation. Manual documentation remains available.'
-    return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':settings.allow_signup,
+    return {'version':'6.0.0','legal_version':settings.legal_version,'allow_signup':bool(settings.allow_signup or owner_enrollment),
+        'signup_scope':'public' if settings.allow_signup else 'owner_test' if owner_enrollment else 'closed',
         'clinical_data_enabled':settings.clinical_data_enabled,'privacy_review_required':not settings.clinical_data_enabled,
+        'isolated_test_server': isolation.is_isolated_test_server(),
+        'synthetic_test': {'enabled': render_owner_test.available(), 'expires_at': settings.render_owner_test_until,
+            'patient_data_allowed': False, 'provider_cap_usd': 1} if render_owner_test.required() else None,
         'capabilities':{'ai':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Clinical assistance is not configured. Manual documentation remains available.'),
             'photo':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Image interpretation is not configured.'),'document':capability(ai,paused if settings.openrouter_api_key and not settings.provider_execution_enabled else 'Document extraction is not configured.'),
             'audio':capability(speech,paused if not settings.provider_execution_enabled else 'Transcription is not configured. You can type or paste findings.'),
@@ -121,3 +171,5 @@ def frontend(path:str):
         return FileResponse(asset,headers={'Cache-Control':'no-cache' if path.endswith(('sw.js','index.html')) else 'public, max-age=3600'})
     if not (FRONTEND/'index.html').exists():return JSONResponse({'service':'WoundCoPilot','frontend':'Build the frontend to open the app.'},status_code=503)
     return FileResponse(FRONTEND/'index.html',headers={'Cache-Control':'no-cache'})
+
+

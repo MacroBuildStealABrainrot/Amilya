@@ -136,7 +136,7 @@ class WearPhoneBridge(private val s:AppState,private val context:Context,private
      if(RecordingService.state.value.recording)return@withLock reply(WearError.RECORDING_ALREADY_ACTIVE)
      if(s.quickMode!="document" || s.encounterId.isBlank() || now.phase==Phase.REPORT_READY)s.startQuick("document")
      cancelledJob="";cancelledOwner=""
-     s.recordingConsent=c.consent;s.autoStartRecording=false;s.screen="record"
+     if(c.consent)s.confirmRecordingConsent("watch_tap")else s.recordingConsent=false;s.autoStartRecording=false;s.screen="record"
      s.prepareRecordingContext("${owner()}:${s.encounterId}")
      RecordingService.start(context,"${owner()}:${s.encounterId}")
      val started=withTimeoutOrNull(8000){RecordingService.state.first{it.recording||it.error!=null}}

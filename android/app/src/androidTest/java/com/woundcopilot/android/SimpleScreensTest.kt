@@ -33,9 +33,10 @@ class SimpleScreensTest {
                 }
             }
         }
-        listOf("Document", "Photo Assessment", "Wound Consultant").forEach {
-            compose.onNodeWithText(it).performScrollTo().performClick()
+        listOf("Document", "Photo Assessment", "Ask Consultant").forEach {
+            compose.onNodeWithContentDescription(it, substring = true).performScrollTo().performClick()
         }
+        compose.onNodeWithText("What do you need?").assertDoesNotExist()
         compose.runOnIdle { assertEquals(listOf("document", "photo", "consultant"), actions) }
     }
 
@@ -57,7 +58,7 @@ class SimpleScreensTest {
         compose.onNodeWithText("Done").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(listOf("done"), actions) }
         compose.onNodeWithText("Add to Report").assertExists()
-        compose.onNodeWithText("Ask Wound Consultant").assertExists()
+        compose.onNodeWithText("Ask Consultant").assertExists()
     }
 
     @Test fun consultantDoesNotLoseDraftBeforeSendAcknowledgement() {
@@ -130,7 +131,7 @@ class SimpleScreensTest {
         compose.onNodeWithText("Improve the lighting.").assertExists()
         compose.onNodeWithText("This must not be shown when quality fails.").assertDoesNotExist()
         compose.onNodeWithText("Add to Report").assertDoesNotExist()
-        compose.onNodeWithText("Ask Wound Consultant").assertDoesNotExist()
+        compose.onNodeWithText("Ask Consultant").assertDoesNotExist()
         compose.onNodeWithText("Retake").performScrollTo().performClick()
         compose.onNodeWithText("Done").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(listOf("retake", "done"), actions) }
@@ -146,7 +147,7 @@ class SimpleScreensTest {
         compose.onNodeWithText("Retake").assertExists()
         compose.onNodeWithText("Done").assertExists()
         compose.onNodeWithText("Add to Report").assertDoesNotExist()
-        compose.onNodeWithText("Ask Wound Consultant").assertDoesNotExist()
+        compose.onNodeWithText("Ask Consultant").assertDoesNotExist()
     }
 
     @Test fun voiceMessageHasItsOwnVisibleActionWithoutOpeningAttachments() {
@@ -179,7 +180,8 @@ class SimpleScreensTest {
         compose.onNodeWithTag("chat-bubble-answer-1").assertExists()
         compose.onNodeWithText("First clinical point.").assertExists()
         compose.onNodeWithText("One focused question?").assertExists()
-        compose.onAllNodesWithText("Wound Consultant").assertCountEquals(2)
+        compose.onAllNodesWithText("Ask Consultant").assertCountEquals(1)
+        compose.onAllNodesWithText("Consultant").assertCountEquals(1)
         compose.onNodeWithText("effort", substring = true).assertDoesNotExist()
         compose.onNodeWithText("3 sources attached to this conversation").assertDoesNotExist()
         compose.onNodeWithContentDescription("1 photo attached").assertExists()
@@ -200,6 +202,27 @@ class SimpleScreensTest {
         val unicodeChunks = consultantDisplayChunks(unicode)
         assertEquals(unicode, unicodeChunks.joinToString(""))
         assertTrue(unicodeChunks.none { it.isNotEmpty() && Character.isHighSurrogate(it.last()) })
+    }
+
+    @Test fun recoveryListShowsOnlyStatusAndResumeAction() {
+        val finished=mutableListOf<String>()
+        val job=org.json.JSONObject("""{"id":"synthetic-job","owner":"synthetic-owner","file":"/synthetic/audio.m4a","phase":"REPORT_READY","resume_from":"REPORT_READY","updated_at":0,"report":"PRIVATE_REPORT_SENTINEL","case":{"patient":{"display_name":"PRIVATE_PATIENT_SENTINEL"}}}""")
+        showScreen { RecordingRecoveryList(listOf(job),null,false,{finished+=it.str("id")},{}) }
+        compose.onNodeWithText("Review report").performClick()
+        compose.runOnIdle { assertEquals(listOf("synthetic-job"),finished) }
+        compose.onNodeWithText("PRIVATE_PATIENT_SENTINEL").assertDoesNotExist()
+        compose.onNodeWithText("PRIVATE_REPORT_SENTINEL").assertDoesNotExist()
+    }
+
+    @Test fun recoveryDiscardRequiresExplicitConfirmation() {
+        val discarded=mutableListOf<String>()
+        val job=org.json.JSONObject("""{"id":"synthetic-job","owner":"synthetic-owner","file":"/synthetic/audio.m4a","phase":"RECORDED_LOCALLY","resume_from":"RECORDED_LOCALLY","updated_at":0}""")
+        showScreen { RecordingRecoveryList(listOf(job),null,false,{}, {discarded+=it.str("id")}) }
+        compose.onNodeWithText("Discard").performClick()
+        compose.onNodeWithText("Discard permanently").assertExists()
+        compose.runOnIdle { assertTrue(discarded.isEmpty()) }
+        compose.onNodeWithText("Discard permanently").performClick()
+        compose.runOnIdle { assertEquals(listOf("synthetic-job"),discarded) }
     }
 
     private fun showScreen(content: @Composable () -> Unit) {

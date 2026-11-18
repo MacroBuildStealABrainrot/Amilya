@@ -24,7 +24,8 @@ from server.audit import write_audit
 from server.core import settings
 from server.db import get_db, uid, utcnow
 from server.identity import User, check_rate, current_user, require_csrf
-from server.media_review import parse_photo_review
+from server import media_review
+from server.media_review import parse_photo_review, parse_clinician_findings
 from server.clinical_models import (ClinicalDocument, ClinicalFact, ClinicalReview, DocumentSignature,
                                     Encounter, Evidence, FactRevision, Patient, TimelineEvent, Wound)
 from server.schemas import (AssistantRequest, DocumentCreate, DraftRequest, EncounterCreate, EncounterPatch, EvidenceCreate,
@@ -33,7 +34,9 @@ from server.schemas import (AssistantRequest, DocumentCreate, DraftRequest, Enco
 
 router = APIRouter(tags=['clinical'])
 MUTATION = [Depends(require_csrf)]
-VISUAL_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate'}
+VISUAL_FIELDS = {'wound_tissue', 'wound_edges', 'periwound', 'exudate', 'visible_finding',
+                 'photo_interpretation', 'photo_next_steps'}
+PHOTO_ADVISORY_FIELDS = {'photo_interpretation', 'photo_next_steps'}  # AI suggestions: shown for review, never charted unless the clinician adds them
 SOURCE_LABELS = {'clinician_manual': 'Clinician assessed', 'clinician_statement': 'Clinician stated',
                  'patient_report': 'Patient reported', 'caregiver_report': 'Caregiver reported',
                  'record_derived': 'Record states', 'image_visible': 'Photo-visible observation',
@@ -57,6 +60,30 @@ def iso(value):
     if value is None:
         return None
     return (value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value).isoformat()
+
+
+CONSENT_METHODS = {'phone_tap', 'watch_tap'}
+CONSENT_MEANING = ('The signed-in clinician tapped to confirm that the client agreed to recording. '
+                   'This is the clinician\'s confirmation, not the client\'s own signature or recorded consent.')
+CONSENT_NOT_RECORDED = 'No tap confirmation was recorded by the app (older app version). This is not evidence of consent.'
+
+
+def consent_record(method: str | None, confirmed_at: str | None, wording: str | None) -> dict:
+    """How the clinician confirmed the client's consent to record, as sent by the app.
+
+    Older apps send only consent=true; that is stored honestly as 'not_recorded'. A spoken answer is never accepted
+    as a method: the app requires a tap by the clinician holding the phone or wearing the watch.
+    """
+    if method not in CONSENT_METHODS:
+        return {'method': 'not_recorded', 'meaning': CONSENT_NOT_RECORDED}
+    # WHOSE action: the signed-in clinician's tap (the recording's created_by is that account). It is NOT the client's
+    # own signature or recorded statement, and must never be presented as one.
+    record = {'method': method, 'confirmed_by': 'signed_in_clinician', 'meaning': CONSENT_MEANING}
+    if isinstance(confirmed_at, str) and 0 < len(confirmed_at) <= 40 and re.fullmatch(r'[0-9T:.+\-Z]+', confirmed_at):
+        record['confirmed_at_device'] = confirmed_at
+    if isinstance(wording, str) and re.fullmatch(r'[a-z0-9-]{1,40}', wording):
+        record['wording'] = wording
+    return record
 
 
 def owned(db: Session, model, identifier: str, user: User):
@@ -599,6 +626,8 @@ def checked_media(data: bytes, mime: str, kind: str):
 async def upload_evidence(encounter_id: str, request: Request, file: UploadFile = File(...), kind: str = Form(...),
                           consent: bool = Form(False), duration_seconds: float | None = Form(None),
                           wound_id: str | None = Form(None), photo_review: str | None = Form(None),
+                          consent_method: str | None = Form(None), consent_confirmed_at: str | None = Form(None),
+                          consent_wording: str | None = Form(None), clinician_note: str | None = Form(None, max_length=4000), clinician_findings: str | None = Form(None, max_length=2000),
                           user: User = Depends(current_user), db: Session = Depends(get_db)):
     from . import diagnostics
     diagnostics.bind(user)
@@ -606,6 +635,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
     encounter = owned(db, Encounter, encounter_id, user)
     target_wound = selected_wound(db, encounter, wound_id, user)
     capture_review = parse_photo_review(photo_review, kind)
+    recorded = parse_clinician_findings(clinician_findings, kind)
+    note = (clinician_note or '').strip()[:4000] if kind == 'photo' else ''
     if kind == 'audio' and not consent:
         raise HTTPException(403, 'Recording consent is required before processing audio')
     if duration_seconds is not None and (not 0 < duration_seconds <= settings.max_audio_seconds):
@@ -624,6 +655,10 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
     payload_fingerprint = [kind, mime, filename, media_hash, target_wound, consent, duration_seconds]
     if capture_review is not None:
         payload_fingerprint.append(capture_review)
+    # The clinician's note and recorded details are part of the request: the same retry replays (no second charge),
+    # while different entries under an old key are refused rather than silently answered with the old assessment.
+    if note or recorded is not None:
+        payload_fingerprint.append({'note': note, 'findings': recorded.model_dump(mode='json') if recorded else None})
     payload_hash = digest(payload_fingerprint)
     key = request_key(request)
     previous = previous_request(db, Evidence, user, encounter_id, key, payload_hash)
@@ -656,7 +691,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
         candidates, validation_warnings = validate_candidates(result.get('facts', []), text, 'document')
         warnings.extend(validation_warnings)
     else:
-        result = await providers.analyze_media(data, mime, kind, user=user, db=db, encounter_id=encounter_id)
+        result = await providers.analyze_media(data, mime, kind, user=user, db=db, encounter_id=encounter_id,
+                                               clinician_note=note, clinician_findings=recorded.as_text() if recorded else '')
         if kind == 'photo':
             automatic_quality = result.get('quality')
         if kind == 'document':
@@ -667,6 +703,8 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
         if automatic_quality and automatic_quality.get('retake_required'):
             candidates = []
         warnings.extend(validation_warnings)
+    differences = media_review.selection_differences(recorded, candidates) if kind == 'photo' else []
+    warnings = differences + warnings
     warnings.extend(str(w) for w in result.get('warnings', []))
     if kind == 'photo':
         warnings.append(automatic_quality['message'] if automatic_quality and automatic_quality.get('retake_required')
@@ -680,10 +718,16 @@ async def upload_evidence(encounter_id: str, request: Request, file: UploadFile 
                         kind=kind, text=text, created_by=user.id, request_key=key, request_hash=payload_hash,
                         metadata_json={'filename': filename, 'mime': mime, 'bytes': len(data), 'media_hash': media_hash,
                                        'raw_media_retained': False, 'consent': consent, 'duration_seconds': duration_seconds,
+                                       **({'consent_record': consent_record(consent_method, consent_confirmed_at, consent_wording)} if kind == 'audio' else {}),
                                        'segments': segments, 'source_text_hash': content_hash(text) if text is not None else None,
                                        **({'original_transcript': result['original_text']} if kind == 'audio' and isinstance(result.get('original_text'), str) else {}),
                                        **({'photo_quality': automatic_quality} if automatic_quality is not None else {}),
-                                       **({'photo_review': capture_review} if capture_review is not None else {})},
+                                       **({'photo_review': capture_review} if capture_review is not None else {}),
+                                       # Kept with THIS photo of THIS visit, so reports use exactly what the clinician entered.
+                                       **({'clinician_entries': {'note': note, 'findings': recorded.model_dump(mode='json') if recorded else None,
+                                                                 'findings_text': recorded.as_text() if recorded else '',
+                                                                 **({'differences': differences} if differences else {})}}
+                                          if kind == 'photo' and (note or recorded is not None) else {})},
                         warnings=list(dict.fromkeys(warnings)))
     db.add(evidence)
     db.flush()

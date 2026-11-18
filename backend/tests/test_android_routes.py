@@ -101,3 +101,9 @@ def test_a_write_to_a_missing_route_is_a_clear_404_not_a_405():
         assert client.put('/api/v1/encounters/x/photo-layout', json={}).status_code == 401
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+def test_the_phone_and_server_agree_on_the_diagnostics_address():
+    # The phone sends technical events to POST <server>/api/v1/diagnostics/events; this server code accepts exactly that.
+    assert ('POST', '/diagnostics/events') in android_calls()
+    assert matches('POST', '/diagnostics/events', server_routes())

@@ -17,6 +17,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,7 +47,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
     val key = "capture-${s.user?.str("id")}-${s.encounterId}-$purpose"
     var path by rememberSaveable(key) { mutableStateOf(s.vault.read(key) ?: "") }
     var mime by rememberSaveable(key) { mutableStateOf(s.vault.read("$key-mime") ?: captureMimeFromExtension(path, kind)) }
-    var consent by rememberSaveable(key) { mutableStateOf(s.recordingConsent && purpose=="audio") }
+    // Consent is asked once per visit and then remembered for every recording in that visit.
+    var consent by rememberSaveable(key) { mutableStateOf(s.recordingConsent) }
     var consentPrompt by remember { mutableStateOf(false) }
     val importBusy=s.externalCapture.busy
     var recordingRequested by rememberSaveable(key) { mutableStateOf(false) }
@@ -63,10 +68,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
         if (newlySelected) s.vault.remove("$key-review")
         path = file.absolutePath
         mime = selectedMime
-        val currentOwner = "${s.user?.str("id")}:${s.encounterId}${if (purpose in listOf("message", "correction")) ":$purpose" else ""}"
-        if (photo && submitNewPhoto && newlySelected && currentOwner == ownerKey && !s.loading) {
-            s.upload(file, selectedMime, "photo")
-        }
+
+        // Photos are never sent on selection: the review screen sends photo, note and details together on "Assess photo".
     }
 
     LaunchedEffect(key,s.externalCapture.revision) {
@@ -95,9 +98,9 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
         }catch(_:Exception){s.externalCapture.clear();s.error="Microphone permission could not open."}
     }
     LaunchedEffect(s.autoStartRecording){
-        if(audio && purpose=="audio" && s.autoStartRecording){s.autoStartRecording=false;if(consent)beginWithPermission()else consentPrompt=true}
+        if(audio && s.autoStartRecording){s.autoStartRecording=false;if(consent)beginWithPermission()else consentPrompt=true}
     }
-    if(consentPrompt)AlertDialog(onDismissRequest={consentPrompt=false},title={Text("Record encounter")},text={Text("Confirm that you have consent to record and process this audio.")},confirmButton={TextButton({consent=true;s.recordingConsent=true;consentPrompt=false;beginWithPermission()}){Text("Confirm and record")}},dismissButton={TextButton({consentPrompt=false}){Text("Cancel")}})
+    if(consentPrompt)AlertDialog(onDismissRequest={consentPrompt=false},title={Text("Client consent to record")},text={Text("Ask the client. Tap only if the client agreed to this visit being recorded. A spoken yes cannot confirm consent. You will not be asked again during this visit.")},confirmButton={TextButton({consent=true;s.confirmRecordingConsent("phone_tap");consentPrompt=false;beginWithPermission()}){Text("Client agreed. Record")}},dismissButton={TextButton({consentPrompt=false}){Text("Cancel")}})
 
     LaunchedEffect(ownerKey, audio) {
         if (audio && path.isNotBlank() && File(path).parentFile?.name == "recordings") {
@@ -116,6 +119,8 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
             try{
                 selectFile(completed, "audio/mp4")
                 if(!s.loading)s.rememberRecording(completed)
+                // A voice message or voice correction is turned into text as soon as recording stops.
+                if(purpose in listOf("message","correction") && consent && !s.loading && rec.error==null)s.upload(completed,"audio/mp4","audio")
             }catch(_:Exception){s.error="Audio was captured, but recovery details could not be saved. Keep this screen open and check available device storage."}
         }
         pending = withContext(Dispatchers.IO) {
@@ -149,23 +154,24 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                 }
             }
             StatusTag(when { belongsHere && rec.paused -> "Paused"; belongsHere && rec.recording -> "Recording"; selectedFile != null -> "Saved on this device"; else -> "Ready" })
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(consent, { consent = it }, enabled = !rec.recording)
-                Text("I have consent to record and process this audio.", Modifier.weight(1f))
-            }
+            if (consent) Text("Consent confirmed for this visit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             RecorderControl(
-                enabled=(belongsHere && rec.recording) || (consent && idle && !rec.recording),
+                enabled=(belongsHere && rec.recording) || (idle && !rec.recording),
                 recording=belongsHere && rec.recording, paused=rec.paused,
-                onRecord={ beginWithPermission() }, onStop={RecordingService.stop(context)}
+                onRecord={ if(consent)beginWithPermission() else consentPrompt=true }, onStop={RecordingService.stop(context)}
             )
-            if (rec.recording && belongsHere) TextButton(onClick={if(rec.paused)RecordingService.resume(context)else RecordingService.pause(context)},modifier=Modifier.align(Alignment.CenterHorizontally)) { Text(if(rec.paused)"Resume" else "Pause") }
+            // A clear Pause button: pause during TV, phone calls or private talk, then resume (owner request 2026-11-07).
+            if (rec.recording && belongsHere) WcpButton(if(rec.paused)"Resume recording" else "Pause recording",
+                {if(rec.paused)RecordingService.resume(context)else RecordingService.pause(context)},Modifier.fillMaxWidth(),secondary=!rec.paused)
             if (belongsHere || recordingRequested) rec.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (belongsHere || recordingRequested) rec.notice?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             if (belongsHere && rec.recording) RecordingPermissions.notificationHint(android.os.Build.VERSION.SDK_INT, notificationsGranted())?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             TextButton(onClick={launchExternal(ExternalKind.AUDIO_PICKER)},modifier=Modifier.align(Alignment.CenterHorizontally),enabled=idle&&!rec.recording){Text("Import audio") }
-            if (pending.isNotEmpty()) {
-                SectionLabel("Saved for this encounter")
-                pending.forEachIndexed { index, saved ->
+            // Only recordings other than the one in use are listed, e.g. one left over after an interruption.
+            val others = pending.filter { it.filePath != path && !(belongsHere && rec.recording && it.filePath == rec.filePath) }
+            if (others.isNotEmpty() && !s.loading) {
+                SectionLabel("Earlier recordings for this visit")
+                others.forEachIndexed { index, saved ->
                     val storedFile = File(saved.filePath!!)
                     val time = localTime(java.time.Instant.ofEpochMilli(storedFile.lastModified()).toString())
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -210,29 +216,47 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
                     InstrumentIcon("camera",Modifier.size(48.dp),tint)
                 }
             }
-            if (photo) WcpButton(if (selectedFile == null) "Take photograph" else "Retake", {
+            if (photo && selectedFile == null) WcpButton("Take photograph", {
                 launchExternal(ExternalKind.CAMERA)
             }, Modifier.fillMaxWidth(), enabled = idle)
+            if (!(photo && selectedFile != null)) {
             WcpButton(if (photo) "Choose an image" else "Choose a document", {
                 launchExternal(if(photo)ExternalKind.PHOTO_PICKER else ExternalKind.DOCUMENT_PICKER)
             }, Modifier.fillMaxWidth(), enabled = idle, secondary = photo)
+            }
             if (!photo) Text("PDF, text or CSV", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (importBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if(s.externalCapture.canDiscard)TextButton({s.externalCapture.discard()}){Text("Cancel pending selection")}
-        if (selectedFile != null && (!audio || !rec.recording)) {
+        if (photo && selectedFile != null) {
+            PhotoReviewPanel(s, selectedFile, idle, sizeValid,
+                onRetake = { launchExternal(ExternalKind.CAMERA) },
+                onAssess = {
+                    val batch = s.pendingPhotoFiles()
+                    if (batch.isNotEmpty()) s.uploadPhotos(batch) else s.upload(selectedFile, mime, kind)
+                })
+        } else if (selectedFile != null && (!audio || !rec.recording)) {
             LocalMediaPreview(selectedFile, kind)
+            if (kind != "document" && selectedFile.isFile && !(audio && rec.recording)) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val shareMime = if (photo) "image/jpeg" else "audio/mp4"
+                TextButton({ s.notice = PhoneSave.save(context, selectedFile, shareMime) }, Modifier.weight(1f), enabled = idle) { Text("Save to phone") }
+                TextButton({ PhoneSave.share(context, selectedFile, shareMime, "Share")?.let { s.notice = it } }, Modifier.weight(1f), enabled = idle) { Text("Share") }
+            }
             if (!sizeValid) Text("This file is too large to process. Choose another file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             // A restored selection waits for an explicit action. New photos start
             // automatically in the selection callback; request failures use Retry.
             if (!photo || (idle && s.error == null)) WcpButton(
-                when { purpose == "message" -> "Review message"; purpose == "correction" -> "Review correction"; s.quickMode == "document" && audio -> "Create report"; photo -> "Analyze photo"; s.quickMode == "consultant" -> "Add to conversation"; audio -> "Add recording"; else -> "Add document" },
+                when { purpose == "message" -> "Review message"; purpose == "correction" -> "Review correction"; s.quickMode == "document" && audio -> "Create report"; photo -> "Use this photo"; s.quickMode == "consultant" -> "Add to conversation"; audio -> "Add recording"; else -> "Add document" },
                 {
                     val batch=if(photo)s.pendingPhotoFiles()else emptyList()
                     if(batch.isNotEmpty())s.uploadPhotos(batch)else s.upload(selectedFile,mime,kind)
                 },
                 Modifier.fillMaxWidth(), enabled = idle && sizeValid && (!audio || consent),
             )
+            if (photo) TextButton({
+                s.vault.remove(key); s.vault.remove("$key-mime"); s.vault.remove("$key-review"); path = ""
+                s.finishPhotoAssessment()
+            }, Modifier.fillMaxWidth(), enabled = idle) { Text("Cancel") }
         }
         if (purpose == "message") TextButton(onClick = { s.cancelVoiceMessage() }, enabled = idle && !rec.recording, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Back to conversation") }
         if (purpose == "correction") TextButton(onClick = { s.cancelVoiceCorrection() }, enabled = idle && !rec.recording, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Keep original report") }
@@ -363,3 +387,136 @@ private fun captureMimeFromExtension(path: String, kind: String) = when (File(pa
     "csv" -> "text/csv"; "txt" -> "text/plain"; "pdf" -> "application/pdf"
     else -> if (kind == "audio") "audio/mp4" else if (kind == "photo") "image/jpeg" else "application/pdf"
 }
+
+
+/**
+ * After a photo: one simple review screen. Photo with a small Retake, an optional note (type or dictate), optional
+ * wound details folded away, and one large "Assess photo". Nothing is sent until that button is tapped.
+ */
+@Composable
+private fun PhotoReviewPanel(s: AppState, file: File, idle: Boolean, sizeValid: Boolean, onRetake: () -> Unit, onAssess: () -> Unit) {
+    LaunchedEffect(s.encounterId) { s.loadPhotoNote() }
+    var open by rememberSaveable(s.encounterId) { mutableStateOf(false) }
+    val details = s.photoDetails
+    Box(Modifier.fillMaxWidth()) {
+        LocalMediaPreview(file, "photo")
+        OutlinedButton(onRetake, Modifier.align(Alignment.BottomEnd).padding(12.dp), enabled = idle,
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Black.copy(alpha = 0.45f), contentColor = Color.White)) {
+            Text("↻  Retake")
+        }
+    }
+    if (!sizeValid) Text("This file is too large to process. Choose another file.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text("Add a note", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    OutlinedTextField(s.photoNote, { s.updatePhotoNote(it) }, Modifier.fillMaxWidth(), enabled = idle, minLines = 3,
+        placeholder = { Text("Type or speak a quick note…") },
+        trailingIcon = {
+            FilledIconButton({ s.recordPhotoNote() }, enabled = idle, modifier = Modifier.size(52.dp)) {
+                InstrumentIcon("voice", Modifier.size(26.dp), MaterialTheme.colorScheme.onPrimary)
+            }
+        })
+    OutlinedButton({ open = !open }, Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = idle) {
+        Text("+", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.width(12.dp))
+        Text(if (details.selectedCount() > 0) "Wound details · ${details.selectedCount()}" else "Add wound details",
+            Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        Text(if (open) "⌃" else "⌄", style = MaterialTheme.typography.titleLarge)
+    }
+    if (!open) Text("Wound bed, surrounding skin, drainage, size", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp))
+    if (open) WoundDetailsChoices(details, idle) { s.updatePhotoDetails(it) }
+    WcpButton("Assess photo", onAssess, Modifier.fillMaxWidth().heightIn(min = 60.dp), enabled = idle && sizeValid && !details.hasInvalidMeasurement())
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WoundDetailsChoices(details: PhotoDetails, enabled: Boolean, onChange: (PhotoDetails) -> Unit) {
+    @Composable fun Group(title: String, content: @Composable () -> Unit) {
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { content() }
+    }
+    Group("Wound type") {
+        PhotoDetails.WOUND_TYPE.forEach { (key, label) ->
+            FilterChip(details.woundType == key, { onChange(details.copy(woundType = if (details.woundType == key) null else key,
+                pressureStage = if (key == "pressure_injury" && details.woundType != key) details.pressureStage else null)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    if (details.woundType == "pressure_injury") Group("Stage") {
+        PhotoDetails.PRESSURE_STAGE.forEach { (key, label) ->
+            FilterChip(details.pressureStage == key, { onChange(details.copy(pressureStage = if (details.pressureStage == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Wound bed") {
+        PhotoDetails.WOUND_BED.forEach { (key, label) ->
+            FilterChip(key in details.woundBed, { onChange(details.copy(woundBed = details.woundBed.toggle(key))) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Wound edges") {
+        PhotoDetails.WOUND_EDGES.forEach { (key, label) ->
+            FilterChip(key in details.woundEdges, { onChange(details.copy(woundEdges = PhotoDetails.toggleEdge(details.woundEdges, key))) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Probe to bone") {
+        PhotoDetails.PROBE_TO_BONE.forEach { (key, label) ->
+            FilterChip(details.probeToBone == key, { onChange(details.copy(probeToBone = if (details.probeToBone == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Periwound") {
+        PhotoDetails.SURROUNDING_SKIN.forEach { (key, label) ->
+            FilterChip(key in details.surroundingSkin, { onChange(details.copy(surroundingSkin = details.surroundingSkin.toggle(key))) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Drainage amount") {
+        PhotoDetails.DRAINAGE_AMOUNT.forEach { (key, label) ->
+            FilterChip(details.drainageAmount == key, { onChange(details.copy(drainageAmount = if (details.drainageAmount == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Drainage type") {
+        PhotoDetails.DRAINAGE_TYPE.forEach { (key, label) ->
+            FilterChip(details.drainageType == key, { onChange(details.copy(drainageType = if (details.drainageType == key) null else key)) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Local signs of infection") {
+        PhotoDetails.INFECTION_SIGNS.forEach { (key, label) ->
+            FilterChip(key in details.infectionSigns, { onChange(details.copy(infectionSigns = PhotoDetails.toggleInfection(details.infectionSigns, key))) }, { Text(label) }, enabled = enabled)
+        }
+    }
+    Group("Pain (0–10)") {
+        (0..10).forEach { score ->
+            FilterChip(details.painScore == score, { onChange(details.copy(painScore = if (details.painScore == score) null else score)) }, { Text("$score") }, enabled = enabled)
+        }
+    }
+    Text("Size (cm)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(Triple("Length", details.lengthCm) { v: String -> details.copy(lengthCm = v) },
+               Triple("Width", details.widthCm) { v: String -> details.copy(widthCm = v) },
+               Triple("Depth", details.depthCm) { v: String -> details.copy(depthCm = v) }).forEach { (label, value, update) ->
+            OutlinedTextField(value, { onChange(update(it.take(6))) }, Modifier.weight(1f), enabled = enabled, singleLine = true,
+                label = { Text(label) }, isError = details.invalidMeasurement(value),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        }
+    }
+    if (listOf(details.lengthCm, details.widthCm, details.depthCm).any { details.invalidMeasurement(it) })
+        Text("Enter a size above 0 and up to 100 cm, or leave it blank.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    // Optional healing progress: earlier length x width compared with today's. Calculated in the app, never by the AI.
+    Text("Healing progress", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 4.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(Triple("Earlier length", details.previousLengthCm) { v: String -> details.copy(previousLengthCm = v.take(6)) },
+               Triple("Earlier width", details.previousWidthCm) { v: String -> details.copy(previousWidthCm = v.take(6)) },
+               Triple("Weeks ago", details.previousWeeksAgo) { v: String -> details.copy(previousWeeksAgo = v.filter { it.isDigit() }.take(3)) }).forEach { (label, value, update) ->
+            OutlinedTextField(value, { onChange(update(it)) }, Modifier.weight(1f), enabled = enabled, singleLine = true,
+                label = { Text(label) }, isError = if (label == "Weeks ago") details.invalidWeeks() else details.invalidMeasurement(value),
+                keyboardOptions = KeyboardOptions(keyboardType = if (label == "Weeks ago") KeyboardType.Number else KeyboardType.Decimal))
+        }
+    }
+    val change = details.areaChangePercent()
+    when {
+        change != null -> Text(when {
+            change > 0 -> "$change% smaller in area"
+            change < 0 -> "${-change}% larger in area"
+            else -> "No change in area"
+        }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        details.progressIncomplete() -> Text("Enter today's and the earlier length and width.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private fun Set<String>.toggle(key: String) = if (key in this) this - key else this + key

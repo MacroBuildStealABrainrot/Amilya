@@ -22,7 +22,7 @@ def limited(*, reason='rate_limit_exceeded', message='Temporarily rate limited',
         json={'error': {'message': message, 'metadata': {'error_type': reason}}, **(extra or {})})
 
 
-@pytest.mark.parametrize('reason', list(providers.PHOTO_RETAKE_MESSAGES))
+@pytest.mark.parametrize('reason', [r for r in providers.PHOTO_RETAKE_MESSAGES if r not in providers.PHOTO_PARTIAL_VIEW_MESSAGES])
 def test_insufficient_photo_discards_every_finding_and_uses_fixed_retaking_message(reason):
     result = providers.validate_result({'quality': {'status': 'insufficient', 'reason': reason},
         'facts': [{'name': 'periwound', 'value': {'text': 'Invented clinical finding'}, 'quote': ''}],
@@ -31,6 +31,25 @@ def test_insufficient_photo_discards_every_finding_and_uses_fixed_retaking_messa
     assert result['quality'] == {'status': 'insufficient', 'reason': reason, 'retake_required': True,
         'message': providers.PHOTO_RETAKE_MESSAGES[reason]}
     assert 'Invented' not in json.dumps(result)
+
+
+@pytest.mark.parametrize('reason', list(providers.PHOTO_PARTIAL_VIEW_MESSAGES))
+def test_partly_covered_photo_keeps_valid_visible_findings_with_a_plain_note(reason):
+    # A dressing covers the wound but the toe beside it is red: the redness must reach the clinician, not a retake.
+    result = providers.validate_result({'quality': {'status': 'insufficient', 'reason': reason},
+        'facts': [{'name': 'visible_finding', 'value': {'text': 'Redness of the right great toe beside the dressing.'}, 'quote': ''}],
+        'warnings': []}, 'image')
+    assert [f['value']['text'] for f in result['facts']] == ['Redness of the right great toe beside the dressing.']
+    assert result['quality']['retake_required'] is False and result['quality']['limited_view'] == reason
+    assert result['warnings'][0] == providers.PHOTO_PARTIAL_VIEW_MESSAGES[reason]
+
+
+@pytest.mark.parametrize('reason', list(providers.PHOTO_PARTIAL_VIEW_MESSAGES))
+def test_partly_covered_photo_without_usable_findings_still_asks_for_a_retake(reason):
+    for facts in ([], [{'name': 'not_a_photo_field', 'value': {'text': 'x'}, 'quote': ''}], [{'name': 'visible_finding', 'value': 'bad', 'quote': ''}]):
+        result = providers.validate_result({'quality': {'status': 'insufficient', 'reason': reason}, 'facts': facts, 'warnings': []}, 'image')
+        assert result['facts'] == [] and result['quality']['retake_required'] is True
+        assert result['quality']['message'] == providers.PHOTO_RETAKE_MESSAGES[reason]
 
 
 @pytest.mark.parametrize('quality', [None, {}, {'status': True, 'reason': 'none'},

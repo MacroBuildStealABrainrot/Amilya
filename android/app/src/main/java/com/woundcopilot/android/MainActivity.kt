@@ -34,6 +34,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import com.woundcopilot.android.ui.*
 import kotlinx.coroutines.flow.distinctUntilChanged
+import org.json.JSONObject
 
 class MainActivity:ComponentActivity(){
     private val state:AppState by viewModels()
@@ -62,6 +63,7 @@ class MainActivity:ComponentActivity(){
     private fun deviceLocked()=getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked || !getSystemService(android.os.PowerManager::class.java).isInteractive
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState)
+        DeveloperDiagnostics.installCrashCapture(this)
         state.wearBridge
         state.externalCapture.operationId?.let{id->state.externalCapture.kind?.let{registerCapture(it,id)}}
         if(!BuildConfig.DEBUG && !BuildConfig.ALLOW_SCREEN_CAPTURE)window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -93,6 +95,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     fun back(){
         if(s.loading)return
         if(page=="record" && rec.recording){s.notice="Stop the recording before leaving this screen.";return}
+        if(page=="shift_summary"){navigate("saved");return}
         s.dismissError()
         if(s.voiceMessage){s.cancelVoiceMessage();return}
         if(s.voiceCorrection){s.cancelVoiceCorrection();return}
@@ -117,21 +120,26 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     Text(s.case?.optJSONObject("patient")?.str("display_name").orEmpty(),style=MaterialTheme.typography.titleMedium,maxLines=2,overflow=TextOverflow.Ellipsis)
                     Text(s.case?.optJSONObject("wound")?.str("label")?.ifBlank{null}?:s.case?.optJSONObject("encounter")?.str("title").orEmpty(),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant,maxLines=2,overflow=TextOverflow.Ellipsis)
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
-                TroubleshootingShare(s)
-                if(inCase)TouchIcon("record","Voice commands",{s.voiceCommandsOpen=true},!s.loading)
+                // Owner's layout request (2026-10-28): no share, top microphone or refresh in the shared header.
+                // Owner's request (2026-10-30): one Voice button for spoken commands (not dictation), hidden while recording.
+                if(page !in listOf("welcome","login","signup","reconnect","record","shift_summary") && !rec.recording && s.user!=null)
+                    Surface(onClick={if(!s.loading)s.voiceCommandsOpen=true},shape=RoundedCornerShape(50),color=c.surfaceVariant,modifier=Modifier.padding(end=4.dp).semantics{contentDescription="Voice commands"}){
+                        Row(Modifier.padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                            InstrumentIcon("voice",Modifier.size(18.dp),c.primary);Text("Voice",style=MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 if(s.demo)Text("SAMPLE",Modifier.padding(horizontal=10.dp),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
-                else if(page !in listOf("login","signup","admin"))TouchIcon("refresh","Refresh workspace",{s.refresh()},!s.loading)
             }
             if(rec.recording&&page!="record")Surface(onClick={navigate("record")},color=c.errorContainer){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){InstrumentIcon("record",Modifier.size(18.dp),c.onErrorContainer);Text("${if(rec.paused)"Paused" else "Recording"} · ${rec.elapsedSeconds/60}:${(rec.elapsedSeconds%60).toString().padStart(2,'0')}",Modifier.weight(1f).padding(start=10.dp),style=MaterialTheme.typography.labelLarge);Text("Open",style=MaterialTheme.typography.labelLarge)}}
-            if(s.loading){LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp));Text(s.taskLabel,Modifier.padding(horizontal=20.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium,color=c.onSurfaceVariant)}
+            if(s.loading){LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp));if(s.taskLabel.contains("aving"))Row(Modifier.padding(horizontal=20.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically){CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=3.dp);Spacer(Modifier.width(12.dp));Text(s.taskLabel,style=MaterialTheme.typography.titleSmall)} else Text(s.taskLabel,Modifier.padding(horizontal=20.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium,color=c.onSurfaceVariant)}
         }
     },bottomBar={
         if(page in listOf("home","saved","account"))InstrumentDock(listOf(DockDestination("home","Home","cases"),DockDestination("saved","Saved work","document"),DockDestination("account","Account","account")),page,::navigate)
         else if(s.quickMode==null&&inCase&&!showSidebar&&page in listOf("encounter","findings","documents","sources","review","history"))InstrumentDock(listOf(DockDestination("encounter","Capture","capture"),DockDestination("findings","Review","review",s.case?.items("facts")?.count{it.str("confirmation_state")=="unconfirmed"}?:0),DockDestination("documents","Documents","document")),phase(page),::navigate)
     }){padding->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()){
-            s.error?.let{RequestFeedback(it,retryAtMillis=s.retryAtMillis,onRetry=if(s.retryAvailable){{s.retryFailed()}}else null,onDismiss={s.dismissError()})}
-            s.notice?.let{Surface(color=c.surfaceVariant){Row(Modifier.fillMaxWidth().padding(start=16.dp),verticalAlignment=Alignment.CenterVertically){Text(it,Modifier.weight(1f).padding(vertical=10.dp),style=MaterialTheme.typography.bodySmall);TouchIcon("close","Dismiss notification",{s.notice=null})}}}
+            s.error?.let{RequestFeedback(it,retryAtMillis=s.retryAtMillis,onRetry=if(s.retryAvailable){{s.retryFailed()}}else null,onDismiss={s.dismissError()},sequence=s.errorMessageSequence)}
+            s.notice?.let{FadingFeedback(it,sequence=s.noticeMessageSequence){Surface(color=c.surfaceVariant){Row(Modifier.fillMaxWidth().padding(start=16.dp),verticalAlignment=Alignment.CenterVertically){Text(it,Modifier.weight(1f).padding(vertical=10.dp),style=MaterialTheme.typography.bodySmall);TouchIcon("close","Dismiss notification",{s.notice=null})}}}}
             if(s.legalRequired&&!s.demo&&s.user!=null)LegalGate(s)
             else Box(Modifier.fillMaxWidth().weight(1f)){
                 Row(Modifier.fillMaxSize()){
@@ -144,6 +152,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                             route=="login"||route=="signup"->AuthScreen(s,route=="signup")
                             route=="home"->HomeScreen(s)
                             route=="saved"->SavedWorkScreen(s)
+                            route=="shift_summary"->ShiftSummaryScreen(s)
                             route=="document_capture"->DocumentCaptureScreen(s)
                             route=="photo_assessment"->QuickPhotoScreen(s)
                             route=="consultant"->QuickConsultantScreen(s)
@@ -176,6 +185,8 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     val pager=rememberPagerState(initialPage=workspacePages.indexOf(s.screen).coerceAtLeast(0),pageCount={3})
     var requested by remember{mutableStateOf<Int?>(null)}
     LaunchedEffect(s.screen){val destination=workspacePages.indexOf(s.screen);if(destination>=0&&destination!=pager.currentPage){requested=destination;pager.animateScrollToPage(destination);requested=null}}
+    // Free test servers go to sleep when idle. While the app is open, ask the server a harmless question every 4 minutes so it stays awake.
+    LaunchedEffect(Unit){if(BuildConfig.ISOLATED_TEST)kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){while(true){try{val c=java.net.URL("https://$ISOLATED_TEST_HOST/api/v1/health").openConnection() as java.net.HttpURLConnection;c.connectTimeout=20000;c.readTimeout=60000;c.getResponseCode();c.disconnect()}catch(_:Exception){};kotlinx.coroutines.delay(240_000)}}}
     LaunchedEffect(pager){snapshotFlow{pager.isScrollInProgress to pager.settledPage}.distinctUntilChanged().collect{(moving,position)->if(!moving&&requested==null&&s.screen in workspacePages&&workspacePages.indexOf(s.screen)!=position)s.screen=workspacePages[position]}}
     HorizontalPager(pager,Modifier.fillMaxSize().testTag("encounter-pager"),userScrollEnabled=!s.loading,key={workspacePages[it]}){index->when(index){0->EncounterScreen(s);1->FindingsScreen(s);2->DocumentsScreen(s)}}
 }
@@ -203,7 +214,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         Text("Care,\nin focus.",style=MaterialTheme.typography.displayLarge.copy(fontFamily=FontFamily.Serif,fontWeight=FontWeight.Normal,fontSize=60.sp,lineHeight=62.sp,letterSpacing=(-2).sp))
         Text("Documentation and wound support, when you need it.",style=MaterialTheme.typography.bodyMedium,color=c.onSurfaceVariant)
         GlassPanel(Modifier.fillMaxWidth()){
-            listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Wound Consultant","Talk through a question.")).forEach{(icon,title,detail)->
+            listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Ask Consultant","Talk through a question.")).forEach{(icon,title,detail)->
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
                     InstrumentIcon(icon,Modifier.size(26.dp),c.primary)
                     Column{Text(title,style=MaterialTheme.typography.titleMedium);Text(detail,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}
@@ -211,37 +222,85 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             }
         }
         WcpButton("Sign in",{s.screen="login"},Modifier.fillMaxWidth())
-        WcpButton("Explore a sample encounter",{s.startDemo()},Modifier.fillMaxWidth(),secondary=true)
         if(s.config.optBoolean("allow_signup",true))TextButton(onClick={s.screen="signup"},modifier=Modifier.align(Alignment.CenterHorizontally)){Text("Create account")}
-        Text("Sample encounters use fictional data.",Modifier.align(Alignment.CenterHorizontally),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
     }
 }
 
 @Composable fun SavedWorkScreen(s:AppState){
-    var query by rememberSaveable{mutableStateOf("")};var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
+    var recovery by rememberSaveable{mutableStateOf(false)};val c=MaterialTheme.colorScheme
+    val recorder by RecordingService.state.collectAsState()
     Page{
+        TextButton(onClick={s.openShiftSummary()},enabled=!s.loading&&!recorder.recording){Text("End-of-shift summary")}
         InstrumentTitle("Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
-        TextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Find a patient or encounter")},leadingIcon={InstrumentIcon("search",tint=c.onSurfaceVariant)},singleLine=true,shape=RoundedCornerShape(18.dp),colors=TextFieldDefaults.colors(focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedContainerColor=c.surfaceContainer,unfocusedContainerColor=c.surfaceContainer))
-        Row{TextButton({recovery=false}){Text("Saved")};TextButton({recovery=true}){Text("Recovery & older work")}}
-        val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}.filter{e->(e.str("title")+s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")).contains(query,true)}
-        if(!s.demo&&(s.encounters.size>=500||s.patients.size>=500))Text("Searching the 500 records loaded by this service.",style=MaterialTheme.typography.bodySmall)
-        if(filtered.isEmpty())EmptyState(if(query.isBlank())"No encounters yet" else "No matching encounters","",if(query.isBlank())"New encounter" else null){s.screen="new"}
-        if(!recovery)TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading && filtered.isNotEmpty()){Text("Delete all saved work")}
+        Row{TextButton(onClick={recovery=false}){Text("Saved")};TextButton(onClick={recovery=true;s.refreshRecordingJobs()}){Text("Recovery & older work")}}
+        val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
+        if(recovery) RecordingRecoveryList(jobs=s.recordingJobs,actionId=s.recoveryActionId,recording=recorder.recording,onFinish=s::resumeRecording,onDiscard=s::discardRecovery)
+        if(filtered.isEmpty() && (!recovery || s.recordingJobs.isEmpty())) {
+            Text(if(recovery)"No unfinished recordings or older work." else "Nothing saved yet. Start a report from Home.")
+            WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
+        }
+        if(!recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
         filtered.forEach{e->
-            val quick=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank()
-            val name=if(quick)e.str("title")else s.patients.firstOrNull{it.str("id")==e.str("patient_id")}?.str("display_name")?:"Visit"
+            val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty()
+            val type=when(mode.lowercase()){
+                "photo","photo_assessment","image"->"Photo assessment"
+                "consultant","wound_consultant","ask_consultant"->"Ask Consultant"
+                "document","report","nursing"->"Visit"
+                else->"Visit"
+            }
+            // Keep patient-entered titles out of Saved Work previews.
+            val custom=s.visitName(e.str("id"))
+            val name=if(custom.isNotBlank())custom else "$type, ${localTime(e.str("updated_at"))}"
             GlassPanel(Modifier.fillMaxWidth().clickable(role=Role.Button){s.openEncounter(e.str("id"))}){
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
                     Box(Modifier.size(45.dp).background(c.primaryContainer,CircleShape),contentAlignment=Alignment.Center){Text(name.split(' ').mapNotNull{it.firstOrNull()}.take(2).joinToString(""),style=MaterialTheme.typography.titleMedium,color=c.onPrimaryContainer)}
-                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){Text(name,style=MaterialTheme.typography.titleLarge);Text(e.str("title"),style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
+                        Text(name,style=MaterialTheme.typography.titleLarge)
+                        val status=when(e.str("storage_state").lowercase()){
+                            "saved"->"Saved"
+                            "temporary"->"Temporary"
+                            else->"Recovery or older work"
+                        }
+                        Text(status,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)
+                    }
                     InstrumentIcon("arrow",tint=c.primary)
                 }
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){TextButton({s.deleteWorkId=e.str("id")}){Text("Delete")};Spacer(Modifier.weight(1f));Text(localTime(e.str("updated_at")),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){TextButton({s.deleteWorkId=e.str("id")}){Text("Delete")};TextButton({s.renameWorkId=e.str("id")}){Text("Rename")};Spacer(Modifier.weight(1f));Text(localTime(e.str("updated_at")),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
             }
         }
     }
 }
 
+@Composable internal fun RecordingRecoveryList(
+    jobs:List<JSONObject>, actionId:String?, recording:Boolean,
+    onFinish:(JSONObject)->Unit, onDiscard:(JSONObject)->Unit,
+){
+    var discardTarget by remember { mutableStateOf<JSONObject?>(null) }
+    if(jobs.isNotEmpty()){
+        Text("Unfinished recordings",style=MaterialTheme.typography.titleLarge)
+        jobs.forEach{job->
+            val phase=job.str("resume_from",job.str("phase"))
+            val action=when(phase){"REPORT_READY"->"Review report";"TRANSCRIBED","GENERATING_REPORT"->"Finish report";else->"Finish recording"}
+            val busy=recording || actionId!=null
+            GlassPanel(Modifier.fillMaxWidth()){
+                Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                    Text("Unfinished recording",style=MaterialTheme.typography.titleMedium)
+                    epochMillisAsStoredTime(job.optLong("updated_at"))?.let{Text("Updated ${localTime(it)}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        Button(onClick={onFinish(job)},enabled=!busy){Text(action)}
+                        TextButton(onClick={discardTarget=job},enabled=!busy){Text("Discard")}
+                    }
+                }
+            }
+        }
+    }
+    discardTarget?.let{job->
+        AlertDialog(onDismissRequest={discardTarget=null},title={Text("Discard this recording?")},
+            text={Text("This permanently deletes the local audio and its unfinished recovery data from this device. Saved reports are not affected.")},
+            confirmButton={TextButton(onClick={discardTarget=null;onDiscard(job)}){Text("Discard permanently")}},
+            dismissButton={TextButton(onClick={discardTarget=null}){Text("Keep it")}})
+    }
+}
 @Composable fun EncounterScreen(s:AppState){
     val data=s.case?:return;val facts=data.items("facts");val pending=facts.count{it.str("confirmation_state")=="unconfirmed"};val confirmed=facts.count{it.str("confirmation_state")=="confirmed"};val c=MaterialTheme.colorScheme
     Page{

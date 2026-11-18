@@ -9,6 +9,11 @@ internal object LockPolicy {
     /** How long an app-started camera or picker may stay open before the PIN is needed again (was 60 seconds). */
     const val EXTERNAL_FLOW_MS = 180_000L
 
+    /** Owner choice 2026-11-06: leaving the app (another app, or the screen turning off) asks for the PIN only after 10 minutes away. */
+    const val AWAY_LOCK_MS = 600_000L
+
+    fun lockAfterAway(awayMs: Long?): Boolean = awayMs != null && awayMs !in 0 until AWAY_LOCK_MS
+
     /**
      * True when returning to the app must show the PIN screen because of a pending camera/picker operation.
      * [alreadyLockedFor] is the operation the app already locked for: once the clinician has unlocked, the same old operation

@@ -19,12 +19,14 @@ import androidx.compose.ui.unit.dp
 import com.woundcopilot.android.ui.*
 
 val quickFormats = linkedMapOf(
-    "nursing" to "Nursing Note",
+    "nursing" to "Note",
     "soap" to "SOAP Note",
     "sbar" to "SBAR",
     "physician_update" to "Physician Update",
     "referral_letter" to "Referral Letter",
     "handoff" to "Handoff Report",
+    "diagnostics" to "Diagnostics Summary",
+    "medical_order" to "Order Draft",
 )
 
 /** Editing is a report action. Signing always applies to an exact saved version. */
@@ -81,6 +83,7 @@ fun QuickReportScreen(s: AppState) {
                 SelectionContainer { Text(s.editor, Modifier.fillMaxWidth().padding(22.dp), style = MaterialTheme.typography.bodyLarge) }
             }
         } else {
+            DocumentAlerts(s)
             if (s.amendId != null) OutlinedTextField(
                 value = s.amendReason, onValueChange = s::updateAmendmentReason,
                 label = { Text("Reason for amendment") }, enabled = !s.loading,
@@ -114,23 +117,19 @@ fun QuickReportScreen(s: AppState) {
                 WcpButton("I reviewed the current sources", { s.useCurrentRevision() }, Modifier.fillMaxWidth(), enabled = !s.loading, secondary = true)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (!signed) WcpButton("Fix by Voice", { s.fixByVoice() }, Modifier.weight(1f), enabled = s.editor.isNotBlank() && !s.loading, secondary = true)
-            WcpButton("Copy", {
-                copySensitiveReport(context, s.editor)
-                s.notice = "Report copied."
-            }, Modifier.weight(1f), enabled = s.editor.isNotBlank() && !s.loading, secondary = true)
-        }
+        if (!signed) WcpButton("Fix by Voice", { s.fixByVoice() }, Modifier.fillMaxWidth(), enabled = s.editor.isNotBlank() && !s.loading, secondary = true)
         if (!signed && !exactSaved) WcpButton(
             "Save report", { s.persistEditor(); s.saveDocument() }, Modifier.fillMaxWidth(),
             enabled = s.editor.isNotBlank() && current && !s.loading && (s.amendId == null || s.amendReason.isNotBlank()),
         )
-        WcpButton("Send", { s.sendReports() }, Modifier.fillMaxWidth(), enabled = exactSaved && !s.loading, secondary = !exactSaved)
-        SendReportToPhone(s)
+        // One Send button: text message, another app, computer (one-time link) or copy.
+        SendOptions(s.editor, documentTypeTitle(s.editorTemplate), s.loading,
+            onComputer = { s.sendToComputer() }, onMessage = { s.notice = it },
+            openRequested = s.sendRequested, onOpenHandled = { s.sendRequested = false })
 
         DetailDisclosure("More options") {
             TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text("Add photo, recording or files") }
-            TextButton(onClick = { s.quickConsultant() }, enabled = !s.loading) { Text("Ask Wound Consultant") }
+            TextButton(onClick = { s.quickConsultant() }, enabled = !s.loading) { Text("Ask Consultant") }
             TextButton(onClick = { s.screen = "documents" }, enabled = !s.loading) { Text("Saved versions") }
             if (signed && document != null) WcpButton("Create amendment", { s.startAmendment(document) }, Modifier.fillMaxWidth(), enabled = !s.loading, secondary = true)
             if (!signed) {
@@ -138,7 +137,7 @@ fun QuickReportScreen(s: AppState) {
                 TextButton(onClick = { regenerate = true }, enabled = !s.loading) { Text("Generate again from sources") }
                 if (s.hasRecoverableDraft) TextButton(onClick = { s.restorePreviousDraft() }, enabled = !s.loading) { Text("Recover previous wording") }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (false) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("PDF", "Text").forEach { format ->
                     WcpButton("Share $format", {
                         s.runTask("Preparing ${format.lowercase()} export") {
@@ -204,7 +203,7 @@ fun VoiceCorrectionScreen(s: AppState) {
 /** Marks clinical wording sensitive so supported Android versions suppress clipboard previews. */
 private fun copySensitiveReport(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val clip = ClipData.newPlainText("WoundCoPilot report", text)
+    val clip = ClipData.newPlainText("Amilya report", text)
     clip.description.extras = PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
     clipboard.setPrimaryClip(clip)
 }

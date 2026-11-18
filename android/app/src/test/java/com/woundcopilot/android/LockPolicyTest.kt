@@ -1,5 +1,6 @@
 package com.woundcopilot.android
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,5 +61,18 @@ class LockPolicyTest {
     @Test fun aDeferredPhotoIsNeverSentForAnotherClinician() {
         assertTrue(deferred(user = "u2") == LockPolicy.Deferred.DROP)
         assertTrue(deferred(user = null) == LockPolicy.Deferred.DROP)
+    }
+
+    @Test fun pinIsAskedOnlyAfterTenMinutesAway() {
+        assertFalse(LockPolicy.lockAfterAway(null))
+        assertFalse(LockPolicy.lockAfterAway(9 * 60_000L))
+        assertTrue(LockPolicy.lockAfterAway(10 * 60_000L))
+        assertTrue(LockPolicy.lockAfterAway(-1))  // a clock that went backwards is never trusted
+    }
+
+    @Test fun testBuildKeepsItsSignInUnderTheNameTheAppChecksAtStart() {
+        assertEquals("session", sessionKeyFor(RENDER_TEST_API_ORIGIN))
+        assertEquals("session", sessionKeyFor(PRODUCTION_API_ORIGIN))
+        assertEquals("session-local-integration", sessionKeyFor("http://10.0.2.2:8000/api/v1"))
     }
 }

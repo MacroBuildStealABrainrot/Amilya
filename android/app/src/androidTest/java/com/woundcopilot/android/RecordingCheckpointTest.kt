@@ -29,7 +29,8 @@ class RecordingCheckpointTest {
             assertEquals(1,RecordingRecovery(context).list("synthetic-owner").size)
             assertTrue(RecordingRecovery(context).list("other-owner").isEmpty())
             LocalRetention.clean(context,now+LocalRetention.RECOVERY_AGE+60_000)
-            assertFalse(file.exists());assertNull(first.read(file))
+            if(BuildConfig.RETAIN_UNRESOLVED){assertTrue(file.isFile);assertNotNull(first.read(file))}
+            else{assertFalse(file.exists());assertNull(first.read(file))}
         }finally{root.walkBottomUp().forEach{it.delete()}}
     }
     @Test fun metricsNeverExposeNonOpaqueIdentifiers(){
