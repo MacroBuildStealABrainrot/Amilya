@@ -185,7 +185,7 @@ fun AccountScreen(state: AppState) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         // Credits and service status are owner details; the nurse does not need them in the test app.
-        if (!com.woundcopilot.android.BuildConfig.ISOLATED_TEST) {
+        if (!(com.woundcopilot.android.BuildConfig.ISOLATED_TEST || com.woundcopilot.android.BuildConfig.OWNER_CLEAN_UI)) {
         SectionLabel("Workspace credits", action = if (state.demo) null else "Refresh", onAction = { state.runTask { state.refreshHome() } })
         EvidenceRail {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,7 +221,7 @@ fun AccountScreen(state: AppState) {
             )
         }
         }
-        if (!state.demo && !com.woundcopilot.android.BuildConfig.ISOLATED_TEST) com.woundcopilot.android.StoredDiagnosticsSection(state)
+        if (!state.demo && !(com.woundcopilot.android.BuildConfig.ISOLATED_TEST || com.woundcopilot.android.BuildConfig.OWNER_CLEAN_UI)) com.woundcopilot.android.StoredDiagnosticsSection(state)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Help & policies")
         var automaticBiometrics by remember{mutableStateOf(state.vault.read("biometric-auto")!="false")}

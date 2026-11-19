@@ -14,6 +14,7 @@ android {
         buildConfigField("boolean", "REPAIR_SERVER", "false")
         buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
         buildConfigField("boolean", "ISOLATED_TEST", "false")
+        buildConfigField("boolean", "OWNER_CLEAN_UI", "false")
         versionCode = 82
         versionName = "1.9.0-test46"
         manifestPlaceholders["appLabel"] = "WoundCoPilot"
@@ -112,6 +113,19 @@ android {
             buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
             buildConfigField("String", "API_BASE_URL", "\"https://amilya-repair-test.onrender.com/api/v1\"")
             matchingFallbacks += listOf("pilot", "debug")
+        }
+        // LIVE app for the owner: the real service, a proper (non-debug) build with its own identity, signed only in the
+        // private build repository. Same clean screens as the isolated test app (no credits or service details shown).
+        create("live") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".live"
+            versionNameSuffix = "-live"
+            manifestPlaceholders["appLabel"] = "Amilya"
+            if (signingConfigs.findByName("privateInstaller") != null) signingConfig = signingConfigs.getByName("privateInstaller")
+            buildConfigField("boolean", "OWNER_CLEAN_UI", "true")
+            buildConfigField("boolean", "ISOLATED_TEST", "false")
+            buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
+            matchingFallbacks += listOf("release", "debug")
         }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The

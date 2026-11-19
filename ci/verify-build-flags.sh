@@ -22,6 +22,14 @@ check "$(ls $APKS/pilot/*.apk | head -1)" com.woundcopilot.android.pilot2 false
 check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair2 false
 check "$(ls $APKS/renderTest/*.apk | head -1)" com.woundcopilot.android.rendertest false
 check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolated2 false
+check "$(ls $APKS/live/*.apk | head -1)" com.woundcopilot.android.live false
+# The live app must be compiled for the real service only, never as an isolated/test build, with the clean owner screens.
+LBC="$(find android/app/build/generated -path '*live*' -name BuildConfig.java | head -1)"
+[ -n "$LBC" ] || { echo "FAIL: live BuildConfig not found"; fail=1; }
+if [ -n "$LBC" ]; then
+  grep -q 'API_BASE_URL = "https://woundcopilot-1039151887397.us-central1.run.app/api/v1"' "$LBC" || { echo "FAIL: live app has the wrong server address"; fail=1; }
+  grep -q 'ISOLATED_TEST = false' "$LBC" && grep -q 'OWNER_CLEAN_UI = true' "$LBC" && grep -q 'SANDBOX = false' "$LBC" && grep -q 'DEBUG = false' "$LBC" || { echo "FAIL: unexpected live app flags"; fail=1; }
+fi
 # The isolated test app must be COMPILED to use only the isolated test server (read from the generated settings file).
 BC="$(find android/app/build/generated -path '*isolatedTest*' -name BuildConfig.java | head -1)"
 [ -n "$BC" ] || { echo "FAIL: isolatedTest BuildConfig not found"; fail=1; }
