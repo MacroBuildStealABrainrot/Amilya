@@ -248,7 +248,8 @@ def test_intact_periwound_against_erythema_or_maceration_is_flagged():
 
 
 def test_pain_score_zero_to_ten_and_infection_judged_from_clinician_entries():
-    assert 'pain' not in ClinicianFindings(pain_score=0, wound_type='venous').as_text()  # owner request: pain 0 is not charted
+    assert 'pain 0/10' in ClinicianFindings(pain_score=0, wound_type='venous').as_text()  # an entered zero is kept
+    assert 'pain' not in ClinicianFindings(wound_type='venous').as_text()  # a blank pain field says nothing
     assert 'pain 7/10' in ClinicianFindings(pain_score=7).as_text()
     assert not ClinicianFindings(pain_score=0).is_empty() and ClinicianFindings().is_empty()
     import pytest

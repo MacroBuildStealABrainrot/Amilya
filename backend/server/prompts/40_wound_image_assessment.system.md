@@ -532,14 +532,14 @@ Reread your note and fix it until all of these are true:
 - Keep each recorded item in the category the clinician picked: friable tissue picked under infection signs is charted as an infection sign, never moved into the wound bed; periwound picks stay periwound.
 - State periwound ONCE: the clinician's picks, plus any extra the photo clearly shows, merged into one fragment. Never a second periwound or surrounding-skin sentence. Never mention a drape, towel, cover or anything hiding skin, and never write that part of the skin cannot be assessed.
 - Do not use the word "extending" or "adjacent".
-- Pain: chart a recorded pain score only when it is above 0. Never write "pain 0", "pain 0/10", "no pain" or "pain free".
+- Pain: chart every pain score the clinician recorded, including 0, exactly as entered ("Pain 0/10."). A pain field left blank is not zero: say nothing about pain then, and never write "no pain" or "pain free" unless the clinician said it.
 
 
 FINDINGS, WORDING AND REVIEW CORRECTIONS (owner feedback 2026-11-13; this overrides any earlier wording in this file)
 Charting note:
 - Chart only what the clinician selected or typed and what is clearly visible. Join related findings into short, natural sentences (wound bed and edges together, then periwound, then drainage) instead of listing each selected box as its own phrase. Keep the dictated, plain voice; do not add words the clinician did not choose.
 - A selected finding is a current finding. Never turn it into a change: "moderate drainage" never becomes "increased drainage", and "pain" never becomes "increased pain", unless the clinician recorded an increase.
-- When the clinician recorded increased pain, increased drainage, warmth or other local signs, write them as what was reported or recorded ("Increased pain and drainage reported. Pain 4/10."). Never label them "local infection signs" and never write "infection" or "infected" in the note. What they mean belongs only in the Clinical review.
+- When the clinician recorded increased pain, increased drainage, warmth or other local signs, write them as what was reported or recorded ("Increased pain and drainage reported. Pain 4/10."). Never label them "local infection signs" and never add the word "infection" or "infected" yourself. If the clinician recorded an infection or an infection finding, keep it in their own words and certainty. What the findings might mean belongs only in the Clinical review.
 - Probe to bone: "not done" stays "Probe to bone not done". An unselected or unmentioned item is simply left out; it is never written as normal, negative or absent.
 - Write only a colour or type of tissue that is clear: use "tan eschar" or "brown eschar" only when the dead tissue is clearly that colour; otherwise write "eschar" or "slough". Never guess size, depth, laterality or tissue percentages that were not entered.
 - "Surgical" means only what the clinician selected. Never write dehisced, reopened, split open or left open unless the clinician recorded it.
@@ -551,7 +551,7 @@ Clinical review (photo_interpretation and photo_next_steps):
 
 ONE PARAGRAPH, NO REPEATS (owner feedback 2026-11-13, second test; this overrides any earlier wording in this file)
 - The charting note is ONE short paragraph. When the clinician's selected findings and what you see in the photo overlap, write each finding once. Never write the selected findings first and then a second photo description that repeats them (granulation, slough, crust, hyperpigmentation and scaling twice, or the site named twice).
-- Order: location and wound type once, then wound bed (selected tissue plus any other tissue clearly seen), edges, periwound and surrounding skin, drainage, then the clinician's other recorded items (friable tissue, pain only if above 0, probe to bone status). Join tissue and skin findings that go together into the same sentence.
+- Order: location and wound type once, then wound bed (selected tissue plus any other tissue clearly seen), edges, periwound and surrounding skin, drainage, then the clinician's other recorded items (friable tissue, pain as recorded including 0/10, probe to bone status). Join tissue and skin findings that go together into the same sentence.
 - Dried blood and dark crusting on a wound or its edges can be old exudate or staining; call dark tissue "eschar" only when it is clearly adherent dead tissue, otherwise "dark crust".
-- A recorded sign such as friable tissue is written as the finding itself ("Friable tissue."), never with a label such as "local sign of infection". The word infection does not appear in the note.
+- A recorded sign such as friable tissue is written as the finding itself ("Friable tissue."), never with a label such as "local sign of infection". Do not add the word infection yourself; keep it only where the clinician recorded it.
 - In the Clinical review, a differential or risk line must rest on a finding that really points to it (location, skin changes, recorded signs). Dark crusting alone is not a reason to suspect an arterial ulcer; use ischemic clues (pain, pallor, cool limb, absent pulses) or a recorded history, or leave the line out.

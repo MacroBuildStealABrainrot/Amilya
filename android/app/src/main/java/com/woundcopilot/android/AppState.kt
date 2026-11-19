@@ -1086,7 +1086,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(!demo)acknowledge(reportIntent,reportPayload)
         val question=("Consultant review of this photo assessment"+(if(note.isNotBlank())", with my notes: "+note else "")+
             ". Give the likely picture, what it may be concerning for, what to check next, dressing categories that fit, red flags and when to escalate.").take(2000)
-        val consultPayload=obj("message" to question,"history" to JSONArray(),"current_report" to text)
+        val consultPayload=obj("message" to question,"history" to JSONArray(),"current_report" to text,"current_report_origin" to "ai_draft_unreviewed")
         val consultIntent="photo-review-$sourceRevision-"+hash(question).take(16)
         val reply=if(demo)obj("answer" to "Sample consultant review. No AI request was sent.","case_revision" to revision)else mutation(consultIntent,"/encounters/$visit/consult",consultPayload)
         require(encounterId==visit){"The active visit changed."}

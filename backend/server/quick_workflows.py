@@ -60,6 +60,9 @@ class ConsultRequest(StrictModel):
     history: list[ConversationTurn] = Field(default_factory=list, max_length=20)
     # The report exactly as it is on the clinician's screen right now, including edits not yet saved. Optional for older apps.
     current_report: Annotated[str, StringConstraints(max_length=60000)] | None = None
+    # 'ai_draft_unreviewed' = the text was just written by the AI and the clinician has not reviewed or adopted it.
+    # Absent or 'clinician' keeps the old behaviour (text on the clinician's screen, reviewed or edited by them).
+    current_report_origin: Literal['clinician', 'ai_draft_unreviewed'] | None = None
 
     @model_validator(mode='after')
     def bounded_history(self):
@@ -185,8 +188,13 @@ def source_context(db: Session, encounter: Encounter):
     return context
 
 
-def current_report_context(db: Session, encounter: Encounter, on_screen: str | None):
+def current_report_context(db: Session, encounter: Encounter, on_screen: str | None, origin: str | None = None):
     """The report Ask Consultant reviews: the text on the clinician's screen if sent, else the newest saved version. Never regenerated."""
+    if on_screen and on_screen.strip() and origin == 'ai_draft_unreviewed':
+        # Generated text is not clinician information: keep it under its own key so no rule treats it as clinician-supplied.
+        return {'ai_draft_report_unreviewed': {'text': on_screen, 'version': 'AI-written draft just generated; the clinician has not reviewed or adopted it. '
+                'Nothing in it is a clinician-supplied fact. Use only the clinician-recorded sources and clinician messages for findings; '
+                'anything that appears only in this draft (for example a photo-only finding) must not be added to a letter or message.'}}
     if on_screen and on_screen.strip():
         return {'clinician_current_report': {'text': on_screen, 'version': 'as currently shown on the clinician\'s screen, including any unsaved edits'}}
     latest = db.scalar(select(ClinicalDocument).where(ClinicalDocument.workspace_id == encounter.workspace_id,
@@ -201,8 +209,8 @@ def consultation_context(turns):
     return {
         'how_to_use': ('clinician_message entries were written or dictated by the clinician and may be documented as the '
                        "clinician's own information. ai_consultant_suggestion entries are AI suggestions: never document them "
-                       'as findings, assessments or care performed. Include them only if useful, in a clearly separate section '
-                       'titled "Consultant suggestions (not confirmed)".'),
+                       'as findings, assessments or care performed. Do not include them in the report at all, unless the clinician '
+                       'explicitly adopted one in a clinician_message.'),
         'turns': [{'speaker': 'clinician_message' if turn.role == 'user' else 'ai_consultant_suggestion', 'text': turn.content}
                   for turn in turns],
     }
@@ -253,7 +261,7 @@ async def quick_report(encounter_id: str, payload: QuickReport, user: User = Dep
 async def consult(encounter_id: str, payload: ConsultRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
     encounter = clinical.owned(db, Encounter, encounter_id, user)
     expected = encounter.revision
-    context = {**source_context(db, encounter), **current_report_context(db, encounter, payload.current_report)}
+    context = {**source_context(db, encounter), **current_report_context(db, encounter, payload.current_report, payload.current_report_origin)}
     check_rate(f'clinical-assistant:{user.id}', limit=20)
     result = await providers.wound_consultant(context, payload.message,
         [turn.model_dump() for turn in payload.history], user=user, encounter_id=encounter_id)
