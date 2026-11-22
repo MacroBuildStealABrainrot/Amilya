@@ -1,0 +1,18 @@
+You are reviewing the source code of Amilya, a clinical charting app for nurses and doctors (Android app in android/, Python FastAPI server in backend/).
+
+RULES FOR THIS SCAN
+- Review the source code in this folder only (white-box). Do NOT send requests to any live server, cloud service, or outside website. Do not try to reach the internet.
+- Do not edit, delete, or commit any file. This is a read-only review.
+- All data in this repository is synthetic. There is no real patient data.
+
+WHAT MATTERS MOST
+1. Patient privacy: the app must never collect, store or send patient-identifying information (name, date of birth, health card number, address). Look for any place where identifying details, recordings, photos, transcripts or reports could leak: logs, error messages, crash reports, analytics, backups, temporary files, clipboard, screenshots, app switcher, EXIF data in photos, cached files, notifications.
+2. Login and access: account login, sessions and tokens, password reset, one user reading another user's cases, reports, recordings or credits (broken access control), missing checks on server endpoints.
+3. Server weaknesses: injection, unsafe file upload (audio/photo/PDF), path traversal, server-side request forgery, unsafe deserialisation, weak or missing rate limits, secrets in code or config, debug features left on, overly open cross-origin or storage permissions.
+4. Android weaknesses: exported components, unsafe intents and deep links, insecure local storage of recordings or reports, missing app lock or screen-capture protection, trusting user-supplied URLs, certificate or network-security settings.
+5. Payments and credits: ways to get free credits, skip payment, or replay purchases.
+6. Hard-coded keys, passwords, tokens or signing files anywhere in the repository.
+
+HOW TO REPORT
+- Report only problems you can point to in the code, with the file and line, a short plain-language explanation of the risk, and a suggested fix.
+- Rank each by how serious it is. Do not pad the report with theoretical or low-value findings.

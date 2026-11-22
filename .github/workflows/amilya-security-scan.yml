@@ -1,0 +1,106 @@
+# Amilya security scan (Strix). Starts ONLY when you press "Run workflow" in the Actions tab. It never runs by itself.
+#
+# SAFE BY DESIGN
+#  * Reads Amilya's source code only. It is told never to contact the live server or any outside website.
+#  * Uses no patient data and no signing keys. Nothing is deployed and nothing is changed in the repository.
+#  * The repository is public, so the scan results are NEVER shown in the run log. They are locked with a public
+#    certificate (ci/security-scan-public-cert.pem) and saved as one locked file. Only the matching private key,
+#    kept outside the repository, can open it.
+#  * Needs one secret: STRIX_LLM_API_KEY (an Anthropic API key). Without it the run stops at once and spends nothing.
+#  * Cost is capped by the "budget" box (US dollars).
+name: amilya-security-scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "How deep to scan: quick, standard or deep"
+        type: choice
+        options: [ quick, standard, deep ]
+        default: quick
+      budget:
+        description: "Most you are willing to spend on AI for this scan (US dollars)"
+        type: string
+        default: "5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amilya-security-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: Security scan of the source code
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Stop early if the AI key has not been added yet
+        env:
+          KEY: ${{ secrets.STRIX_LLM_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error title=AI key missing::Add the secret STRIX_LLM_API_KEY (Settings > Secrets and variables > Actions). Nothing was run and nothing was spent."
+            exit 1
+          fi
+
+      - name: Check the budget box holds a plain number
+        env:
+          BUDGET: ${{ inputs.budget }}
+        run: |
+          printf '%s' "$BUDGET" | grep -Eq '^[0-9]+(\.[0-9]+)?$' || { echo "::error::Budget must be a plain number such as 5"; exit 1; }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Strix (pinned version)
+        run: python -m pip install --progress-bar off "strix-agent==1.7.0"
+
+      - name: Run the scan (output goes to a private file, not the public log)
+        id: scan
+        env:
+          STRIX_LLM: anthropic/claude-sonnet-5-5
+          LLM_API_KEY: ${{ secrets.STRIX_LLM_API_KEY }}
+          MODE: ${{ inputs.mode }}
+          BUDGET: ${{ inputs.budget }}
+        run: |
+          set +e
+          strix -n -t . -m "$MODE" --scope-mode full --max-budget "$BUDGET" \
+            --instruction-file ci/security-scan-instructions.txt --fail-on high > strix-console.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # Exit 0 = no high-or-worse finding. Exit 2 = at least one high-or-worse finding. Anything else = the scan did not finish.
+          case "$code" in
+            0) echo "::notice title=Security scan::Finished. No high or critical finding." ;;
+            2) echo "::warning title=Security scan::Finished. At least one high or critical finding. Details are in the locked file." ;;
+            *) echo "::error title=Security scan::The scan did not finish normally (code $code). Details are in the locked file." ;;
+          esac
+          exit 0
+
+      - name: Lock the results (details are never printed here)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p locked
+          tar czf locked/results.tgz strix-console.log strix_runs 2>/dev/null || tar czf locked/results.tgz strix-console.log
+          openssl smime -encrypt -aes-256-cbc -binary -in locked/results.tgz -out amilya-security-scan-locked.bin -outform DER ci/security-scan-public-cert.pem
+          rm -rf locked strix-console.log strix_runs
+          ls -l amilya-security-scan-locked.bin | awk '{print "Locked file size: " $5 " bytes"}'
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: amilya-security-scan-locked
+          path: amilya-security-scan-locked.bin
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Fail the run if the scan did not finish normally
+        if: steps.scan.outputs.exit_code != '0' && steps.scan.outputs.exit_code != '2'
+        run: exit 1
