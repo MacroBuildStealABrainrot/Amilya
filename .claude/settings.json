@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Write|Edit", "hooks": [ { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/privacy_guard.py\"" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Write|Edit", "hooks": [ { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/run_server_tests.sh\"", "timeout": 300 } ] }
+    ]
+  }
+}
