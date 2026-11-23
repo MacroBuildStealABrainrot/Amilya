@@ -229,11 +229,11 @@ fun AccountScreen(state: AppState) {
             Text("Offer biometrics on return",Modifier.weight(1f))
             Switch(automaticBiometrics,{automaticBiometrics=it;state.vault.write("biometric-auto",it.toString())})
         }
-        if (!state.demo && user.optBoolean("is_platform_admin")) {
+        if (!com.woundcopilot.android.BuildConfig.NOTES_ONLY && !state.demo && user.optBoolean("is_platform_admin")) {
             WcpButton("Open administration", { state.screen = "admin" }, Modifier.fillMaxWidth(), secondary = true)
         }
         WcpButton("Contact support", { support = true }, Modifier.fillMaxWidth(), secondary = true)
-        if(!state.demo && user.optBoolean("is_platform_admin"))com.woundcopilot.android.SharePerformanceDiagnostics(state)
+        if(!com.woundcopilot.android.BuildConfig.NOTES_ONLY && !state.demo && user.optBoolean("is_platform_admin"))com.woundcopilot.android.SharePerformanceDiagnostics(state)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { legal = "terms" }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Terms of Use") }
             TextButton(onClick = { legal = "privacy" }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Privacy Policy") }
@@ -241,7 +241,7 @@ fun AccountScreen(state: AppState) {
         TextButton(onClick = { signOut = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = !state.loading) {
             Text(if (state.demo) "Leave the sample" else "Sign out", color = MaterialTheme.colorScheme.error)
         }
-        Text("Amilya for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"Amilya Notes for Android" else "Amilya for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
     }
     if (editProfile) ProfileDialog(state) { editProfile = false }

@@ -123,7 +123,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
                 // Owner's layout request (2026-10-28): no share, top microphone or refresh in the shared header.
                 // Owner's request (2026-10-30): one Voice button for spoken commands (not dictation), hidden while recording.
-                if(page !in listOf("welcome","login","signup","reconnect","record","shift_summary") && !rec.recording && s.user!=null)
+                if(!BuildConfig.NOTES_ONLY && page !in listOf("welcome","login","signup","reconnect","record","shift_summary") && !rec.recording && s.user!=null)
                     Surface(onClick={if(!s.loading)s.voiceCommandsOpen=true},shape=RoundedCornerShape(50),color=c.surfaceVariant,modifier=Modifier.padding(end=4.dp).semantics{contentDescription="Voice commands"}){
                         Row(Modifier.padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
                             InstrumentIcon("voice",Modifier.size(18.dp),c.primary);Text("Voice",style=MaterialTheme.typography.labelLarge)
@@ -135,7 +135,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             if(s.loading){LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp));if(s.taskLabel.contains("aving"))Row(Modifier.padding(horizontal=20.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically){CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=3.dp);Spacer(Modifier.width(12.dp));Text(s.taskLabel,style=MaterialTheme.typography.titleSmall)} else Text(s.taskLabel,Modifier.padding(horizontal=20.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium,color=c.onSurfaceVariant)}
         }
     },bottomBar={
-        if(page in listOf("home","saved","account"))InstrumentDock(listOf(DockDestination("home","Home","cases"),DockDestination("saved","Saved work","document"),DockDestination("account","Account","account")),page,::navigate)
+        if(page in listOf("home","saved","account"))InstrumentDock(listOf(DockDestination("home","Home","cases"),DockDestination("saved",if(BuildConfig.NOTES_ONLY)"Saved reports" else "Saved work","document"),DockDestination("account","Account","account")),page,::navigate)
         else if(s.quickMode==null&&inCase&&!showSidebar&&page in listOf("encounter","findings","documents","sources","review","history"))InstrumentDock(listOf(DockDestination("encounter","Capture","capture"),DockDestination("findings","Review","review",s.case?.items("facts")?.count{it.str("confirmation_state")=="unconfirmed"}?:0),DockDestination("documents","Documents","document")),phase(page),::navigate)
     }){padding->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()){
@@ -163,7 +163,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                             route=="admin"->AdminScreen(s)
                             route=="developer_diagnostics"->DeveloperDiagnosticsScreen(s)
                             route=="new"->CreateEncounterScreen(s)
-                            route=="sources"->SourcesScreen(s)
+                            route=="sources"->if(BuildConfig.NOTES_ONLY)NotesSourcesScreen(s)else SourcesScreen(s)
                             route=="record"->CaptureScreen(s,true)
                             route=="photo"||route=="upload"->CaptureScreen(s,false,route=="photo")
                             route.startsWith("evidence:")->EvidenceForm(s,route.substringAfter(':'))
@@ -176,7 +176,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             }
         }
     }
-    VoiceCommandsDialog(s)
+    if(!BuildConfig.NOTES_ONLY)VoiceCommandsDialog(s)
     WorkPrivacyDialogs(s)
     ActiveTransferDialog(s)
     AssessmentReviewDialog(s)
@@ -212,10 +212,10 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     Page{
         Row(Modifier.padding(top=8.dp),verticalAlignment=Alignment.CenterVertically){Box(Modifier.weight(1f)){Wordmark(compact=true)};Text("ANDROID",style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
         Spacer(Modifier.height(10.dp))
-        Text("Care,\nin focus.",style=MaterialTheme.typography.displayLarge.copy(fontFamily=FontFamily.Serif,fontWeight=FontWeight.Normal,fontSize=60.sp,lineHeight=62.sp,letterSpacing=(-2).sp))
-        Text("Documentation and wound support, when you need it.",style=MaterialTheme.typography.bodyMedium,color=c.onSurfaceVariant)
+        Text(if(BuildConfig.NOTES_ONLY)"Your notes,\nmade simple." else "Care,\nin focus.",style=MaterialTheme.typography.displayLarge.copy(fontFamily=FontFamily.Serif,fontWeight=FontWeight.Normal,fontSize=60.sp,lineHeight=62.sp,letterSpacing=(-2).sp))
+        Text(if(BuildConfig.NOTES_ONLY)"Speak or type your visit notes. Review, save and share your nursing report." else "Documentation and wound support, when you need it.",style=MaterialTheme.typography.bodyMedium,color=c.onSurfaceVariant)
         GlassPanel(Modifier.fillMaxWidth()){
-            listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Ask Consultant","Talk through a question.")).forEach{(icon,title,detail)->
+            (if(BuildConfig.NOTES_ONLY)listOf(Triple("record","New report","Speak or type your notes."),Triple("document","Saved reports","Review and share your work."),Triple("document","End-of-shift summary","Bring your selected reports together."))else listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Ask Consultant","Talk through a question."))).forEach{(icon,title,detail)->
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
                     InstrumentIcon(icon,Modifier.size(26.dp),c.primary)
                     Column{Text(title,style=MaterialTheme.typography.titleMedium);Text(detail,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}
@@ -232,7 +232,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     val recorder by RecordingService.state.collectAsState()
     Page{
         TextButton(onClick={s.openShiftSummary()},enabled=!s.loading&&!recorder.recording){Text("End-of-shift summary")}
-        InstrumentTitle("Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
+        InstrumentTitle(if(BuildConfig.NOTES_ONLY)"Saved reports" else "Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
         Row{TextButton(onClick={recovery=false}){Text("Saved")};TextButton(onClick={recovery=true;s.refreshRecordingJobs()}){Text("Recovery & older work")}}
         val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
         if(recovery) RecordingRecoveryList(jobs=s.recordingJobs,actionId=s.recoveryActionId,recording=recorder.recording,onFinish=s::resumeRecording,onDiscard=s::discardRecovery)
@@ -240,7 +240,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             Text(if(recovery)"No unfinished recordings or older work." else "Nothing saved yet. Start a report from Home.")
             WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
         }
-        if(!recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
+        if(!BuildConfig.NOTES_ONLY && !recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}
         filtered.forEach{e->
             val mode=e.optJSONObject("draft_data")?.str("quick_mode").orEmpty()
             val type=when(mode.lowercase()){

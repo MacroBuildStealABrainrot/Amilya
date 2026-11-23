@@ -39,6 +39,16 @@ fun QuickReportScreen(s: AppState) {
     val signed = document?.str("status") == "signed"
     val exactSaved = document != null && document.str("text") == s.editor && document.str("template") == s.editorTemplate &&
         document.str("amends_id") == s.amendId.orEmpty() && document.str("reason") == s.amendReason
+    if(BuildConfig.NOTES_ONLY && !notesCanEditTemplate(s.editorTemplate)){
+        Page {
+            InstrumentTitle("Saved report")
+            Text("This report uses another format. Open it in the full Amilya app to make changes.")
+            DocumentAlerts(s)
+            SelectionContainer { Text(s.editor) }
+            WcpButton("Done", { s.doneQuick() }, Modifier.fillMaxWidth(), enabled = !s.loading)
+        }
+        return
+    }
     val current = s.editorCaseRevision == s.revision
     var formatOpen by rememberSaveable(s.encounterId) { mutableStateOf(false) }
     var pendingFormat by rememberSaveable(s.encounterId) { mutableStateOf<String?>(null) }
@@ -55,7 +65,7 @@ fun QuickReportScreen(s: AppState) {
             TextButton(onClick = { s.doneQuick() }, enabled = !s.loading) { Text("Done") }
         })
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Box {
+            if(!BuildConfig.NOTES_ONLY)Box {
                 TextButton(onClick = { formatOpen = true }, enabled = !signed && !s.loading) {
                     Text("Document Type · ${documentTypeTitle(s.editorTemplate)}")
                     Spacer(Modifier.width(7.dp))
@@ -108,7 +118,7 @@ fun QuickReportScreen(s: AppState) {
             },
             style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
         )
-        if (!signed) DocumentReviewTools(s)
+        if (!signed && !BuildConfig.NOTES_ONLY) DocumentReviewTools(s)
         if (!signed && !current && s.editor.isNotBlank()) {
             GlassPanel(Modifier.fillMaxWidth()) {
                 Text("Your sources changed", style = MaterialTheme.typography.titleMedium)
@@ -128,8 +138,8 @@ fun QuickReportScreen(s: AppState) {
             openRequested = s.sendRequested, onOpenHandled = { s.sendRequested = false })
 
         DetailDisclosure("More options") {
-            TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text("Add photo, recording or files") }
-            TextButton(onClick = { s.quickConsultant() }, enabled = !s.loading) { Text("Ask Consultant") }
+            TextButton(onClick = { s.screen = "document_capture" }, enabled = !s.loading) { Text(if(BuildConfig.NOTES_ONLY)"Add a recording or note" else "Add photo, recording or files") }
+            if(!BuildConfig.NOTES_ONLY)TextButton(onClick = { s.quickConsultant() }, enabled = !s.loading) { Text("Ask Consultant") }
             TextButton(onClick = { s.screen = "documents" }, enabled = !s.loading) { Text("Saved versions") }
             if (signed && document != null) WcpButton("Create amendment", { s.startAmendment(document) }, Modifier.fillMaxWidth(), enabled = !s.loading, secondary = true)
             if (!signed) {

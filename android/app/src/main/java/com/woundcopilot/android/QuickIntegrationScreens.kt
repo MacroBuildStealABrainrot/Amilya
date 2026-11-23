@@ -15,6 +15,10 @@ import java.time.format.DateTimeFormatter
 
 @Composable fun HomeScreen(s:AppState){
     LaunchedEffect(s.user?.str("id")){s.refreshRecordingJobs()}
+    if(BuildConfig.NOTES_ONLY){
+        NotesHomeScreen(s)
+        return
+    }
     StartScreen(
         recovery={
             val pending = s.recordingJobs.filter { it.str("resume_from") != "REPORT_READY" }
@@ -57,37 +61,55 @@ import java.time.format.DateTimeFormatter
         onAccount={s.screen="account"},onSendAll={s.sendReports(true)})
 }
 
+@Composable private fun NotesHomeScreen(s:AppState){
+    val recorder by RecordingService.state.collectAsState()
+    val ready=!s.loading&&!recorder.recording
+    Page{
+        InstrumentTitle("Nursing reports")
+        Text("Speak or type your notes, then review your report.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+        WcpButton("New report",{s.startQuick("document")},Modifier.fillMaxWidth(),enabled=ready)
+        WcpButton("Saved reports",{s.screen="saved"},Modifier.fillMaxWidth(),enabled=ready,secondary=true)
+        WcpButton("End-of-shift summary",{s.openShiftSummary()},Modifier.fillMaxWidth(),enabled=ready,secondary=true)
+        if(s.recordingJobs.isNotEmpty()){
+            RecordingRecoveryList(jobs=s.recordingJobs,actionId=s.recoveryActionId,recording=recorder.recording,
+                onFinish=s::resumeRecording,onDiscard=s::discardRecovery)
+        }
+    }
+}
+
 @Composable fun DocumentCaptureScreen(s:AppState){
     LaunchedEffect(Unit){withFrameNanos{};Performance.end("document_open")}
     val sources=s.case?.items("evidence").orEmpty()
     val context=LocalContext.current
     val spokenText=sources.filter{it.str("kind") in listOf("audio","typed","transcript")}.map{it.str("text").trim()}.filter{it.isNotEmpty()}.joinToString("\n\n")
     Page{
-        InstrumentTitle("Document")
-        DocumentTypeSelector(s.editorTemplate, !s.loading) { if(s.editor.isBlank()){s.updateTemplate(it);s.persistEditor()}else s.reformatQuick(it) }
-        WcpButton("Record",{s.textOnlyNext=false;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
-        WcpButton("Record, text only (no report)",{s.textOnlyNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        InstrumentTitle(if(BuildConfig.NOTES_ONLY)"New report" else "Document")
+        if(!BuildConfig.NOTES_ONLY)DocumentTypeSelector(s.editorTemplate, !s.loading) { if(s.editor.isBlank()){s.updateTemplate(it);s.persistEditor()}else s.reformatQuick(it) }
+        WcpButton(if(BuildConfig.NOTES_ONLY)"Record a note" else "Record",{s.textOnlyNext=false;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
+        if(!BuildConfig.NOTES_ONLY)WcpButton("Record, text only (no report)",{s.textOnlyNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         WcpButton("Write instead",{s.screen="evidence:typed"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         // After a whole-visit recording: a short spoken summary in the clinician's own words is the most reliable source.
         if(sources.any{it.str("kind")=="audio"})WcpButton("Add a spoken summary",{s.textOnlyNext=false;s.summaryNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
+        if(!BuildConfig.NOTES_ONLY)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
             TextButton({s.screen="photo"},enabled=!s.loading){InstrumentIcon("photo",Modifier.size(18.dp));Text("  Add photo")}
             TextButton({s.screen="upload"},enabled=!s.loading){InstrumentIcon("add",Modifier.size(18.dp));Text("  Add Files")}
         }
         if(s.editor.isNotBlank())WcpButton("Return to report",{s.screen="editor"},Modifier.fillMaxWidth(),enabled=!s.loading)
         else if(showsGenerateOnDocument(true,sources.size,s.earlierReportWaiting()))WcpButton(if(sources.isEmpty())"Recover earlier report" else "Generate report",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading)
-        if(spokenText.isNotBlank())WcpButton("Share text",{try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,spokenText)},"Share text"))}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
-        val audioPath=s.vault.read("capture-${s.user?.str("id")}-${s.encounterId}-audio").orEmpty()
-        if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Share recording",{try{
-            val src=java.io.File(audioPath);val dir=java.io.File(context.cacheDir,"exports").apply{mkdirs()}
-            val copy=java.io.File(dir,"visit-recording-"+System.currentTimeMillis()+"."+src.extension.ifBlank{"m4a"});src.copyTo(copy,true)
-            val uri=androidx.core.content.FileProvider.getUriForFile(context,context.packageName+".files",copy)
-            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="audio/mp4";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)},"Share recording"))
-        }catch(_:Exception){s.notice="The recording could not be shared."}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
-        if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Save recording to phone",{s.notice=PhoneSave.save(context,java.io.File(audioPath),"audio/mp4")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
-        if(spokenText.isNotBlank())WcpButton("Save text to phone",{s.notice=PhoneSave.saveText(context,spokenText,"visit-text")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
-        if(spokenText.isNotBlank())WcpButton("Copy text",{try{(context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Voice to text",spokenText));s.notice="Text copied."}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
-        if(spokenText.isNotBlank() && s.editor.isBlank())WcpButton("Create report from this text",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if(!BuildConfig.NOTES_ONLY){
+            if(spokenText.isNotBlank())WcpButton("Share text",{try{context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_TEXT,spokenText)},"Share text"))}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+            val audioPath=s.vault.read("capture-${s.user?.str("id")}-${s.encounterId}-audio").orEmpty()
+            if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Share recording",{try{
+                val src=java.io.File(audioPath);val dir=java.io.File(context.cacheDir,"exports").apply{mkdirs()}
+                val copy=java.io.File(dir,"visit-recording-"+System.currentTimeMillis()+"."+src.extension.ifBlank{"m4a"});src.copyTo(copy,true)
+                val uri=androidx.core.content.FileProvider.getUriForFile(context,context.packageName+".files",copy)
+                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply{type="audio/mp4";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)},"Share recording"))
+            }catch(_:Exception){s.notice="The recording could not be shared."}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+            if(audioPath.isNotBlank() && java.io.File(audioPath).isFile)WcpButton("Save recording to phone",{s.notice=PhoneSave.save(context,java.io.File(audioPath),"audio/mp4")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+            if(spokenText.isNotBlank())WcpButton("Save text to phone",{s.notice=PhoneSave.saveText(context,spokenText,"visit-text")},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+            if(spokenText.isNotBlank())WcpButton("Copy text",{try{(context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("Voice to text",spokenText));s.notice="Text copied."}catch(_:Exception){}},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+            if(spokenText.isNotBlank() && s.editor.isBlank())WcpButton("Create report from this text",{s.quickReport()},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        }
         if(sources.isNotEmpty())DetailDisclosure("Sources","${sources.size} added"){
             sources.forEach{EvidenceItem(s,it)}
             if(s.editor.isBlank())TextButton({s.quickReport(false)},enabled=!s.loading){Text("Create draft without AI")}

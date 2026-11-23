@@ -24,6 +24,7 @@ check "$(ls $APKS/renderTest/*.apk | head -1)" com.woundcopilot.android.renderte
 check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolated2 false
 check "$(ls $APKS/live/*.apk | head -1)" com.woundcopilot.android.live false
 check "$(ls $APKS/liveShots/*.apk | head -1)" com.woundcopilot.android.liveshots false
+check "$(ls $APKS/notes/*.apk | head -1)" com.woundcopilot.android.notes false
 # The live app must be compiled for the real service only, never as an isolated/test build, with the clean owner screens.
 LBC="$(find android/app/build/generated -path '*/live/*' -name BuildConfig.java | head -1)"
 [ -n "$LBC" ] || { echo "FAIL: live BuildConfig not found"; fail=1; }
@@ -43,14 +44,26 @@ fi
 APKSIGNER="${AAPT2%aapt2}apksigner"
 "$APKSIGNER" verify --verbose --print-certs "$(ls $APKS/renderTest/*.apk | head -1)"
 
-# Check screenshot policy and destination separately for both live variants.
-for variant in live liveShots; do
+# Check screenshot policy and destination separately for all live variants.
+for variant in live liveShots notes; do
   config=$(find android/app/build/generated -path "*/$variant/*" -name BuildConfig.java | head -1)
   [ -n "$config" ] || exit 1
   capture=false; [ "$variant" != liveShots ] || capture=true
   grep -q "ALLOW_SCREEN_CAPTURE = $capture" "$config" || exit 1
   grep -q 'API_BASE_URL = "https://woundcopilot-1039151887397.us-central1.run.app/api/v1"' "$config" || exit 1
   grep -q 'ISOLATED_TEST = false' "$config" || exit 1
+  grep -q 'OWNER_CLEAN_UI = true' "$config" || exit 1
+  grep -q 'SANDBOX = false' "$config" || exit 1
+  grep -q 'DEBUG = false' "$config" || exit 1
+  grep -q 'WEAR_REMOTE_CONTROL = false' "$config" || exit 1
+done
+
+# Only the reporting companion may remove the other workflows. Verify every built app.
+for variant in debug release pilot repair renderTest isolatedTest sandbox live liveShots notes; do
+  config=$(find android/app/build/generated -path "*/$variant/*" -name BuildConfig.java | head -1)
+  [ -n "$config" ] || { echo "FAIL: $variant BuildConfig not found"; exit 1; }
+  notes=false; [ "$variant" != notes ] || notes=true
+  grep -q "NOTES_ONLY = $notes" "$config" || { echo "FAIL: unexpected reporting-only flag in $variant"; exit 1; }
 done
 
 [ $fail -eq 0 ] && echo "ALL BUILD-FLAG CHECKS PASSED"

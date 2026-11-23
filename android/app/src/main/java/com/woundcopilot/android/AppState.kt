@@ -190,7 +190,10 @@ class AppState(application:Application):AndroidViewModel(application) {
         get() = noticeFeedback.text
         set(value) { noticeFeedback = noticeFeedback.replace(value) }
     val noticeMessageSequence get() = noticeFeedback.sequence
-    var screen by mutableStateOf("welcome")
+    private var screenValue by mutableStateOf("welcome")
+    var screen: String
+        get() = screenValue
+        set(value) { screenValue = if (BuildConfig.NOTES_ONLY && !notesRouteAllowed(value)) "home" else value }
     var dark by mutableStateOf(vault.read("theme") != "light")
     var patients by mutableStateOf<List<JSONObject>>(emptyList()); private set
     var encounters by mutableStateOf<List<JSONObject>>(emptyList()); private set
@@ -375,7 +378,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             val e=async{(api.call("/work")as JSONArray).objects()}
             val b=async{api.call("/billing")as JSONObject}
             val people=p.await();val work=e.await();val credits=b.await()
-            if(user?.str("id")==owner && !demo){patients=people;encounters=work;billing=credits;rememberShiftMetadata()}
+            if(user?.str("id")==owner && !demo){patients=people;encounters=if(BuildConfig.NOTES_ONLY)work.filter{notesVisitAllowed(it.optJSONObject("draft_data")?.str("quick_mode").orEmpty())}else work;billing=credits;rememberShiftMetadata()}
         }
     }
     fun refresh()=runTask {if(user==null){config=api.call("/config") as JSONObject}else if(case!=null && screen !in listOf("home","saved","account","new")){reloadCase()}else refreshHome()}
@@ -595,6 +598,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun pendingPhotoFiles():List<Pair<File,String>> = vault.read(storeKey("photo-batch-pending"))?.let{raw->runCatching{JSONArray(raw).objects().map{File(it.str("path")) to it.str("mime")}.filter{it.first.isFile}}.getOrNull()}?:emptyList()
     private fun quickDestination()=when(quickMode){"document"->if(editor.isNotBlank())"editor" else "document_capture";"photo"->if(case?.items("evidence")?.any{it.str("kind")=="photo"}==true)"photo_assessment" else "photo";"consultant"->"consultant";else->"encounter"}
     private fun restoreQuick(){
+        if(BuildConfig.NOTES_ONLY){quickMode="document";consultantMessages=emptyList();consultantDraft="";return}
         quickMode=vault.read(storeKey("quick-mode"))?.takeIf{it in listOf("document","photo","consultant")} ?: case?.optJSONObject("encounter")?.optJSONObject("draft_data")?.str("quick_mode")?.takeIf{it.isNotBlank()}
         consultantMessages=vault.read(storeKey("consult-chat"))?.let{runCatching{JSONArray(it).objects()}.getOrNull()}?:emptyList()
         consultantDraft=vault.read(storeKey("consult-draft"))?:"";consultantReset++
@@ -608,6 +612,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun beginCaseReview(){if(loading)return;reviewPending=true;notice="Choose the visit to review.";screen="saved"}
     fun startQuick(mode:String){
         if(loading)return
+        if(BuildConfig.NOTES_ONLY && mode!="document"){notice="Amilya Notes is for nursing reports.";return}
         reviewPending=false
         reportFromConsultation=false;consultantReportPrompt=false
         processingRecording=null
@@ -764,6 +769,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         File(context.cacheDir,"exports").listFiles()?.filter{it.isFile}?.forEach{it.delete()}
     }
     fun deleteWork(id:String)=runTask("Deleting work"){
+        require(!BuildConfig.NOTES_ONLY || id!="all-saved"){"Delete an individual report from Saved reports."}
         val ids=if(id=="all-saved"){
             if(demo)encounters.filter(::isSavedWork).map{it.str("id")}else{
                 val result=api.call("/work/delete-all-saved","POST",obj("confirm" to true))as JSONObject
@@ -912,6 +918,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         }
     }
     private suspend fun draftQuick(ai:Boolean,format:String=editorTemplate){
+        require(!BuildConfig.NOTES_ONLY || notesCanEditTemplate(format)){"Open this report in the full Amilya app to change its format."}
         ensureRemoteDocument()
         recordingStage("GENERATING_REPORT");Performance.start("report_request")
         // Once a source is accepted, retry only drafting, never its successful upload.
@@ -939,6 +946,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             for(k in sent.keys())payload.put(k,sent.get(k))
         }
         val reportFormat=payload.optString("template",format)
+        require(!BuildConfig.NOTES_ONLY || notesCanEditTemplate(reportFormat)){"Recover this report in the full Amilya app."}
         var reportStorage=earlier?.first?:journalKey(intent,payload)
         if(ai && !demo)journal.point(pointer,sourceRevision.toString(),reportStorage)
         val leftOutKey=storeKey("left-out-$reportStorage")
@@ -985,6 +993,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun reformatOrRetry(ai:Boolean,format:String)=runTask("Preparing your report"){draftQuick(ai,format)}
     fun reformatQuick(format:String)=runTask("Changing report format"){draftQuick(true,format)}
     fun applyVoiceCorrection():Unit=runTask("Applying your correction",purpose="report",retry={applyVoiceCorrection()}){
+        require(!BuildConfig.NOTES_ONLY || notesCanEditTemplate(editorTemplate)){"Edit this report in the full Amilya app."}
         require(voiceInstruction.isNotBlank()){"Enter the correction you want to make."}
         val start=localRevision;val intent="refine-$revision";val payload=obj("text" to editor,"instruction" to voiceInstruction,"template" to editorTemplate)
         if(editorTemplate=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
@@ -1146,7 +1155,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
         draftNotice?.let{notice=it}
     }
-    fun newDocument(){if(loading)return;snapshotDraft();draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
+    fun newDocument(){if(loading)return;snapshotDraft();if(BuildConfig.NOTES_ONLY)editorTemplate="nursing";draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
     fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);val alertsOfThisReport=savedAlerts.read(d.str("id"));documentAlerts=alertsOfThisReport?.first?:emptyList();documentAlertSafetyCount=alertsOfThisReport?.second?:0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
