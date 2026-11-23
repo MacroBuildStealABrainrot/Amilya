@@ -61,7 +61,7 @@ class ConsultRequest(StrictModel):
     # The report exactly as it is on the clinician's screen right now, including edits not yet saved. Optional for older apps.
     current_report: Annotated[str, StringConstraints(max_length=60000)] | None = None
     # 'ai_draft_unreviewed' = the text was just written by the AI and the clinician has not reviewed or adopted it.
-    # Absent or 'clinician' keeps the old behaviour (text on the clinician's screen, reviewed or edited by them).
+    # Report-level labels never prove adoption of individual findings; clinician messages carry explicit adoption.
     current_report_origin: Literal['clinician', 'ai_draft_unreviewed'] | None = None
 
     @model_validator(mode='after')
@@ -190,18 +190,16 @@ def source_context(db: Session, encounter: Encounter):
 
 def current_report_context(db: Session, encounter: Encounter, on_screen: str | None, origin: str | None = None):
     """The report Ask Consultant reviews: the text on the clinician's screen if sent, else the newest saved version. Never regenerated."""
-    if on_screen and on_screen.strip() and origin == 'ai_draft_unreviewed':
+    if on_screen and on_screen.strip():
         # Generated text is not clinician information: keep it under its own key so no rule treats it as clinician-supplied.
         return {'ai_draft_report_unreviewed': {'text': on_screen, 'version': 'AI-written draft just generated; the clinician has not reviewed or adopted it. '
                 'Nothing in it is a clinician-supplied fact. Use only the clinician-recorded sources and clinician messages for findings; '
                 'anything that appears only in this draft (for example a photo-only finding) must not be added to a letter or message.'}}
-    if on_screen and on_screen.strip():
-        return {'clinician_current_report': {'text': on_screen, 'version': 'as currently shown on the clinician\'s screen, including any unsaved edits'}}
     latest = db.scalar(select(ClinicalDocument).where(ClinicalDocument.workspace_id == encounter.workspace_id,
         ClinicalDocument.encounter_id == encounter.id).order_by(ClinicalDocument.version.desc()).limit(1))
-    if latest is None:
+    if latest is None or not (latest.text or "").strip():
         return {}
-    return {'clinician_current_report': {'text': latest.text, 'version': f'latest saved version {latest.version}'}}
+    return current_report_context(db, encounter, latest.text, 'ai_draft_unreviewed')
 
 
 def consultation_context(turns):

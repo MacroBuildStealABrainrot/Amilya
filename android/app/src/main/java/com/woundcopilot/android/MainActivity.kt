@@ -112,6 +112,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     val c=MaterialTheme.colorScheme
     Scaffold(containerColor=c.background,topBar={
         if(page!="welcome")Column(Modifier.statusBarsPadding()){
+            if(BuildConfig.APPLICATION_ID.endsWith(".liveshots"))Text("FAKE DATA ONLY - Amilya SHOTS",modifier=Modifier.fillMaxWidth().padding(8.dp),color=c.error)
             Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=5.dp),verticalAlignment=Alignment.CenterVertically){
                 if(page !in listOf("home","account"))TouchIcon("back","Back",::back)
                 if(inCase&&s.quickMode!=null)Box(Modifier.weight(1f).padding(start=6.dp)){

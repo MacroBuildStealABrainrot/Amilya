@@ -889,7 +889,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(editorOwner==storeKey("draft"))persistEditor()
         val onScreen=editor.takeIf{editorOwner==storeKey("draft") && it.isNotBlank() && it.length<=60000}
         val payload=obj("message" to text,"history" to JSONArray(boundedConsultHistory(history).map{obj("role" to it.str("role"),"content" to it.str("content"))}))
-        if(onScreen!=null)payload.put("current_report",onScreen)
+        if(onScreen!=null){payload.put("current_report",onScreen);payload.put("current_report_origin","ai_draft_unreviewed")}
         val sourceRevision=revision;val intent="consult-$sourceRevision"
         val reply=if(demo)obj("answer" to "This is the local sample. In a connected visit, Ask Consultant can start with your question and the information you choose to add. No model was called.","case_revision" to revision)else mutation(intent,"/encounters/$encounterId/consult",payload)
         require(reply.optInt("case_revision")==revision){"Your sources changed. Ask again using the current sources."}

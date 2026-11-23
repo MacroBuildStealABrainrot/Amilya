@@ -117,5 +117,29 @@ def test_generated_report_is_not_treated_as_clinician_information():
     assert 'clinician_current_report' not in ctx
     assert 'not reviewed or adopted' in ctx['ai_draft_report_unreviewed']['version']
     ctx = qw.current_report_context(None, None, 'Small drainage.')
-    assert 'clinician_current_report' in ctx and 'ai_draft_report_unreviewed' not in ctx
+    assert 'clinician_current_report' not in ctx and 'ai_draft_report_unreviewed' in ctx
     assert 'ai_draft_report_unreviewed' in _read('91_wound_consultant.system.md')
+
+
+def test_report_origin_never_substitutes_for_explicit_adoption():
+    from server import quick_workflows as qw
+    for origin in (None, 'clinician', 'ai_draft_unreviewed'):
+        ctx = qw.current_report_context(None, None, 'Synthetic draft: dark crust.', origin)
+        assert 'clinician_current_report' not in ctx
+        assert 'ai_draft_report_unreviewed' in ctx
+    class DB:
+        def scalar(self, query):
+            return SimpleNamespace(text='Synthetic saved draft.', version=1)
+    encounter = SimpleNamespace(workspace_id='fake-workspace', id='fake-encounter')
+    assert 'ai_draft_report_unreviewed' in qw.current_report_context(DB(), encounter, None)
+    class EmptyDB:
+        def scalar(self, query):
+            return SimpleNamespace(text='   ', version=1)
+    assert qw.current_report_context(EmptyDB(), encounter, None) == {}
+
+
+def test_checkers_reject_unstated_assessment_and_monitoring():
+    assert 'never reject a report for it' not in _read('86_quick_documentation_qa.system.md')
+    marker = _read('95_evaluation_marker.system.md')
+    assert 'even when those signs were not mentioned' not in marker
+    assert 'not supplied or explicitly adopted by the clinician' in marker
