@@ -23,6 +23,7 @@ check "$(ls $APKS/repair/*.apk | head -1)" com.woundcopilot.android.repair2 fals
 check "$(ls $APKS/renderTest/*.apk | head -1)" com.woundcopilot.android.rendertest false
 check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolated2 false
 check "$(ls $APKS/live/*.apk | head -1)" com.woundcopilot.android.live false
+check "$(ls $APKS/liveShots/*.apk | head -1)" com.woundcopilot.android.liveshots false
 # The live app must be compiled for the real service only, never as an isolated/test build, with the clean owner screens.
 LBC="$(find android/app/build/generated -path '*live*' -name BuildConfig.java | head -1)"
 [ -n "$LBC" ] || { echo "FAIL: live BuildConfig not found"; fail=1; }
