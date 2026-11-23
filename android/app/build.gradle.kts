@@ -118,6 +118,7 @@ android {
         // private build repository. Same clean screens as the isolated test app (no credits or service details shown).
         create("live") {
             initWith(getByName("release"))
+            buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", "false")
             applicationIdSuffix = ".live"
             versionNameSuffix = "-live"
             manifestPlaceholders["appLabel"] = "Amilya"

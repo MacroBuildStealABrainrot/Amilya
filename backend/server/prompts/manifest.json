@@ -21,7 +21,7 @@
     "83_quick_report_repair.system.md": "17c4ec1f3bbf2126ff5d6232d4a6107f7e385c44ce5aedad0c4c1e7e1ba888f7",
     "84_improve_report.system.md": "6eb4ccdce312c18580bb8e4194a67b20e5945cedff469d2539921d5b0cd59926",
     "85_documentation_qa.system.md": "53ae3731f8dd4e0f4d3a134ba54335707bed1c3f50883fede777d10b8c6633d9",
-    "86_quick_documentation_qa.system.md": "1b0f8b73f16031187166c63c651dd3d77a03e0b0a1cda2b0c6a32c07eace4c4c",
+    "86_quick_documentation_qa.system.md": "2ce0b804d7acf2539eb3f1657bc4e985851bce8cb12bce2f5a3382385fdf5113",
     "90_contextual_clinical_assistant.system.md": "0a05553d5ff7c4e402b5daccde44856c5e4e96a2672d2ac0538e739d8e1901f6",
     "91_wound_consultant.system.md": "154fe5f35c08299e7fddef54a5b97870f6bfd94857b8ebafac3032373f174936",
     "92_improve_assessment.system.md": "0f5cc446b895826b239f072efe9cce0d4edcd25e76a3de6b29a7ca3c01201314",
@@ -48,6 +48,6 @@
     "documentation/examples/soap_v1.md": "6dfdadf46d2aab0844c812b0a55c40f4d6ef8d2e61687ec12a2d4a37f8227107",
     "documentation/wound_vocabulary_v1.md": "a3c6cd967dd0dc2d1e6d81f886d5b574e7a7812397a4cc337fc08f03acb0c1af",
     "documentation/charting_rules_v1.md": "c0ffaf1e3e4c0868819a6dec664e89d13b94d70139386b1c27aef7a3b97f4278",
-    "95_evaluation_marker.system.md": "cd67d92a51d158593599521f3ce97275d7ae6932a6a5f4020488ca01322761df"
+    "95_evaluation_marker.system.md": "64d1cc0982180f4e001e6332c76bf76442e4a6b92ea99f027508805b6465737f"
   }
 }

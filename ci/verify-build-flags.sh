@@ -25,7 +25,7 @@ check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolat
 check "$(ls $APKS/live/*.apk | head -1)" com.woundcopilot.android.live false
 check "$(ls $APKS/liveShots/*.apk | head -1)" com.woundcopilot.android.liveshots false
 # The live app must be compiled for the real service only, never as an isolated/test build, with the clean owner screens.
-LBC="$(find android/app/build/generated -path '*live*' -name BuildConfig.java | head -1)"
+LBC="$(find android/app/build/generated -path '*/live/*' -name BuildConfig.java | head -1)"
 [ -n "$LBC" ] || { echo "FAIL: live BuildConfig not found"; fail=1; }
 if [ -n "$LBC" ]; then
   grep -q 'API_BASE_URL = "https://woundcopilot-1039151887397.us-central1.run.app/api/v1"' "$LBC" || { echo "FAIL: live app has the wrong server address"; fail=1; }
@@ -42,5 +42,16 @@ if [ -n "$BC" ]; then
 fi
 APKSIGNER="${AAPT2%aapt2}apksigner"
 "$APKSIGNER" verify --verbose --print-certs "$(ls $APKS/renderTest/*.apk | head -1)"
+
+# Check screenshot policy and destination separately for both live variants.
+for variant in live liveShots; do
+  config=$(find android/app/build/generated -path "*/$variant/*" -name BuildConfig.java | head -1)
+  [ -n "$config" ] || exit 1
+  capture=false; [ "$variant" != liveShots ] || capture=true
+  grep -q "ALLOW_SCREEN_CAPTURE = $capture" "$config" || exit 1
+  grep -q 'API_BASE_URL = "https://woundcopilot-1039151887397.us-central1.run.app/api/v1"' "$config" || exit 1
+  grep -q 'ISOLATED_TEST = false' "$config" || exit 1
+done
+
 [ $fail -eq 0 ] && echo "ALL BUILD-FLAG CHECKS PASSED"
 exit $fail
