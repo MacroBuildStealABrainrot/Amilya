@@ -197,7 +197,7 @@ def current_report_context(db: Session, encounter: Encounter, on_screen: str | N
                 'anything that appears only in this draft (for example a photo-only finding) must not be added to a letter or message.'}}
     latest = db.scalar(select(ClinicalDocument).where(ClinicalDocument.workspace_id == encounter.workspace_id,
         ClinicalDocument.encounter_id == encounter.id).order_by(ClinicalDocument.version.desc()).limit(1))
-    if latest is None:
+    if latest is None or not (latest.text or "").strip():
         return {}
     return current_report_context(db, encounter, latest.text, 'ai_draft_unreviewed')
 

@@ -132,6 +132,10 @@ def test_report_origin_never_substitutes_for_explicit_adoption():
             return SimpleNamespace(text='Synthetic saved draft.', version=1)
     encounter = SimpleNamespace(workspace_id='fake-workspace', id='fake-encounter')
     assert 'ai_draft_report_unreviewed' in qw.current_report_context(DB(), encounter, None)
+    class EmptyDB:
+        def scalar(self, query):
+            return SimpleNamespace(text='   ', version=1)
+    assert qw.current_report_context(EmptyDB(), encounter, None) == {}
 
 
 def test_checkers_reject_unstated_assessment_and_monitoring():
