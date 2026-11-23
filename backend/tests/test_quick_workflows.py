@@ -171,10 +171,10 @@ def test_consult_reviews_the_report_on_screen_then_the_newest_saved_version(quic
                 created_by=encounter.created_by))
         db.commit()
     assert quick_api.client.post(url, json={'message': 'Review my report'}).status_code == 200
-    assert seen[-1]['clinician_current_report']['text'] == 'NEWEST SAVED REPORT'
+    assert seen[-1]['ai_draft_report_unreviewed']['text'] == 'NEWEST SAVED REPORT'
     response = quick_api.client.post(url, json={'message': 'Review my report again', 'current_report': 'MY UNSAVED EDIT'})
     assert response.status_code == 200, response.text
-    assert seen[-1]['clinician_current_report']['text'] == 'MY UNSAVED EDIT'
+    assert seen[-1]['ai_draft_report_unreviewed']['text'] == 'MY UNSAVED EDIT'
     assert quick_api.client.post(url, json={'message': 'x', 'current_report': 'y' * 60001}).status_code == 422
 
 
