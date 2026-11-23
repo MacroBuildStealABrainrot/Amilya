@@ -15,6 +15,7 @@ android {
         buildConfigField("boolean", "RENDER_TEST_SERVER", "false")
         buildConfigField("boolean", "ISOLATED_TEST", "false")
         buildConfigField("boolean", "OWNER_CLEAN_UI", "false")
+        buildConfigField("boolean", "NOTES_ONLY", "false")
         versionCode = 82
         versionName = "1.9.0-test46"
         manifestPlaceholders["appLabel"] = "WoundCoPilot"
@@ -127,6 +128,17 @@ android {
             buildConfigField("boolean", "ISOLATED_TEST", "false")
             buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
             matchingFallbacks += listOf("release", "debug")
+        }
+        // Reporting-only companion. Its own package keeps local notes and recordings separate from Amilya.
+        // Uses the same live API, account safeguards, recorder and private signing configuration.
+        create("notes") {
+            initWith(getByName("live"))
+            applicationIdSuffix = ".notes"
+            versionNameSuffix = "-notes"
+            manifestPlaceholders["appLabel"] = "Amilya Notes"
+            buildConfigField("boolean", "NOTES_ONLY", "true")
+            buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", "false")
+            matchingFallbacks += listOf("live", "release", "debug")
         }
         // Screenshot copy of the LIVE app, for the owner's own testing with FAKE patients only. Same real service and
         // screens as "live", but the phone's screenshot buttons work on clinical screens. Own app id and its own name,

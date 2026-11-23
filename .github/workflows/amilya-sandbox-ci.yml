@@ -160,7 +160,7 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
             :app:test :wear-contract:test \
-            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleIsolatedTest :app:assembleDebug :app:assembleRelease :app:assembleLive :app:assembleLiveShots :app:assembleSandboxAndroidTest \
+            :app:assembleSandbox :app:assemblePilot :app:assembleRepair :app:assembleRenderTest :app:assembleIsolatedTest :app:assembleDebug :app:assembleRelease :app:assembleLive :app:assembleLiveShots :app:assembleNotes :app:assembleSandboxAndroidTest \
             :wear:assembleSandbox :wear:assembleRelease 2>&1 | tee ../gradle-build.log
           test ${PIPESTATUS[0]} -eq 0
       - name: Report Android unit test counts (readable without downloading logs)
@@ -179,9 +179,9 @@ jobs:
               if k == 'tests' and v == 'testSandboxUnitTest' and c in ('IsolatedTestAppGuardTest','ReportAlertOrderTest','ReportRetryCodeTest','DiagnosticsStorageTest','VoiceConsentTest','ApiOriginGuardTest'):
                   print(f"::notice title=Android {c}::{n} run, {per[(v,c,'bad')]} failed")
           PY
-      - name: Lint (sandbox + pilot)
+      - name: Lint (test variants + Notes)
         working-directory: android
-        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest :app:lintIsolatedTest
+        run: ./gradlew --no-daemon :app:lintSandbox :app:lintPilot :app:lintRepair :app:lintRenderTest :app:lintIsolatedTest :app:lintNotes
       - name: Check build flags inside the built apps
         run: |
           bash ci/verify-build-flags.sh | tee build-flags.log
