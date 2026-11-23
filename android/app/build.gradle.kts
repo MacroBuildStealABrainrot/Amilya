@@ -127,6 +127,17 @@ android {
             buildConfigField("boolean", "WEAR_REMOTE_CONTROL", "false")
             matchingFallbacks += listOf("release", "debug")
         }
+        // Screenshot copy of the LIVE app, for the owner's own testing with FAKE patients only. Same real service and
+        // screens as "live", but the phone's screenshot buttons work on clinical screens. Own app id and its own name,
+        // so it can never be mistaken for the normal Amilya app.
+        create("liveShots") {
+            initWith(getByName("live"))
+            applicationIdSuffix = ".liveshots"
+            versionNameSuffix = "-liveshots"
+            manifestPlaceholders["appLabel"] = "Amilya SHOTS"
+            buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", "true")
+            matchingFallbacks += listOf("live", "release", "debug")
+        }
         // Test-only build. Its own app id (com.woundcopilot.android.sandbox) so it installs beside, never over,
         // your other builds. It can only reach the fake test server on this PC (through adb reverse). The
         // production address is refused in code, so a recording can never be sent to the live service.
