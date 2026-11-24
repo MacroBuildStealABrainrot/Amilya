@@ -41,4 +41,27 @@ class NotesAudioRecoveryTest {
         assertFalse(notesRecordingComplete(audio(), listOf(audio()), 2))
         assertTrue(notesRecordingComplete(audio(), listOf(audio()), 1))
     }
+
+    @Test fun retriesOpenAnExistingDraftOnlyAfterTheRecordingReachedReportWriting() {
+        for (phase in listOf("TRANSCRIBED", "GENERATING_REPORT", "REPORT_READY")) {
+            assertTrue(notesShouldReopenRecordingDraft(phase, "Practice report with my edits."))
+            assertFalse(notesShouldReopenRecordingDraft(phase, " "))
+        }
+        for (phase in listOf("UPLOADING", "RECORDING", "RECORDED_LOCALLY")) {
+            assertFalse(notesShouldReopenRecordingDraft(phase, "Another note already in this visit."))
+        }
+    }
+
+    @Test fun onlyAFinishedNursingReportFromTheSameAccountAndVisitCanOutlastItsAudio() {
+        val done = obj("id" to "job", "owner" to "practice-owner", "file" to "/practice/test.m4a",
+            "template" to "nursing", "phase" to "REPORT_READY", "resume_from" to "REPORT_READY",
+            "report" to "A made-up report.", "case" to obj("encounter" to obj("id" to "practice-visit")))
+        assertEquals("practice-visit", readyNotesRecordingVisit(done, "practice-owner"))
+        assertNull(readyNotesRecordingVisit(done, "someone-else"))
+        for ((field, value) in listOf("resume_from" to "TRANSCRIBED", "resume_from" to "UPLOADING",
+            "template" to "soap", "report" to " ", "phase" to "COMPLETED", "id" to "", "file" to "")) {
+            assertNull(readyNotesRecordingVisit(JSONObject(done.toString()).put(field, value), "practice-owner"))
+        }
+        assertNull(readyNotesRecordingVisit(JSONObject(done.toString()).put("case", obj()), "practice-owner"))
+    }
 }

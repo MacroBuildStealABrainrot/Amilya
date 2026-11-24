@@ -130,9 +130,31 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun resumeRecording(job:JSONObject){
         if(loading || job.str("owner")!=(user?.str("id")?:"sample"))return
         if(RecordingService.state.value.recording){notice="Stop the current recording before resuming saved work.";screen="record";return}
-        val file=File(job.str("file"));if(!file.isFile){error="This recording is no longer available on this device.";return}
-        persistEditor();case=JSONObject(job.getJSONObject("case").toString());restoreDraft();chooseQuickMode("document");updateTemplate(job.str("template","nursing"));screen="document_capture"
-        processingRecording=file
+        val file = File(job.str("file"))
+        val owner = user?.str("id") ?: "sample"
+        if (!file.isFile && !(BuildConfig.NOTES_ONLY && recordingRecovery.hasReadyNotesReport(job, owner))) {
+            error = "This recording is no longer available on this device."
+            return
+        }
+        val snapshot = job.getJSONObject("case")
+        val visit = snapshot.getJSONObject("encounter")
+        persistEditor()
+        if (!BuildConfig.NOTES_ONLY || encounterId != visit.str("id") || case?.optBoolean("notes_device_draft_shell") == true ||
+            revision < visit.optInt("revision")) {
+            case = JSONObject(snapshot.toString())
+        }
+        restoreDraft()
+        chooseQuickMode("document")
+        processingRecording = file
+        if (BuildConfig.NOTES_ONLY) {
+            dismissError()
+            notice = null
+        }
+        if (BuildConfig.NOTES_ONLY && notesShouldReopenRecordingDraft(job.str("resume_from"), editor)) {
+            screen = "editor"
+            return
+        }
+        updateTemplate(job.str("template","nursing"));screen="document_capture"
         bindDiagnostics();DeveloperDiagnostics.retry()
         if(job.str("resume_from") in listOf("RECORDING","RECORDING_FINALIZATION_FAILED")){
             vault.write("capture-${user?.str("id")}-${encounterId}-audio",file.path)
@@ -175,10 +197,14 @@ class AppState(application:Application):AndroidViewModel(application) {
     var reportLength by mutableStateOf("concise")
     var taskLabel by mutableStateOf("Working"); private set
     private var errorFeedback by mutableStateOf(FeedbackMessage())
+    var notesErrorDetails by mutableStateOf<String?>(null); private set
     var error: String?
         get() = errorFeedback.text
-        set(value) { errorFeedback = errorFeedback.replace(value) }
+        set(value) { notesErrorDetails = null; errorFeedback = errorFeedback.replace(value) }
     val errorMessageSequence get() = errorFeedback.sequence
+    internal var notesWritingRefusal by mutableStateOf<NotesWritingRefusal?>(null)
+        private set
+    internal fun closeNotesWritingReview() { notesWritingRefusal = null }
     var retryAvailable by mutableStateOf(false); private set
     var retryAtMillis by mutableLongStateOf(0); private set
     private var failedAction:(()->Unit)?=null
@@ -266,7 +292,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private suspend fun refreshAcknowledged(){
         try{reloadCase()}catch(e:Exception){if(e is CancellationException)throw e;if(e is ApiException&&e.status in listOf(401,428))throw e;notice=listOfNotNull(notice,"The change was accepted. Refresh to load the latest encounter state.").joinToString("\n")}
     }
-    fun dismissError(){error=null;failedAction=null;retryAvailable=false;retryAtMillis=0}
+    fun dismissError(){error=null;notesWritingRefusal=null;failedAction=null;retryAvailable=false;retryAtMillis=0}
     fun retryFailed(){if(loading || System.currentTimeMillis()<retryAtMillis)return;val action=failedAction?:return;DeveloperDiagnostics.retry();dismissError();action()}
     private fun taskRecovery(purpose:String,retry:()->Unit){taskPurpose=purpose;taskRecovery=retry}
     fun runTask(message:String="Working",purpose:String?=null,retry:(()->Unit)?=null,block:suspend ()->Unit){
@@ -281,12 +307,16 @@ class AppState(application:Application):AndroidViewModel(application) {
                 if(e is CancellationException)throw e
                 if(taskPurpose in listOf("audio","report"))runCatching{recordingStage("FAILED_RETRYABLE")}
                 val hasRecording=activeRecording()?.let{it.isFile && it.length()>128}==true
+                val errorDetails = if (BuildConfig.NOTES_ONLY) notesErrorSummary(
+                    e, taskPurpose, message, screen, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE
+                ) else null
                 val readable=clinicianError(e,taskPurpose)+if(hasRecording && e !is ReportRetryException && e !is java.net.SocketException && e !is java.net.UnknownHostException && taskPurpose in listOf("audio","report"))"\nYour recording is saved on this device."else ""
                 if(e is ApiException && e.status==401){persistEditor();api.clear();clearClinical();demo=false;user=null;legalRequired=false;screen="login"}
                 if(e is ApiException && e.status==428)legalRequired=true
                 consecutiveFailures++
                 val reference=(e as? ApiException)?.requestId?.let{runCatching{ "WC-"+((it.replace("-", "").take(8).toLong(16))%1_000_000).toString().padStart(6,'0') }.getOrNull()}
                 error=readable+if(consecutiveFailures>1 && reference!=null)"\nSupport reference: $reference"else ""
+                notesErrorDetails = errorDetails
                 if(canRetryRequest(e) && taskRecovery!=null && owner==user?.str("id") && (encounter==encounterId || encounter.startsWith("local-"))){
                     val action=taskRecovery!!
                     val retryEncounter=encounterId
@@ -1186,6 +1216,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         taskRecovery("report"){reformatOrRetry(ai,format)}
         taskLabel=if(ai)"Creating report"else "Preparing your draft"
         val start=localRevision;val sourceRevision=revision
+        val requestOwner = user?.str("id")
+        val requestVisit = encounterId
         val payload=obj("template" to format,"use_ai" to ai,"preferred_length" to reportLength)
         if(format=="custom")payload.put("custom_template",obj("name" to customName,"instructions" to customInstructions))
         // An unfinished (maybe already paid) AI report of this visit is resumed exactly as it was sent, with its own request code,
@@ -1218,6 +1250,17 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(ai && !demo && earlier==null && vault.read(storeKey("left-out-choice"))!=null){vault.write(leftOutKey,"1");vault.remove(storeKey("left-out-choice"))}
         fun reportDone(){journal.forget(reportStorage);journal.clearPointerIfPointsTo(pointer,reportStorage);vault.remove(leftOutKey);vault.remove(attachKey)}
         suspend fun request():JSONObject=try{mutation(intent,"/encounters/$encounterId/quick-report",payload,keepCodeOnServerError=true,storageName=reportStorage)}catch(e:ApiException){
+            // Keep the request journal and recovery stage. A refused AI request may open a review,
+            // but it cannot write a chart or turn an unfinished recording into a completed report.
+            if (BuildConfig.NOTES_ONLY && ai && quickMode == "document" && requestOwner != null &&
+                user?.str("id") == requestOwner && encounterId == requestVisit && revision == sourceRevision &&
+                start == localRevision && editor.isBlank() && savedId == null) {
+                val reason = notesWritingRefusalReason(e)
+                if (reason != null && notesReviewText(case?.items("evidence").orEmpty(), emptyList()).isNotBlank()) {
+                    notesWritingRefusal = NotesWritingRefusal(requestOwner, requestVisit, sourceRevision, reason)
+                    screen = "document_capture"
+                }
+            }
             if(e.status!=422 || !payload.has("consultation"))throw e
             // The server refused the conversation. Never write the report without it on our own: stop and say so.
             // Keep the note AND the pointer: this try says nothing about an earlier try that may have finished and been charged, and every later
@@ -1228,7 +1271,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             else try {
                 request()
             } catch (first: ApiException) {
-                if (!ai || !canRetryReportImmediately(first)) throw first
+                if (!ai || !canRetryReportImmediately(first, BuildConfig.NOTES_ONLY)) throw first
                 taskLabel = "Still writing the report"
                 request()
             }

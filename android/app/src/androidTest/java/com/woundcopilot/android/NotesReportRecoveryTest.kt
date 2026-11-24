@@ -115,4 +115,48 @@ class NotesReportRecoveryTest {
             }
         }
     }
+
+    @Test fun finishRecordingKeepsAnEditedDraftAndCanOpenItsCompletedReportWithoutTheAudio() {
+        assumeTrue(BuildConfig.NOTES_ONLY)
+        lateinit var state: AppState
+        compose.runOnIdle { state = ViewModelProvider(compose.activity)[AppState::class.java] }
+        compose.waitUntil(30_000) { !state.loading }
+        compose.runOnIdle { assumeTrue(state.user == null && state.vault.read("session") == null) }
+        val file = File(RecordingService.recordingsDirectory(compose.activity), "practice-${UUID.randomUUID()}.m4a")
+        val edited = "Practice report. The clinician corrected the wording."
+        val completed = "A different completed practice report."
+        try {
+            compose.runOnIdle { state.startDemo(); state.startQuick("document") }
+            compose.waitUntil(10_000) { !state.loading && state.screen == "document_capture" }
+            compose.runOnIdle {
+                file.writeBytes(ByteArray(256))
+                state.rememberRecording(file)
+                val waiting = state.recordingRecovery.stage(file, "GENERATING_REPORT", state.case)!!
+                state.newDocument()
+                state.edit(edited)
+                state.resumeRecording(waiting)
+            }
+            compose.waitUntil(10_000) { !state.loading }
+            compose.runOnIdle {
+                assertEquals("editor", state.screen)
+                assertEquals(edited, state.editor)
+                assertEquals("GENERATING_REPORT", state.recordingRecovery.read(file)?.str("phase"))
+                val done = state.recordingRecovery.stage(file, "REPORT_READY", state.case, completed)!!
+                state.edit("")
+                assertTrue(file.delete())
+                state.refreshRecordingJobs()
+                assertTrue(state.recordingJobs.any { it.str("id") == done.str("id") })
+                state.resumeRecording(done)
+                assertEquals("editor", state.screen)
+                assertEquals(completed, state.editor)
+                assertNull(state.error)
+            }
+        } finally {
+            compose.runOnIdle {
+                state.recordingRecovery.read(file)?.let { state.recordingRecovery.discard(it.str("id"), "sample") }
+                file.delete()
+                if (state.demo) state.logout()
+            }
+        }
+    }
 }

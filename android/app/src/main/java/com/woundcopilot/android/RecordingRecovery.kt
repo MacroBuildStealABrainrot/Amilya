@@ -12,6 +12,14 @@ class RecordingRecovery(private val context:Context){
     private val root=File(context.filesDir,"recordings").canonicalFile
     fun key(file:File)="recording-job-${file.name}"
     fun read(file:File):JSONObject?=synchronized(storageLock){vault.read(key(file))?.let{runCatching{JSONObject(it)}.getOrNull()}}
+    fun hasReadyNotesReport(job:JSONObject,owner:String):Boolean {
+        val visit = readyNotesRecordingVisit(job, owner) ?: return false
+        val file = File(job.str("file"))
+        val stored = read(file) ?: return false
+        return readyNotesRecordingVisit(stored, owner) == visit && stored.str("id") == job.str("id") &&
+            stored.str("file") == file.path && stored.str("report") == job.str("report") &&
+            stored.optLong("updated_at") >= System.currentTimeMillis() - LocalRetention.RECOVERY_AGE
+    }
     fun remember(file:File,user:String,case:JSONObject,template:String,mime:String="audio/mp4"):JSONObject=synchronized(storageLock){
         require(file.canonicalPath.startsWith(root.parentFile!!.path+File.separator))
         val job=read(file)?:obj("id" to UUID.randomUUID().toString(),"owner" to user,"file" to file.canonicalPath,"mime" to mime,"phase" to "RECORDED_LOCALLY","resume_from" to "RECORDED_LOCALLY")
@@ -31,7 +39,8 @@ class RecordingRecovery(private val context:Context){
     private fun write(file:File,job:JSONObject){job.put("updated_at",System.currentTimeMillis());vault.write(key(file),job.toString());WearCheckpointPublisher.changed(context.applicationContext)}
     fun list(user:String)=synchronized(storageLock){vault.names().filter{it.startsWith("recording-job-")}.mapNotNull{key->
         vault.read(key)?.let{runCatching{JSONObject(it)}.getOrNull()}
-    }.filter{it.str("owner")==user && it.str("phase")!="COMPLETED" && (BuildConfig.RETAIN_UNRESOLVED || System.currentTimeMillis()-it.optLong("updated_at")<LocalRetention.RECOVERY_AGE) && File(it.str("file")).isFile}.sortedByDescending{it.optLong("updated_at")}}
+    }.filter{it.str("owner")==user && it.str("phase")!="COMPLETED" && (BuildConfig.RETAIN_UNRESOLVED || System.currentTimeMillis()-it.optLong("updated_at")<LocalRetention.RECOVERY_AGE) &&
+        (File(it.str("file")).isFile || BuildConfig.NOTES_ONLY && readyNotesRecordingVisit(it,user) != null)}.sortedByDescending{it.optLong("updated_at")}}
     fun discard(jobId:String,user:String):Boolean=synchronized(storageLock){
         val key=vault.names().firstOrNull{candidate->
             if(!candidate.startsWith("recording-job-"))false
@@ -42,7 +51,8 @@ class RecordingRecovery(private val context:Context){
         val raw=vault.read(key)?:return@synchronized false
         val job=runCatching{JSONObject(raw)}.getOrNull()?:return@synchronized false
         val file=runCatching{File(job.str("file")).canonicalFile}.getOrNull()?:return@synchronized false
-        if(file.parentFile!=root || file.extension.lowercase()!="m4a" || !file.isFile)return@synchronized false
+        if(file.parentFile!=root || file.extension.lowercase()!="m4a" ||
+            (!file.isFile && !(BuildConfig.NOTES_ONLY && readyNotesRecordingVisit(job,user)!=null)))return@synchronized false
         if(job.str("owner")!=user || job.str("id")!=jobId)return@synchronized false
         RecordingService.clearPending(context,file.path,deleteFile=true)
         vault.names().filter{it.startsWith("capture-") && vault.read(it)==file.path}.forEach{capture->
