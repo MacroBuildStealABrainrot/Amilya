@@ -22,7 +22,7 @@ import urllib.request
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-STABLE_REVISION = 'woundcopilot-00021-lrx'
+STABLE_REVISION = 'woundcopilot-rel-ef3d1a8-c'
 SERVICE, REGION = 'woundcopilot', 'us-central1'
 HEALTH_URL = 'https://woundcopilot-1039151887397.us-central1.run.app/api/v1/health'
 SENTRY_ORG, SENTRY_PROJECTS = 'amilya', ('amilya-android', 'amilya-backend')
@@ -31,7 +31,11 @@ REPORT_LABEL, APPROVAL_LABEL = 'daily-report', 'needs-approval'
 APK_ARTIFACT = 'amilya-apks'
 # Production 5xx count in 24 h that is treated as serious.
 SERIOUS_PROD_ERRORS = 5
-ID_PATTERN = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.I)
+LOG_LIMIT = 1000
+ENCOUNTER_ROUTE = re.compile(
+    r'/api/v1/encounters/[^/]+/(audio-parts|audio-complete|audio-verifications|quick-report|'
+    r'documents|upload|consult|refine-report|transcribe-correction|transcribe-message|improve-report|improve-assessment)'
+)
 
 
 def http_json(url, token=None, method='GET', body=None, auth='Bearer', timeout=30):
@@ -60,8 +64,14 @@ class GitHub:
 
 
 def route_shape(url):
-    path = urllib.parse.urlparse(url or '').path
-    return ID_PATTERN.sub('{id}', path) or '/'
+    try:
+        path = urllib.parse.urlsplit(url or '').path.rstrip('/')
+    except ValueError:
+        return 'other route'
+    if path in ('/api/v1/health', '/api/v1/encounters'):
+        return path
+    match = ENCOUNTER_ROUTE.fullmatch(path)
+    return f'/api/v1/encounters/{{id}}/{match[1]}' if match else 'other route'
 
 
 def collect_github(gh, since):
@@ -142,32 +152,56 @@ def collect_deepgram(token, project, now):
         return {'error': f'HTTP {error.code}'}
 
 
-def gcloud(*args):
+def gcloud(*args, fields):
     exe = shutil.which('gcloud')
     if not exe:
         return None
-    out = subprocess.run([exe, *args, '--format=json'], capture_output=True, text=True, encoding='utf-8', timeout=180)
-    return json.loads(out.stdout) if out.returncode == 0 and out.stdout.strip() else None
+    try:
+        out = subprocess.run([exe, *args, f'--format=json({fields})'], capture_output=True,
+                             text=True, encoding='utf-8', timeout=180)
+        return json.loads(out.stdout) if out.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
 
 
 def collect_gcp():
-    service = gcloud('run', 'services', 'describe', SERVICE, f'--region={REGION}')
+    service = gcloud('run', 'services', 'describe', SERVICE, f'--region={REGION}',
+                     fields='status.traffic,status.latestReadyRevisionName')
     if service is None:
-        return None
-    traffic = [{'revision': t.get('revisionName'), 'percent': t.get('percent')}
-               for t in service.get('status', {}).get('traffic', []) if t.get('percent')]
-    entries = gcloud('logging', 'read', '--freshness=1d', '--limit=1000',
+        return {'traffic': [], 'errors': None, 'prod_routes': []}
+    status = service.get('status', service)
+    traffic = []
+    for target in status.get('traffic', []):
+        if target.get('percent', 0) > 0:
+            revision = target.get('revisionName')
+            if not revision and target.get('latestRevision'):
+                revision = status.get('latestReadyRevisionName')
+            traffic.append({'revision': revision, 'percent': target['percent']})
+    entries = gcloud('logging', 'read', '--freshness=1d', f'--limit={LOG_LIMIT}',
                      f'resource.type="cloud_run_revision" AND resource.labels.service_name="{SERVICE}" '
-                     'AND httpRequest.status>=500') or []
+                     f'AND resource.labels.location="{REGION}" AND log_id("run.googleapis.com/requests") '
+                     'AND httpRequest.status>=500 AND httpRequest.status<600',
+                     fields='resource.labels.revision_name,httpRequest.status,httpRequest.requestUrl')
+    if entries is None:
+        return {'traffic': traffic, 'errors': None, 'prod_routes': []}
+    live = {t['revision'] for t in traffic if t['revision']}
     errors = Counter()
     routes = Counter()
     for entry in entries:
-        revision = entry.get('resource', {}).get('labels', {}).get('revision_name', '?')
+        revision = entry.get('resource', {}).get('labels', {}).get('revision_name') or entry.get('revision_name', 'unknown')
         errors[revision] += 1
-        if revision == STABLE_REVISION:
-            request = entry.get('httpRequest', {})
+        if revision in live:
+            request = entry.get('httpRequest', entry)
             routes[f"{request.get('status')} {route_shape(request.get('requestUrl'))}"] += 1
-    return {'traffic': traffic, 'errors': dict(errors), 'prod_routes': routes.most_common(5)}
+    return {'traffic': traffic, 'errors': dict(errors), 'prod_routes': routes.most_common(5),
+            'limit_reached': len(entries) >= LOG_LIMIT}
+
+
+def live_error_count(gcp):
+    revisions = {t['revision'] for t in gcp['traffic'] if t['percent'] > 0}
+    if gcp['errors'] is None or not revisions or None in revisions:
+        return None
+    return sum(gcp['errors'].get(revision, 0) for revision in revisions)
 
 
 def assess(data):
@@ -178,10 +212,15 @@ def assess(data):
     gcp = data.get('gcp')
     if gcp:
         live = [t['revision'] for t in gcp['traffic'] if t['percent'] == 100]
-        if live != [STABLE_REVISION]:
+        if not gcp['traffic'] or any(t['revision'] is None for t in gcp['traffic']):
+            serious.append('Could not identify which versions are receiving live traffic.')
+        elif live != [STABLE_REVISION]:
             serious.append(f'Live traffic is not on the approved version {STABLE_REVISION}: {gcp["traffic"]}.')
-        if gcp['errors'].get(STABLE_REVISION, 0) >= SERIOUS_PROD_ERRORS:
-            serious.append(f"The live version had {gcp['errors'][STABLE_REVISION]} server errors in 24 hours.")
+        prod = live_error_count(gcp)
+        if gcp['errors'] is None:
+            serious.append('The server error count is unavailable.')
+        elif prod is not None and prod >= SERIOUS_PROD_ERRORS:
+            serious.append(f'Found {prod} server errors in 24 hours on versions currently receiving live traffic.')
     for project, info in (data.get('sentry') or {}).items():
         if info.get('fatal'):
             serious.append(f'{project}: {info["fatal"]} crash type(s) marked fatal in Sentry.')
@@ -202,16 +241,22 @@ def render(data, owner=None):
     lines += ['## Is Amilya working?',
               f"- Live server health check: {'working' if data['health']['ok'] else 'NOT answering'} ({data['health']['detail']}).",]
     if gcp:
-        traffic = ', '.join(f"{t['revision']} {t['percent']}%" for t in gcp['traffic'])
-        lines.append(f'- Live traffic: {traffic}.')
-        prod = gcp['errors'].get(STABLE_REVISION, 0)
-        lines.append(f'- Server errors on the live version in the last 24 hours: {prod}.')
-        for route, count in gcp['prod_routes']:
-            lines.append(f'  - {count} x {route}')
-        tests = {k: v for k, v in gcp['errors'].items() if k != STABLE_REVISION}
-        if tests:
-            lines.append('- Errors on test versions (not seen by users): '
-                         + ', '.join(f'{k} {v}' for k, v in sorted(tests.items())) + '.')
+        traffic = ', '.join(f"{t['revision'] or 'unknown version'} {t['percent']}%" for t in gcp['traffic'])
+        lines.append(f"- Live traffic: {traffic or 'unavailable'}.")
+        prod = live_error_count(gcp)
+        if prod is None:
+            lines.append('- Live server error count: unavailable.')
+        else:
+            lines.append(f'- Server errors in the last 24 hours on versions currently receiving live traffic: {prod}.')
+            for route, count in gcp['prod_routes']:
+                lines.append(f'  - {count} x {route}')
+            current = {t['revision'] for t in gcp['traffic'] if t['percent'] > 0}
+            others = {k: v for k, v in gcp['errors'].items() if k not in current}
+            if others:
+                lines.append('- Errors on other versions during this period: '
+                             + ', '.join(f'{k} {v}' for k, v in sorted(others.items())) + '.')
+        if gcp.get('limit_reached'):
+            lines.append(f'- The log search reached its limit of {LOG_LIMIT} entries. Counts may be higher.')
     else:
         lines.append('- Google Cloud details: not connected yet (one-time setup waiting for approval).')
 

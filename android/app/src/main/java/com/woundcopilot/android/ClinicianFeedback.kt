@@ -16,6 +16,11 @@ import java.io.IOException
 internal fun canRetryRequest(error:Exception)=
     error !is javax.net.ssl.SSLException && (error is IOException || error is ApiException && error.retryAllowed!=false && (error.ambiguous || isCsrfRejection(error.status,error.message.orEmpty()) || error.status in listOf(408,429,500,502,503,504)))
 
+/** Keep the original server response so the retry button can honour its delay and policy. */
+internal fun canRetryReportImmediately(error: ApiException): Boolean =
+    error.status in setOf(502, 503, 504) && canRetryRequest(error) &&
+        (error.retryAfterSeconds ?: 0L) <= 0L
+
 /** A report that can simply be tried again; its message is already plain and complete. */
 internal class ReportRetryException(message:String):java.io.IOException(message)
 
@@ -23,9 +28,11 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
     if(error is ReportRetryException)return error.message.orEmpty()
     val api=error as? ApiException
     val task=when(purpose){"audio"->"Recording processing";"report"->"Report generation";"photo"->"Photo assessment";"consultant"->"Ask Consultant";else->"Request"}
+    val reportRequest = api != null && purpose == "report"
     var code=api?.category
     val aiPaused=api?.status==503 && Regex("(?i)paused|AI_PAUSED|TEST_WINDOW|owner activates").containsMatchIn(api.message.orEmpty()+" "+(api.category.orEmpty()))
     val reason=when {
+        aiPaused && reportRequest -> "Live AI is paused. An administrator needs to enable it."
         aiPaused -> "AI processing is temporarily unavailable. Your recording is saved safely. Tap Try again later."
         error is java.net.SocketTimeoutException -> "The connection was too slow. Your work is saved on this phone. Tap Try again."
         error is java.net.UnknownHostException -> "No internet connection. Your work is saved on this phone. Tap Try again when you're back online."
@@ -36,19 +43,41 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         code=="PROVIDER_AUTH" -> "The provider rejected the API key or account access. An administrator must check provider credentials and permissions."
         code=="MODEL_UNAVAILABLE" -> "No provider endpoint matches the configured model and privacy settings. An administrator must check routing."
         code=="REQUEST_INCOMPATIBLE" -> "The provider rejected the request format or model parameters. The integration needs correction."
-        code=="PROVIDER_TIMEOUT" -> "The AI service took too long this time. Your work is saved. Tap Try again."
-        code=="OUTPUT_LIMIT" -> "The AI response was cut short. No partial result was accepted. Your source is saved; contact support before trying again."
+        code=="PROVIDER_TIMEOUT" -> "The AI service took too long to respond."
+        code=="OUTPUT_LIMIT" -> "The AI response was cut short. No partial result was accepted."
         code=="INVALID_RESPONSE" -> "The AI response failed structure or clinical-data validation. Its result was not accepted."
         code=="NETWORK_UNAVAILABLE" -> "The server could not connect to the AI provider. Retry when that connection is restored."
         code=="RATE_LIMITED" -> "The provider rate-limited this request. Wait before retrying."
         code=="RETRY_LIMIT" -> "The retry limit for this request has been reached. Contact support before starting another attempt."
         code=="RESPONSE_PROCESSING_FAILED" -> "The server could not process the provider response. Contact support with the request reference."
-        code=="PROVIDER_UNAVAILABLE" -> "The AI service didn't respond this time. Your work is saved. Tap Try again."
-        api!=null && isCsrfRejection(api.status,api.message.orEmpty()) -> {code="SESSION_TOKEN_REFRESH_FAILED";"The secure session token could not be refreshed. Check your connection and tap Try Again. Your recording is not affected."}
+        code=="PROVIDER_UNAVAILABLE" -> "The AI service didn't respond."
+        code in setOf("AI_NOT_CONFIGURED", "MODEL_CONFIGURATION_INVALID") -> "An administrator needs to check the AI setup."
+        code in setOf("PROVIDER_APPROVAL_REQUIRED", "PRIVACY_CONFIGURATION_REQUIRED", "SECURE_STORAGE_REQUIRED") ->
+            "AI processing is blocked until an administrator reviews the privacy and storage settings."
+        api!=null && isCsrfRejection(api.status,api.message.orEmpty()) -> {
+            code="SESSION_TOKEN_REFRESH_FAILED"
+            "The secure session token could not be refreshed. Check your connection and tap Try Again." +
+                if (purpose == "audio") " Your recording is not affected." else ""
+        }
         api?.status==429 -> {code="RATE_LIMITED";"This request is temporarily limited. Wait before trying again."}
         api?.status==401 -> "Your session is no longer authorized. Sign in again."
         api?.status==402 -> "This app account needs AI entitlement or app credits. Provider funding alone does not activate app access."
         api?.status==428 -> "Review the updated terms to continue."
+        reportRequest && api != null -> when {
+            api.message == "The report did not pass source-faithfulness review. Your original source and editor text remain available." ->
+                "Amilya could not verify the draft against your notes."
+            api.message == "The report check could not be verified. Your original source and editor text remain available." ->
+                "Amilya could not complete the report check."
+            api.ambiguous && api.status == 409 -> "This report request is still being processed."
+            api.ambiguous -> "The app could not read the reply. The report may already be ready."
+            api.status == 403 -> "You do not have permission for this action."
+            api.status == 409 -> "The visit changed while the report was being prepared. Reopen the visit."
+            api.status == 413 -> "The submitted notes exceeded the size limit."
+            api.status == 422 -> "The server could not accept the information submitted for this report."
+            api.status == 503 -> "The report service is unavailable."
+            api.status == 504 -> "The report service did not reply in time."
+            else -> "The server could not return a report."
+        }
         api!=null -> api.message.orEmpty().takeIf{it.isNotBlank() && it.length<=1200 && !Regex("(?i)traceback|input_value|sk-[a-z0-9]|bearer |<html|<!doctype").containsMatchIn(it)} ?: when(api.status){
             403->"You do not have permission for this action."
             409->"The request conflicts with the current state. Refresh before trying again."
@@ -66,7 +95,7 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         error is IllegalArgumentException -> error.message.orEmpty().takeIf{it.isNotBlank() && it.length<=500 && !Regex("(?i)sk-|bearer |input_value|traceback").containsMatchIn(it)} ?: "The input or local request state is invalid. Review your selections."
         else -> {code="UNEXPECTED_APP_ERROR";"An unexpected application error occurred. Contact support with the request reference."}
     }
-    if(aiPaused)return "$reason"
+    if(aiPaused && !reportRequest)return reason
     val technical=listOfNotNull(code,api?.status?.let{"HTTP $it"},api?.upstreamStatus?.let{"provider HTTP $it"},api?.requestId?.takeIf{runCatching{java.util.UUID.fromString(it).toString()==it}.getOrDefault(false)}?.let{"Request $it"})
     return "$task: $reason" + if(technical.isEmpty())""else "\n"+technical.joinToString(" · ")
 }

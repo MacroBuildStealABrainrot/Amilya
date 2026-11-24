@@ -167,6 +167,15 @@ android {
         }
     }
 }
+androidComponents {
+    onVariants(selector().withBuildType("notes")) { variant ->
+        variant.outputs.forEach { output ->
+            output.versionCode.set(83)
+            output.versionName.set("1.9.1-notes")
+        }
+    }
+}
+
 dependencies {
     implementation(project(":wear-contract"))
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
