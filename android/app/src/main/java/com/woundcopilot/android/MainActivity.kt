@@ -234,10 +234,11 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         TextButton(onClick={s.openShiftSummary()},enabled=!s.loading&&!recorder.recording){Text("End-of-shift summary")}
         InstrumentTitle(if(BuildConfig.NOTES_ONLY)"Saved reports" else "Saved work",if(s.demo)"Sample workspace" else if(!s.config.optBoolean("clinical_data_enabled"))"Synthetic data workspace" else null)
         Row{TextButton(onClick={recovery=false}){Text("Saved")};TextButton(onClick={recovery=true;s.refreshRecordingJobs()}){Text("Recovery & older work")}}
+        if (BuildConfig.NOTES_ONLY && !s.demo && !recovery) NotesDeviceDrafts(s)
         val filtered=s.encounters.filter{if(recovery)!s.isSavedWork(it)else s.isSavedWork(it)}
         if(recovery) RecordingRecoveryList(jobs=s.recordingJobs,actionId=s.recoveryActionId,recording=recorder.recording,onFinish=s::resumeRecording,onDiscard=s::discardRecovery)
         if(filtered.isEmpty() && (!recovery || s.recordingJobs.isEmpty())) {
-            Text(if(recovery)"No unfinished recordings or older work." else "Nothing saved yet. Start a report from Home.")
+            Text(if(recovery)"No unfinished recordings or older work." else if(BuildConfig.NOTES_ONLY)"No reports saved to your workspace yet." else "Nothing saved yet. Start a report from Home.")
             WcpButton("Go to Home",{s.screen="home"},Modifier.fillMaxWidth())
         }
         if(!BuildConfig.NOTES_ONLY && !recovery && filtered.isNotEmpty())TextButton(onClick={s.deleteWorkId="all-saved"},enabled=!s.loading){Text("Delete all saved work")}

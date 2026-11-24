@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.woundcopilot.android.BuildConfig
+import com.woundcopilot.android.NotesReportRecoveryAction
 import com.woundcopilot.android.AppState
 import com.woundcopilot.android.items
 import com.woundcopilot.android.obj
@@ -164,14 +166,20 @@ private data class FindingInput(
 @Composable
 fun EvidenceForm(state: AppState, kind: String) {
     val owner = state.user?.str("id") ?: "signed-out"
-    val storageKey = "evidence-form-$owner-${state.encounterId}-$kind"
+    val storageKey = if (BuildConfig.NOTES_ONLY && kind == "typed") state.notesTypedFormKey()
+        else "evidence-form-$owner-${state.encounterId}-$kind"
     key(storageKey) { EvidenceFormContent(state, kind, storageKey) }
 }
 
 @Composable
 private fun EvidenceFormContent(state: AppState, kind: String, storageKey: String) {
-    val restored = remember { state.vault.read(storageKey)?.let { runCatching { JSONObject(it) }.getOrNull() } }
+    val notesTyped = BuildConfig.NOTES_ONLY && kind == "typed"
+    val restored = remember(storageKey) {
+        val snapshot = if (notesTyped) state.restoreNotesTypedForm(storageKey) else state.vault.read(storageKey)
+        snapshot?.let { runCatching { JSONObject(it) }.getOrNull() }
+    }
     var sourceText by remember { mutableStateOf(restored?.str("text") ?: "") }
+    var editId by remember { mutableStateOf(restored?.str("edit_id")?.ifBlank { null } ?: UUID.randomUUID().toString()) }
     var fields by remember {
         mutableStateOf(restored?.items("fields")?.map { FindingInput.restore(it) }?.takeIf { it.isNotEmpty() }
             ?: listOf(FindingInput(name = if (kind == "measurement") "wound_measurement" else "narrative")))
@@ -183,7 +191,9 @@ private fun EvidenceFormContent(state: AppState, kind: String, storageKey: Strin
     val submissionRevision = remember { mutableStateOf<Int?>(null) }
     val attested = kind == "manual" || kind == "measurement"
     val supported = kind in listOf("manual", "measurement", "typed", "transcript", "result")
-    val snapshot = obj("text" to sourceText, "fields" to JSONArray().apply { fields.forEach { put(it.json()) } }).toString()
+    val snapshot = obj("text" to sourceText, "fields" to JSONArray().apply { fields.forEach { put(it.json()) } }).apply {
+        if (notesTyped) put("edit_id", editId)
+    }.toString()
     val latestSnapshot by rememberUpdatedState(snapshot)
 
     LaunchedEffect(snapshot) {
@@ -204,7 +214,9 @@ private fun EvidenceFormContent(state: AppState, kind: String, storageKey: Strin
             // A failed request or a back action retains the encrypted recovery copy.
             runCatching {
                 val submitted = submissionRevision.value
-                if (submitted != null && state.revision > submitted) {
+                val acknowledged = if (notesTyped) submitted != null && state.notesTypedFormAcknowledged(storageKey, JSONObject(latestSnapshot).str("text"))
+                    else submitted != null && state.revision > submitted
+                if (acknowledged) {
                     state.vault.remove(storageKey)
                 } else state.vault.write(storageKey, latestSnapshot)
             }.onFailure { state.notice = "The recovery copy could not be saved on this device." }
@@ -224,6 +236,7 @@ private fun EvidenceFormContent(state: AppState, kind: String, storageKey: Strin
     ) {
         InstrumentTitle(when(kind){"measurement"->"Measurements";"manual"->"Assessment";"transcript"->"Transcript";"result"->"Clinical result";else->"Written note"})
         val wound = state.case?.optJSONObject("wound")
+        if (notesTyped && state.error != null) NotesReportRecoveryAction(state, sourceText, editId)
         if (recovered) StatusTag("Recovered unsent entry", "info")
         if (validation != null) ErrorBanner(validation!!) { validation = null }
         if (recoveryError) ErrorBanner("Local recovery could not be saved. Keep this screen open until your entry is saved to the encounter.") { recoveryError = false }
@@ -254,6 +267,7 @@ private fun EvidenceFormContent(state: AppState, kind: String, storageKey: Strin
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             OutlinedTextField(sourceText, {
+                if (notesTyped && it != sourceText) editId = UUID.randomUUID().toString()
                 sourceText = it; validation = null; localSaved = false; recovered = false
             }, Modifier.fillMaxWidth(), enabled = !state.loading,
                 label = { Text(if (kind == "transcript") "Transcript text" else if (kind == "result") "Result or report text" else "Source notes") },
@@ -289,6 +303,7 @@ private fun EvidenceFormContent(state: AppState, kind: String, storageKey: Strin
                 catch (_: Exception) { recoveryError = true }
             }, Modifier.fillMaxWidth(), enabled = !state.loading)
         }
+        if (notesTyped && state.error == null) NotesReportRecoveryAction(state, sourceText, editId)
         Text(if (localSaved) "Draft saved on this device" else "Saving draft…",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))

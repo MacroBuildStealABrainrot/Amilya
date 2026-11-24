@@ -136,6 +136,9 @@ fun CaptureScreen(s: AppState, audio: Boolean, photo: Boolean = false) {
     val idle = !s.loading && !importBusy
     Page {
         InstrumentTitle(when { purpose == "message" -> "Voice message"; purpose == "correction" -> "Fix by Voice"; audio -> "Record a visit"; photo -> "Photo assessment"; else -> "Add a document" })
+        if (BuildConfig.NOTES_ONLY && purpose == "audio" && (s.error != null || selectedFile != null) && idle && !rec.recording) {
+            NotesReportRecoveryAction(s)
+        }
         if (audio) {
             if (rec.recording && !belongsHere) {
                 Text("Another encounter has an active recording. Stop it before starting or playing audio here. The saved file stays with its original encounter.", color = MaterialTheme.colorScheme.error)

@@ -84,10 +84,12 @@ import java.time.format.DateTimeFormatter
     val spokenText=sources.filter{it.str("kind") in listOf("audio","typed","transcript")}.map{it.str("text").trim()}.filter{it.isNotEmpty()}.joinToString("\n\n")
     Page{
         InstrumentTitle(if(BuildConfig.NOTES_ONLY)"New report" else "Document")
+        if (BuildConfig.NOTES_ONLY && (sources.isNotEmpty() || s.error != null)) NotesReportRecoveryAction(s)
         if(!BuildConfig.NOTES_ONLY)DocumentTypeSelector(s.editorTemplate, !s.loading) { if(s.editor.isBlank()){s.updateTemplate(it);s.persistEditor()}else s.reformatQuick(it) }
         WcpButton(if(BuildConfig.NOTES_ONLY)"Record a note" else "Record",{s.textOnlyNext=false;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading)
         if(!BuildConfig.NOTES_ONLY)WcpButton("Record, text only (no report)",{s.textOnlyNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         WcpButton("Write instead",{s.screen="evidence:typed"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
+        if (BuildConfig.NOTES_ONLY && sources.isEmpty() && s.error == null) NotesReportRecoveryAction(s)
         // After a whole-visit recording: a short spoken summary in the clinician's own words is the most reliable source.
         if(sources.any{it.str("kind")=="audio"})WcpButton("Add a spoken summary",{s.textOnlyNext=false;s.summaryNext=true;s.autoStartRecording=true;s.screen="record"},Modifier.fillMaxWidth(),enabled=!s.loading,secondary=true)
         if(!BuildConfig.NOTES_ONLY)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
