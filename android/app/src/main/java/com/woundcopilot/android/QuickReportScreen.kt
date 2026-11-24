@@ -113,6 +113,8 @@ fun QuickReportScreen(s: AppState) {
             when {
                 signed -> "Signed · Exact wording preserved"
                 exactSaved -> "Saved to your workspace"
+                BuildConfig.NOTES_ONLY && s.editor.isBlank() -> "Write your report here, then tap Save report."
+                BuildConfig.NOTES_ONLY -> "Review the wording, then save it to your workspace."
                 s.editor.isBlank() -> "Add a recording or written note to create your report."
                 else -> "Draft — Clinician Review Required"
             },

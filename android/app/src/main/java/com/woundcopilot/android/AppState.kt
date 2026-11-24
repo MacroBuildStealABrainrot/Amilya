@@ -234,6 +234,8 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun now()=Instant.now().toString()
     private fun clearClinical(){
         shiftStorageProblem=false
+        acceptedNotesInput=null
+        notesAdoptedForm=null
         processingRecording=null;recordingConsent=false;autoStartRecording=false
         documentAlerts=emptyList();documentAlertSafetyCount=0;assessmentReview=null;assessmentEncounter=""
         voiceMessage=false;dismissError()
@@ -473,10 +475,131 @@ class AppState(application:Application):AndroidViewModel(application) {
     }
     private fun acknowledge(intent:String,payload:JSONObject){journal.forget(journalKey(intent,payload))}
     private fun mergeSource(r:JSONObject){case=mergeEvidenceResponse(case ?: throw IllegalStateException("No open encounter"),r)}
+    private fun linkedNotesRequest(owner: String): String? {
+        val request = case?.optJSONObject("encounter")?.optJSONObject("draft_data")?.str("quick_request_id")
+        return boundNotesRequest(owner, encounterId, request, vault::read)
+    }
+
+    internal fun notesTypedFormKey(): String {
+        val owner = user?.str("id") ?: "signed-out"
+        val current = "evidence-form-$owner-$encounterId-typed"
+        if (notesResumeFormKey == current) return current
+        return notesInputKey(owner, encounterId, linkedNotesRequest(owner))
+    }
+
+    private fun notesTypedFormKeys(): List<String> {
+        val owner = user?.str("id") ?: return emptyList()
+        return listOf(notesTypedFormKey(), notesInputKey(owner, encounterId, linkedNotesRequest(owner)),
+            "evidence-form-$owner-$encounterId-typed").distinct()
+    }
+
+    internal fun restoreNotesTypedForm(key: String): String? {
+        val keys = notesTypedFormKeys()
+        if (key !in keys) return null
+        val snapshots = (listOf(key) + keys).distinct().mapNotNull(vault::read)
+        return snapshots.firstOrNull { notesInputText(it).isNotBlank() } ?: snapshots.firstOrNull()
+    }
+
+    private var notesAdoptedForm: NotesAdoptedForm? = null
+    private var acceptedNotesInput: Pair<String, String>? = null
+
+    internal fun notesTypedFormAcknowledged(key: String, text: String): Boolean =
+        acceptedNotesInput == (key to hash(text))
+
+    private fun acknowledgeNotesInput(key: String, text: String) {
+        acceptedNotesInput = key to hash(text)
+        for (stored in (listOf(key) + notesTypedFormKeys()).distinct()) {
+            if (notesInputText(vault.read(stored)) == text) vault.remove(stored)
+        }
+    }
+
+    internal fun canReviewNotesLocally(): Boolean =
+        BuildConfig.NOTES_ONLY && !loading && !locked && !legalRequired && user != null &&
+            quickMode == "document" && encounterId.isNotBlank() && editor.isBlank() && savedId == null &&
+            case?.optJSONObject("encounter")?.str("status") != "signed" &&
+            case?.items("documents").orEmpty().none { it.str("status") == "signed" }
+
+    private fun cacheNotesSourceForReview(): Boolean {
+        if (!BuildConfig.NOTES_ONLY || demo) return true
+        if (user == null || encounterId.isBlank() || case?.optBoolean("notes_device_draft_shell") == true) return false
+        val text = notesReviewText(case?.items("evidence").orEmpty(), emptyList())
+        if (text.isBlank()) return false
+        val key = storeKey("source-notes")
+        val snapshot = obj("text" to text, "case_revision" to revision).toString()
+        return try {
+            if (vault.read(key) != snapshot) vault.write(key, snapshot)
+            true
+        } catch (_:Exception) {
+            notice = "The text is in your visit, but a copy could not be kept on this phone."
+            false
+        }
+    }
+
+    internal fun notesRecoverySource(): String {
+        if (!canReviewNotesLocally()) return ""
+        val typed = notesTypedFormKeys().map { notesInputText(vault.read(it)) }
+        // An offline shell has no server evidence. Read this visit's source copy for review only.
+        val cached = if (case?.optBoolean("notes_device_draft_shell") == true) {
+            notesInputText(vault.read(storeKey("source-notes")))
+        } else ""
+        return notesReviewText(case?.items("evidence").orEmpty(), listOf(cached) + typed)
+    }
+
+    internal fun useReviewedNotes(text: String, expectedEncounter: String, expectedOwner: String, typedEditId: String? = null) {
+        if (!canReviewNotesLocally() || encounterId != expectedEncounter || user?.str("id") != expectedOwner) return
+        // Only retire a typed form when the clinician actually adopts those words in this draft.
+        notesAdoptedForm = when {
+            text.isBlank() -> null
+            typedEditId != null -> NotesAdoptedForm(notesTypedFormKey(), hash(text), typedEditId)
+            case?.items("evidence").orEmpty().isEmpty() && vault.read(storeKey("source-notes")) == null -> {
+                notesTypedFormKeys().mapNotNull { key ->
+                    val form = vault.read(key)?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    if (form != null && form.str("text") == text) NotesAdoptedForm(key, hash(text), form.str("edit_id")) else null
+                }.singleOrNull()
+            }
+            else -> null
+        }
+        // Starting this editable draft never consumes or repeats an earlier AI request.
+        dismissError()
+        draftNotice = attachmentNoticeForVisit(recordingNoticeVisit, encounterId, recordingNotice)
+        notice = draftNotice
+        restoring = true
+        editorOwner = storeKey("draft")
+        editorTemplate = "nursing"
+        editorCaseRevision = revision
+        savedId = null
+        amendId = null
+        amendReason = ""
+        editor = text
+        restoring = false
+        localRevision++
+        persistEditor()
+        screen = "editor"
+    }
+
     fun addEvidence(payload:JSONObject)=runTask {
+        val notesKey = if (BuildConfig.NOTES_ONLY && quickMode == "document" && payload.str("kind") == "typed") notesTypedFormKey() else null
+        if (notesKey != null) acceptedNotesInput = null
         ensureRemoteDocument()
         if(demo){val copy=JSONObject(case.toString());val eid=UUID.randomUUID().toString();copy.getJSONArray("evidence").put(obj("id" to eid,"kind" to payload.str("kind"),"text" to payload.str("text"),"metadata" to JSONObject(),"warnings" to JSONArray()));payload.items("findings").forEach{copy.getJSONArray("facts").put(obj("id" to UUID.randomUUID().toString(),"revision" to 1,"name" to it.str("name"),"value" to it.optJSONObject("value"),"confirmation_state" to "confirmed","source_type" to "clinician_manual","source_ref" to eid))};copy.getJSONObject("encounter").put("revision",revision+1);case=copy;notice="Saved in the synthetic preview."}
-        else{val r=mutation("evidence","/encounters/$encounterId/evidence",payload);mergeSource(r);warnings(r);acknowledge("evidence",payload);screen="encounter";refreshAcknowledged()};screen="encounter";afterQuickSource(payload.str("kind"))
+        else {
+            val added = mutation("evidence", "/encounters/$encounterId/evidence", payload)
+            if (notesKey != null) {
+                val confirmed = added.optJSONObject("evidence")
+                check(confirmed != null && confirmed.str("id").isNotBlank() &&
+                    confirmed.str("kind") == "typed" && confirmed.str("encounter_id") == encounterId &&
+                    confirmed.str("text") == payload.str("text")) {
+                    "The written note could not be confirmed for this visit. Its phone copy is still available."
+                }
+            }
+            mergeSource(added)
+            warnings(added)
+            acknowledge("evidence", payload)
+        }
+        if (notesKey != null && cacheNotesSourceForReview()) acknowledgeNotesInput(notesKey, payload.str("text"))
+        screen = if (BuildConfig.NOTES_ONLY && quickMode == "document") "document_capture" else "encounter"
+        if (!demo) refreshAcknowledged()
+        afterQuickSource(payload.str("kind"))
     }
     private suspend fun uploadResponse(keyName:String,block:suspend ()->JSONObject):JSONObject{
         try{return block()}catch(e:ApiException){
@@ -501,7 +624,11 @@ class AppState(application:Application):AndroidViewModel(application) {
         photoEvent("photo_source","success")
         val digest=withContext(Dispatchers.IO){val md=MessageDigest.getInstance("SHA-256");file.inputStream().use{input->val b=ByteArray(8192);while(true){val n=input.read(b);if(n<0)break;md.update(b,0,n)}};md.digest().joinToString(""){"%02x".format(it.toInt() and 255)}}
         // Paid AI work already done is reused: the same recording or photo already in this visit is never sent again.
-        if(!demo && !voiceCorrection && !voiceMessage && kind in listOf("audio","photo") && case?.items("evidence")?.any{it.str("kind")==kind && it.optJSONObject("metadata")?.str("media_hash")==digest}==true){
+        val notesRecording = BuildConfig.NOTES_ONLY && kind == "audio" && quickMode == "document" && !voiceCorrection && !voiceMessage
+        if (notesRecording) check(uploadOwner != null && uploadOwner == user?.str("id") && uploadEncounter == encounterId) {
+            "The active visit changed. Open the original visit to finish its report."
+        }
+        if(!notesRecording && !demo && !voiceCorrection && !voiceMessage && kind in listOf("audio","photo") && case?.items("evidence")?.any{it.str("kind")==kind && it.optJSONObject("metadata")?.str("media_hash")==digest}==true){
             notice="This was already processed. The existing result is being used."
             screen=if(quickMode=="consultant")"consultant" else if(editor.isNotBlank())"editor" else "encounter";return
         }
@@ -525,7 +652,45 @@ class AppState(application:Application):AndroidViewModel(application) {
             if(file.canonicalFile.parentFile==File(getApplication<Application>().filesDir,"recordings").canonicalFile && file.extension=="m4a")RecordingService.clearPending(getApplication(),file.absolutePath)
             screen=if(voicePhotoNote)photoNoteReturn else if(voiceMessage)"consultant"else "voice_correction";voiceMessage=false;voicePhotoNote=false;return
         }
-        if(demo){val copy=JSONObject(case.toString());val id=UUID.randomUUID().toString();copy.getJSONArray("evidence").put(obj("id" to id,"kind" to kind,"text" to "Synthetic preview: no AI request was sent.","created_at" to now(),"metadata" to obj("filename" to file.name,"mime" to mime,"media_hash" to digest,"raw_media_retained" to false,"photo_review" to photoReview)));copy.getJSONObject("encounter").put("revision",revision+1);case=copy;vault.write(storeKey("source-$id"),file.absolutePath);notice="Capture kept on this device. No provider request was sent."}
+        // Both older whole-file uploads and current chunked recordings can already have a completed transcript.
+        // A chunked job belongs to this owner, visit and exact file hash through its upload key.
+        val job = if (notesRecording) vault.read("audio-batch-$uploadOwner-$uploadEncounter-$key")?.let {
+            runCatching { JSONObject(it).str("job_id") }.getOrNull()
+        } else null
+        fun acceptedAudio() = if (notesRecording) completedNotesAudio(
+            case?.items("evidence").orEmpty(), uploadOwner.orEmpty(), uploadEncounter, digest, job
+        ) else null
+        val previous = acceptedAudio()
+        val accepted = if (previous == null && job.isNullOrBlank()) null else {
+            screen = "document_capture"
+            if (!demo) reloadCase()
+            check(uploadOwner == user?.str("id") && uploadEncounter == encounterId) {
+                "The active visit changed. Open the original visit to finish its report."
+            }
+            val latest = acceptedAudio()
+            check(previous == null || latest != null) {
+                "The visit's sources changed. Review the current transcript before retrying."
+            }
+            latest
+        }
+        val handledRecording = if (accepted == null) false else {
+            require(accepted.str("text").isNotBlank()) { "This recording has no transcript. Review the recording or write your notes." }
+            val localNames = crashSafeBackend()?.visitParts(file) ?: listOf(file.name)
+            val complete = notesRecordingComplete(accepted, case?.items("evidence").orEmpty(), localNames.size)
+            if (!complete) {
+                val meta = accepted.getJSONObject("metadata")
+                // Only resume missing parts when this file occupies the same position in the original recording.
+                val index = localNames.indexOf(file.name)
+                require(localNames.size in 2..8 && index >= 0 && meta.optInt("visit_parts") == localNames.size &&
+                    meta.optInt("visit_part") == index + 1 && meta.str("visit_id") == hash("visit:" + localNames.first()).take(32)) {
+                    "Part of this visit is missing. Open the original visit recordings before generating a complete report."
+                }
+            }
+            complete
+        }
+        if (handledRecording) {
+            notice = "Using the transcript already saved for this visit."
+        } else if(demo){val copy=JSONObject(case.toString());val id=UUID.randomUUID().toString();copy.getJSONArray("evidence").put(obj("id" to id,"kind" to kind,"text" to "Synthetic preview: no AI request was sent.","created_at" to now(),"metadata" to obj("filename" to file.name,"mime" to mime,"media_hash" to digest,"raw_media_retained" to false,"photo_review" to photoReview)));copy.getJSONObject("encounter").put("revision",revision+1);case=copy;vault.write(storeKey("source-$id"),file.absolutePath);notice="Capture kept on this device. No provider request was sent."}
         else {
             // A visit longer than about an hour was recorded in parts. Transcribe EVERY part, in recording order, before the one report.
             val visitParts=(if(kind=="audio" && quickMode=="document" && !voiceCorrection && !voiceMessage)visitRecordings(file) else listOf(file))
@@ -534,7 +699,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             val visitId=hash("visit:"+visitParts.first().name).take(32)
             val visitPosition=if(visitParts.size>1)VisitPosition(position+1,visitParts.size,visitId) else null
             if(visitParts.size>1)visitParts.take(position).forEachIndexed{index,part->transcribeVisitPart(part,mime,VisitPosition(index+1,visitParts.size,visitId))}
-            val r=try {
+            val r=if (accepted != null) obj("evidence" to accepted, "case_revision" to revision) else try {
                 uploadResponse(keyName){
                     if(kind=="audio" && file.extension.lowercase() in listOf("m4a","mp4"))
                         AudioChunks(api,vault).apply{summary=summaryNext && quickMode=="document"}.transcribe(encounterId,file,"${user?.str("id")}-${encounterId}-$key",visitPosition){taskLabel=if(visitPosition!=null)"Part ${visitPosition.part} of ${visitPosition.parts}: $it" else it}
@@ -544,6 +709,9 @@ class AppState(application:Application):AndroidViewModel(application) {
                 photoEvent("photo_retained",if(file.isFile && file.length()>0)"success"else "failed")
                 photoEvent("photo_request","failed")
                 throw e
+            }
+            if (notesRecording) check(uploadOwner == user?.str("id") && uploadEncounter == encounterId) {
+                "The active visit changed. Open the original visit to finish its report."
             }
             if(kind=="photo" && (uploadOwner!=user?.str("id") || uploadEncounter!=encounterId))
                 throw ApiException(409,"The active visit changed. Reopen the original visit to see its photo assessment.")
@@ -559,7 +727,12 @@ class AppState(application:Application):AndroidViewModel(application) {
         if(kind=="audio" && quickMode=="document")recordingStage("TRANSCRIBED")
         if(kind=="audio" && quickMode!="document" && file.canonicalFile.parentFile==File(getApplication<Application>().filesDir,"recordings").canonicalFile && file.extension=="m4a")
             RecordingService.clearPending(getApplication(),file.absolutePath)
-        if(kind!="audio" || quickMode!="document"){vault.remove(keyName);clearCaptureSelection(captureKind)};screen="encounter";afterQuickSource(kind);photoEvent("photo_state","success")
+        if(kind!="audio" || quickMode!="document"){vault.remove(keyName);clearCaptureSelection(captureKind)}
+        screen=if(notesRecording)"document_capture" else "encounter"
+        val reopenReport = handledRecording && !textOnlyNext && !summaryNext && editor.isNotBlank()
+        afterQuickSource(kind)
+        if (reopenReport) screen = "editor"
+        photoEvent("photo_state","success")
     }
     /**
      * All recordings of the visit [file] belongs to, in recording order (one file for an ordinary recording). If a part is not on
@@ -638,9 +811,30 @@ class AppState(application:Application):AndroidViewModel(application) {
         vault.write(cache,response.toString())
         DeveloperDiagnostics.link(vault,owner,local,response.getJSONObject("encounter").str("id"))
         forgetShiftVisit(local)
-        case=response;editorOwner=storeKey("draft");chooseQuickMode(mode);updateTemplate(format)
+        val remoteId = response.getJSONObject("encounter").str("id")
+        val remoteDraft = if (BuildConfig.NOTES_ONLY) vault.read("draft-$owner-$remoteId")?.let {
+            runCatching { JSONObject(it) }.getOrNull()
+        } else null
+        val remoteText = remoteDraft?.str("text").orEmpty()
+        if (remoteText.isNotBlank() && editor.isNotBlank() && remoteText != editor) {
+            throw IllegalStateException("This visit has another draft. Both copies are on this phone. Open Saved reports to review them.")
+        }
+        val sameAdoption = notesAdoptedForm?.takeIf { remoteText.isNotBlank() && remoteText == editor }
+        case=response
+        if (remoteText.isNotBlank()) {
+            restoreDraft()
+            if (savedId == null && notesAdoptedForm == null && sameAdoption != null && sameAdoption.key in notesTypedFormKeys()) {
+                notesAdoptedForm = sameAdoption
+                persistEditor()
+            }
+            chooseQuickMode(mode)
+        } else {
+            editorOwner=storeKey("draft")
+            chooseQuickMode(mode)
+            updateTemplate(format)
+            persistEditor()
+        }
         bindDiagnostics()
-        persistEditor()
         processingRecording?.let{file->vault.write("recording-owner-${file.name}","$owner:$encounterId");recordingRecovery.remember(file,owner,response,format)}
     }
     private fun startRemoteQuick(mode:String)=runTask("Opening ${if(mode=="consultant")"Ask Consultant" else mode}") {
@@ -698,6 +892,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private fun rememberShiftCase(confirmedWarningDocumentId:String?=null) {
         val owner=shiftOwner()?:return
         val data=case?:return
+        if(data.optBoolean("notes_device_draft_shell"))return
         val row=data.optJSONObject("encounter")?:return
         try {
             val previous=shiftCache.read(owner,row.str("id"))
@@ -737,8 +932,73 @@ class AppState(application:Application):AndroidViewModel(application) {
             planShiftSummary(applyPhoneEdits(visits,edits),today,zone)
         } catch (_:Exception) { null }
     }
+    internal var notesResumeFormKey: String? = null
+
+    internal fun deviceDrafts(owner: String): List<NotesDeviceDraft> {
+        if (!BuildConfig.NOTES_ONLY || demo || owner != user?.str("id")) return emptyList()
+        return NotesDraftIndex.list(owner, vault.names(), vault::read, vault::modified,
+            System.currentTimeMillis() - LocalRetention.RECOVERY_AGE)
+    }
+
+    internal fun openDeviceDraft(row: NotesDeviceDraft) {
+        if (!BuildConfig.NOTES_ONLY || demo || loading || locked || legalRequired ||
+            row.owner != user?.str("id") || RecordingService.state.value.recording) return
+        val snapshot = vault.read(row.key)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        if (snapshot == null || snapshot.str("text").isBlank() ||
+            (row.kind != NotesDraftKind.TYPED && vault.modified(row.key) < System.currentTimeMillis() - LocalRetention.RECOVERY_AGE) ||
+            (row.kind == NotesDraftKind.REPORT && (snapshot.str("saved_id").isNotBlank() || snapshot.str("template","nursing") != "nursing"))) {
+            notice = "This draft is no longer available on this device."
+            return
+        }
+        persistEditor()
+        dismissError()
+        processingRecording = null
+        recordingConsent = false
+        voiceCorrection = false
+        voiceMessage = false
+        reportFromConsultation = false
+        consultantReportPrompt = false
+        reviewPending = false
+        if (encounterId != row.visit) {
+            // An offline draft carries no fresh workspace status. Saving must reload and verify the real visit.
+            case = obj("notes_device_draft_shell" to true, "encounter" to obj("id" to row.visit,
+                "title" to "Nursing report", "revision" to row.revision,
+                "draft_data" to obj("quick_mode" to "document")), "evidence" to JSONArray())
+        }
+        answer = null
+        audit = emptyList()
+        restoreDraft()
+        chooseQuickMode("document")
+        notesResumeFormKey = row.key.takeIf { row.kind == NotesDraftKind.TYPED }
+        screen = when (row.kind) {
+            NotesDraftKind.REPORT -> "editor"
+            NotesDraftKind.TYPED -> "evidence:typed"
+            NotesDraftKind.SOURCE -> "document_capture"
+        }
+        notice = "Opened the draft on this device."
+    }
+
     fun isSavedWork(row:JSONObject)=row.str("storage_state")=="saved" || row.optJSONObject("draft_data")?.str("retention")=="saved"
     private fun eraseLocalWork(id:String){
+        if (BuildConfig.NOTES_ONLY && !demo) {
+            val ownerId = user?.str("id")
+            if (ownerId != null) {
+                val aliases = NotesDraftIndex.bindings(ownerId, vault.names(), vault::read)
+                val boundId = aliases[id] ?: id
+                val row = encounters.firstOrNull { it.str("id") == boundId }
+                    ?: case?.optJSONObject("encounter")?.takeIf { it.str("id") == boundId }
+                val request = row?.optJSONObject("draft_data")?.str("quick_request_id").orEmpty()
+                val ids = (aliases.filterValues { it == boundId }.keys + id + boundId).toMutableSet()
+                if (request.isNotBlank()) ids += "local-$request"
+                for (visit in ids) {
+                    vault.remove("evidence-form-$ownerId-$visit-typed")
+                    vault.remove("source-notes-$ownerId-$visit")
+                    vault.remove("draft-$ownerId-$visit")
+                    vault.remove("draft-recovery-$ownerId-$visit")
+                    vault.remove("local-bind-$ownerId-$visit")
+                }
+            }
+        }
         runCatching{vault.remove(visitNameKey(id))}
         forgetShiftVisit(id)
         recordingRecovery.complete(id,user?.str("id")?:"sample");refreshRecordingJobs()
@@ -920,6 +1180,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     private suspend fun draftQuick(ai:Boolean,format:String=editorTemplate){
         require(!BuildConfig.NOTES_ONLY || notesCanEditTemplate(format)){"Open this report in the full Amilya app to change its format."}
         ensureRemoteDocument()
+        cacheNotesSourceForReview()
         recordingStage("GENERATING_REPORT");Performance.start("report_request")
         // Once a source is accepted, retry only drafting, never its successful upload.
         taskRecovery("report"){reformatOrRetry(ai,format)}
@@ -973,7 +1234,7 @@ class AppState(application:Application):AndroidViewModel(application) {
             }
         require(start==localRevision && response.optInt("case_revision")==revision){"Your report or sources changed during generation. Your edits were preserved."}
         if(!acceptDocumentResult(response)){if(!demo)reportDone();return}
-        snapshotDraft();restoring=true;editorTemplate=reportFormat;restoring=false
+        snapshotDraft();notesAdoptedForm=null;restoring=true;editorTemplate=reportFormat;restoring=false
         vault.write("preferred-format-${user?.str("id")?:"sample"}",reportFormat)
         Performance.end("report_request");val persistStarted=Performance.now()
         response.str("_diagnostic_request_id").takeIf{it.isNotBlank()}?.let{runCatching{vault.write("diagnostic-generation-${user?.str("id")}-$encounterId",it);api.diagnosticGeneration=it}}
@@ -1130,7 +1391,9 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun ask(question:String)=runTask("Kosmo is reviewing your question") {answer=if(demo)obj("answer" to "This sample is local. In a connected encounter, Kosmo uses this case's evidence to answer your question. No model was called in this preview.","case_revision" to revision)else api.call("/encounters/$encounterId/assistant","POST",obj("question" to question)) as JSONObject}
     fun edit(text:String){editor=text;savedId=null;localRevision++;draftJob?.cancel();val key=editorOwner ?: return;val generation=++draftGeneration;val data=draftJson().toString();draftJob=viewModelScope.launch{delay(150);try{withContext(Dispatchers.IO){synchronized(vault){if(generation==draftGeneration)vault.write(key,data)}}}catch(e:Exception){if(e is CancellationException)throw e;notice="Local draft recovery could not be saved."}}}
     fun persistEditor(){val key=editorOwner ?: return;if(key!=storeKey("draft"))return;draftGeneration++;draftJob?.cancel();try{vault.write(key,draftJson().toString())}catch(_:Exception){notice="The local draft could not be saved on this device."}}
-    private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts),"ui_alert_safety_count" to documentAlertSafetyCount,"ui_notice" to draftNotice.orEmpty())
+    private fun draftJson()=obj("text" to editor,"template" to editorTemplate,"case_revision" to editorCaseRevision,"saved_id" to savedId,"amends_id" to amendId,"reason" to amendReason,"custom_name" to customName,"custom_instructions" to customInstructions,"ui_alerts" to JSONArray(documentAlerts),"ui_alert_safety_count" to documentAlertSafetyCount,"ui_notice" to draftNotice.orEmpty()).apply {
+        notesAdoptedForm?.let { put("notes_adopted_form", it.json()) }
+    }
     private fun restoreDraft(){
         rememberShiftCase()
         assessmentReview=null;documentAlerts=emptyList();documentAlertSafetyCount=0
@@ -1138,6 +1401,7 @@ class AppState(application:Application):AndroidViewModel(application) {
         val d=vault.read(editorOwner!!)?.let{runCatching{JSONObject(it)}.getOrNull()} ?: if(case?.optJSONObject("encounter")?.optJSONObject("draft_data")?.str("quick_mode").orEmpty().isNotBlank())case?.items("documents")?.maxByOrNull{it.optInt("version")}?.let{
             obj("text" to it.str("text"),"template" to it.str("template"),"saved_id" to it.str("id"),"case_revision" to it.optInt("case_revision"),"amends_id" to it.str("amends_id"),"reason" to it.str("reason"),"custom_name" to it.optJSONObject("custom_template")?.str("name"),"custom_instructions" to it.optJSONObject("custom_template")?.str("instructions"))
         }else null
+        notesAdoptedForm = if (BuildConfig.NOTES_ONLY) NotesAdoptedForm.restore(d?.optJSONObject("notes_adopted_form")) else null
         draftNotice=d?.optString("ui_notice","")?.ifBlank{null}
         editor=d?.str("text") ?: "";editorTemplate=d?.str("template","nursing") ?: "nursing";editorCaseRevision=d?.optInt("case_revision",revision) ?: revision
         documentAlerts=d?.optJSONArray("ui_alerts")?.let{a->(0 until a.length()).map{a.optString(it)}}?:emptyList()
@@ -1148,8 +1412,8 @@ class AppState(application:Application):AndroidViewModel(application) {
         hasRecoverableDraft=vault.read(storeKey("draft-recovery"))!=null;restoring=false;localRevision++
         draftNotice?.let{notice=it}
     }
-    fun newDocument(){if(loading)return;snapshotDraft();if(BuildConfig.NOTES_ONLY)editorTemplate="nursing";draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
-    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);val alertsOfThisReport=savedAlerts.read(d.str("id"));documentAlerts=alertsOfThisReport?.first?:emptyList();documentAlertSafetyCount=alertsOfThisReport?.second?:0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
+    fun newDocument(){if(loading)return;snapshotDraft();notesAdoptedForm=null;if(BuildConfig.NOTES_ONLY)editorTemplate="nursing";draftNotice=null;notice=noticeForShownReport(null);documentAlerts=emptyList();documentAlertSafetyCount=0;restoring=true;editorOwner=storeKey("draft");editor="";savedId=null;editorCaseRevision=revision;amendId=case?.items("documents")?.filter{it.str("status")=="signed"}?.maxByOrNull{it.optInt("version")}?.str("id");amendReason="";restoring=false;localRevision++;persistEditor();screen="editor"}
+    fun loadDocument(d:JSONObject){if(loading)return;snapshotDraft();notesAdoptedForm=null;draftNotice=savedNotices.read(d.str("id"));notice=noticeForShownReport(draftNotice);val alertsOfThisReport=savedAlerts.read(d.str("id"));documentAlerts=alertsOfThisReport?.first?:emptyList();documentAlertSafetyCount=alertsOfThisReport?.second?:0;restoring=true;editorOwner=storeKey("draft");editor=d.str("text");editorTemplate=d.str("template","nursing");savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");amendId=d.str("amends_id").ifBlank{null};amendReason=d.str("reason");customName=d.optJSONObject("custom_template")?.str("name")?:"";customInstructions=d.optJSONObject("custom_template")?.str("instructions")?:"";restoring=false;localRevision++;screen="editor";persistEditor()}
     fun startAmendment(d:JSONObject){if(loading)return;loadDocument(d);amendId=d.str("id");savedId=null;editorCaseRevision=revision;amendReason="";persistEditor()}
 
     fun generate(ai:Boolean)=runTask(if(ai)"Generating report and checking sources" else "Preparing source-based draft") {
@@ -1196,7 +1460,18 @@ class AppState(application:Application):AndroidViewModel(application) {
         mergeDocument(d)
         if(before==localRevision&&matchesEditor(d)){savedId=d.str("id");editorCaseRevision=d.optInt("case_revision");savedNotices.save(d.str("id"),draftNotice);savedAlerts.save(d.str("id"),documentAlerts,documentAlertSafetyCount)}
         rememberShiftCase(if(before==localRevision&&matchesEditor(d))d.str("id")else null)
-        persistEditor();if(!demo)acknowledge("save",p)
+        if (BuildConfig.NOTES_ONLY && savedId == d.str("id") && matchesEditor(d)) {
+            vault.remove(storeKey("source-notes"))
+            notesAdoptedForm?.let { adopted ->
+                val allowed = notesTypedFormKeys()
+                if (adopted.key in allowed && adopted.unchanged(allowed, vault.read(adopted.key), ::hash)) {
+                    vault.remove(adopted.key)
+                }
+            }
+            notesAdoptedForm = null
+        }
+        persistEditor()
+        if(!demo)acknowledge("save",p)
         notice=if(demo)"Saved in the synthetic preview." else "Exact document saved to your workspace."
         refreshAcknowledged()
     }
