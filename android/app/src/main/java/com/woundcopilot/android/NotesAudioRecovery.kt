@@ -29,3 +29,16 @@ internal fun notesRecordingComplete(source: JSONObject, evidence: List<JSONObjec
     }.map { it.getJSONObject("metadata").optInt("visit_part") }.toSet()
     return seen == (1..count).toSet()
 }
+
+/** A recording retry must leave previously reviewed wording in the editor. */
+internal fun notesShouldReopenRecordingDraft(phase: String, words: String): Boolean =
+    words.isNotBlank() && phase in setOf("TRANSCRIBED", "GENERATING_REPORT", "REPORT_READY")
+
+/** Older audio files can expire before the encrypted copy of the finished report. */
+internal fun readyNotesRecordingVisit(job: JSONObject, owner: String): String? {
+    if (owner.isBlank() || job.str("owner") != owner || job.str("id").isBlank() ||
+        job.str("resume_from") != "REPORT_READY" || job.str("report").isBlank() ||
+        job.str("phase") !in setOf("REPORT_READY", "FAILED_RETRYABLE") || job.str("template") != "nursing") return null
+    val encounter = job.optJSONObject("case")?.optJSONObject("encounter") ?: return null
+    return encounter.str("id").takeIf { it.isNotBlank() && job.str("file").isNotBlank() }
+}

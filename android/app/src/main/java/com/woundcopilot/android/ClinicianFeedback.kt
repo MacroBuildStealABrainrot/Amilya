@@ -6,6 +6,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -17,8 +18,9 @@ internal fun canRetryRequest(error:Exception)=
     error !is javax.net.ssl.SSLException && (error is IOException || error is ApiException && error.retryAllowed!=false && (error.ambiguous || isCsrfRejection(error.status,error.message.orEmpty()) || error.status in listOf(408,429,500,502,503,504)))
 
 /** Keep the original server response so the retry button can honour its delay and policy. */
-internal fun canRetryReportImmediately(error: ApiException): Boolean =
-    error.status in setOf(502, 503, 504) && canRetryRequest(error) &&
+internal fun canRetryReportImmediately(error: ApiException, notesOnly: Boolean = false): Boolean =
+    !(notesOnly && error.reportState == REPORT_ENDED_NO_CHARGE) &&
+        error.status in setOf(502, 503, 504) && canRetryRequest(error) &&
         (error.retryAfterSeconds ?: 0L) <= 0L
 
 /** A report that can simply be tried again; its message is already plain and complete. */
@@ -101,7 +103,7 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
 }
 
 /** Operational failures use a compact, neutral surface. Clinical alerts keep their own treatment. */
-@Composable fun RequestFeedback(message:String,retryAtMillis:Long=0,onRetry:(()->Unit)?=null,onDismiss:()->Unit,sequence:Long=0){
+@Composable fun RequestFeedback(message:String,retryAtMillis:Long=0,onRetry:(()->Unit)?=null,onDismiss:()->Unit,sequence:Long=0,copyDetails:String?=null){
     var ready by remember(retryAtMillis){mutableStateOf(System.currentTimeMillis()>=retryAtMillis)}
     LaunchedEffect(retryAtMillis){if(!ready){delay((retryAtMillis-System.currentTimeMillis()).coerceAtLeast(0));ready=true}}
     val c=MaterialTheme.colorScheme
@@ -109,6 +111,18 @@ internal fun clinicianError(error:Exception,purpose:String?=null):String {
         Surface(color=c.surfaceContainerLow,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp).semantics{liveRegion=LiveRegionMode.Polite}){
             Column(Modifier.padding(horizontal=16.dp,vertical=10.dp)){
                 Text(message,style=MaterialTheme.typography.bodyMedium,color=c.onSurface)
+                if (copyDetails != null) {
+                    val context = LocalContext.current
+                    var copyLabel by remember(sequence) { mutableStateOf("Copy error details") }
+                    TextButton(onClick = {
+                        copyLabel = try {
+                            copySensitive(context, copyDetails, "Amilya Notes error")
+                            "Error details copied"
+                        } catch (_: Exception) {
+                            "Try copying again"
+                        }
+                    }) { Text(copyLabel) }
+                }
                 Row(Modifier.align(Alignment.End)){
                     TextButton(onClick=onDismiss){Text("Dismiss")}
                     onRetry?.let{TextButton(onClick=it,enabled=ready){Text(if(ready)"Try Again"else"Please wait…")}}

@@ -47,6 +47,8 @@ internal fun NotesReportRecoveryAction(s: AppState, typedText: String? = null, t
     if (!BuildConfig.NOTES_ONLY || !s.canReviewNotesLocally()) return
     val owner = s.user?.str("id").orEmpty()
     val visit = s.encounterId
+    val revision = s.revision
+    val refused = s.notesWritingRefusal?.takeIf { typedText == null && it.matches(owner, visit, revision) }
     // The preview stays in memory and clears if the account or visit changes.
     var preview by remember(owner, visit, s.revision) { mutableStateOf<String?>(null) }
     val source = typedText ?: remember(owner, visit, s.revision, s.errorMessageSequence) { s.notesRecoverySource() }
@@ -54,14 +56,26 @@ internal fun NotesReportRecoveryAction(s: AppState, typedText: String? = null, t
         if (source.isBlank()) s.useReviewedNotes("", visit, owner) else preview = source
     }, Modifier.fillMaxWidth(), secondary = s.error == null)
 
-    preview?.let { reviewedWords ->
+    // An automatic offer uses only the text accepted for this visit. Unsent forms are reviewed separately.
+    val wordsToReview = if (refused == null) preview else remember(owner, visit, revision, refused) {
+        notesReviewText(s.case?.items("evidence").orEmpty(), emptyList()).takeIf(String::isNotBlank)
+    }
+    fun closeReview() {
+        preview = null
+        if (refused != null) s.closeNotesWritingReview()
+    }
+    wordsToReview?.let { reviewedWords ->
         AlertDialog(
-            onDismissRequest = { preview = null },
-            title = { Text("Review your words") },
+            onDismissRequest = ::closeReview,
+            title = { Text(if (refused != null) "AI couldn’t write this report" else "Review your words") },
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    if (refused != null) {
+                        Text(refused.reason)
+                    }
                     Text(
-                        if (typedText != null) "Only the note in this text box will be used. You can edit it before saving."
+                        if (refused != null) "These are the original notes. Check who said what, then edit and save your own report."
+                        else if (typedText != null) "Only the note in this text box will be used. You can edit it before saving."
                         else "If these words came from a recording, check who said what. Edit the draft before saving.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -70,16 +84,19 @@ internal fun NotesReportRecoveryAction(s: AppState, typedText: String? = null, t
                 }
             },
             confirmButton = {
-                TextButton(onClick = { preview = null; s.useReviewedNotes(reviewedWords, visit, owner, typedEditId) }) {
+                TextButton(onClick = {
+                    closeReview()
+                    if (s.revision == revision) s.useReviewedNotes(reviewedWords, visit, owner, typedEditId)
+                }) {
                     Text("Use in draft")
                 }
             },
             dismissButton = {
                 Column {
-                    TextButton(onClick = { preview = null; s.useReviewedNotes("", visit, owner) }) {
+                    TextButton(onClick = { closeReview(); s.useReviewedNotes("", visit, owner) }) {
                         Text("Start blank")
                     }
-                    TextButton(onClick = { preview = null }) { Text("Cancel") }
+                    TextButton(onClick = ::closeReview) { Text("Cancel") }
                 }
             },
         )
