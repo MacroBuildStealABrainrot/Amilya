@@ -1,6 +1,6 @@
 # Amilya daily report
 
-`.github/workflows/amilya-daily-report.yml` runs every morning at 11:00 UTC (07:00 Toronto in summer, 06:00 in winter). It posts one plain-English comment on the open issue labelled `daily-report`, and creates that issue the first time. Subscribe to the issue to receive each report by email. If something is serious, the owner is @mentioned. Serious means: the health check fails, live traffic leaves `woundcopilot-00021-lrx`, the live version has 5 or more server errors in 24 h, a fatal Sentry crash appears, or tests fail on `main`.
+`.github/workflows/amilya-daily-report.yml` runs every morning at 11:00 UTC (07:00 Toronto in summer, 06:00 in winter). It posts one plain-English comment on the open issue labelled `daily-report`, and creates that issue the first time. Subscribe to the issue to receive each report by email. If something is serious, the owner is @mentioned. Serious means: the health check fails, live traffic leaves `woundcopilot-rel-ef3d1a8-c`, the live version has 5 or more server errors in 24 h, a fatal Sentry crash appears, or tests fail on `main`.
 
 **Read-only.** It never deploys or changes traffic, billing, databases or app settings. Encounter IDs in URLs are redacted. Sections that aren't connected say "not connected", never a guess. On pull requests that touch these files it runs its own tests and writes a preview to the run summary without posting.
 

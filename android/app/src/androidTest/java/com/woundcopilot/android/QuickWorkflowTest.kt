@@ -287,7 +287,7 @@ class QuickWorkflowTest {
         assertTrue(canRetryRequest(ApiException(429,"provider limit")))
         assertFalse(canRetryRequest(ApiException(402,"insufficient credits")))
         assertTrue(clinicianError(ApiException(402,"provider credits"),"photo").contains("app credits"))
-        assertTrue(clinicianError(ApiException(502,"faithfulness review failed"),"report").contains("faithfulness review failed"))
+        assertTrue(clinicianError(ApiException(502,"The report did not pass source-faithfulness review. Your original source and editor text remain available."),"report").contains("verify the draft against your notes"))
         assertTrue(clinicianError(IllegalArgumentException("Enter a question within 2,000 characters.")).contains("Enter a question within 2,000 characters."))
     }
 
