@@ -33,9 +33,9 @@ import java.io.File
 import java.util.UUID
 
 /**
- * "Amilya Voice": the light app. It does one thing: record your voice, turn it into text, and let you share that text.
- * No patient charts, photos, reports or consultant. It uses the same sign-in and the same server step that already
- * turns a spoken message into text (no new server code). The audio file lives only in the app's private folder and is
+ * "Amilya Voice": the light app. It does one thing: record the whole visit (nurse and client), turn it into text, and let
+ * you share that text. No patient charts, photos, reports or consultant. It uses the same sign-in and the same server
+ * steps that already turn a visit recording into a transcript (no new server code, no report step). The audio file lives only in the app's private folder and is
  * deleted as soon as the text arrives.
  */
 private const val LITE_MAX_SECONDS = 40 * 60
@@ -100,17 +100,20 @@ private suspend fun liteVisit(s: AppState, owner: String): String {
     return id
 }
 
-private suspend fun liteTranscribe(s: AppState, owner: String, file: File, seconds: Double): JSONObject {
-    if (s.demo) return obj("text" to "Sample only. No transcription was performed.")
-    suspend fun once(): JSONObject {
+/** Sends the whole recording (you and the client) in short pieces and returns the plain text. No report is made. */
+private suspend fun liteTranscribe(s: AppState, owner: String, file: File, stage: (String) -> Unit): String {
+    if (s.demo) return "Sample only. No transcription was performed."
+    val key = "lite-$owner-${file.name}"
+    suspend fun once(): String {
         val visit = liteVisit(s, owner)
-        return s.api.multipart("/encounters/$visit/transcribe-message", file, "audio/mp4",
-            mapOf("consent" to "true", "duration_seconds" to "%.1f".format(java.util.Locale.US, seconds.coerceAtLeast(1.0))),
-            "lite-" + file.name)
+        val result = AudioChunks(s.api, s.vault).transcribe(visit, file, key, null) { stage(it) }
+        return result.optJSONObject("evidence")?.str("text").orEmpty()
     }
     return try { once() } catch (e: CancellationException) { throw e } catch (e: Exception) {
-        // The temporary holder visit can expire on the server. Make a fresh one once and try again.
-        if (e.message.orEmpty().contains("not found", ignoreCase = true)) { s.vault.remove("lite-visit-$owner"); once() } else throw e
+        // The temporary holder visit can expire on the server. Make a fresh one once and start this recording again.
+        if (e.message.orEmpty().contains("not found", ignoreCase = true)) {
+            s.vault.remove("lite-visit-$owner"); s.vault.remove("audio-batch-$key"); once()
+        } else throw e
     }
 }
 
@@ -126,7 +129,7 @@ fun LiteVoiceScreen(s: AppState) {
     var message by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf(s.vault.read("lite-text-$owner").orEmpty()) }
     var pending by remember { mutableStateOf(recorder.pendingFile()) }
-    var lastSeconds by remember { mutableDoubleStateOf(0.0) }
+    var stageLabel by remember { mutableStateOf("") }
     val activity = context.liteActivity()
 
     fun saveText(value: String) { text = value; if (value.isBlank()) s.vault.remove("lite-text-$owner") else s.vault.write("lite-text-$owner", value) }
@@ -135,24 +138,21 @@ fun LiteVoiceScreen(s: AppState) {
         val result = recorder.stop()
         recording = false
         if (result == null) { message = "Nothing was recorded. Please try again."; return }
-        pending = result.first; lastSeconds = result.second
+        pending = result.first
     }
 
     fun turnIntoText(file: File) {
         if (working) return
         scope.launch {
-            working = true; message = null
+            working = true; message = null; stageLabel = "Starting"
             try {
-                val duration = if (file == pending && lastSeconds > 0) lastSeconds else 60.0
-                val r = liteTranscribe(s, owner, file, duration)
-                val heard = r.str("text").trim()
-                if (r.optBoolean("needs_rerecord") || heard.isBlank()) {
-                    message = "No clear speech was heard. Move closer to the phone and record again."
-                    file.delete(); pending = recorder.pendingFile()
+                val heard = liteTranscribe(s, owner, file) { stageLabel = it }.trim()
+                if (heard.isBlank()) {
+                    message = "No speech was found in this recording. Move the phone closer and record again."
+                    s.vault.remove("audio-batch-lite-$owner-${file.name}"); file.delete(); pending = recorder.pendingFile()
                 } else {
                     saveText(if (text.isBlank()) heard else text.trimEnd() + "\n\n" + heard)
-                    file.delete(); pending = recorder.pendingFile()
-                    message = null
+                    s.vault.remove("audio-batch-lite-$owner-${file.name}"); file.delete(); pending = recorder.pendingFile()
                 }
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 message = (e.message?.takeIf { it.isNotBlank() } ?: "The text could not be made.") + " Your recording is saved on this phone. Tap Turn into text to try again."
@@ -173,7 +173,7 @@ fun LiteVoiceScreen(s: AppState) {
     }
 
     LaunchedEffect(recording) {
-        while (recording) { delay(1000); seconds++; if (seconds >= LITE_MAX_SECONDS) { finishRecording(); message = "Recording stopped at 40 minutes. Tap Turn into text." } }
+        while (recording) { delay(1000); seconds++; if (seconds >= LITE_MAX_SECONDS) { finishRecording(); message = "Recording stopped at 40 minutes. Tap Turn into text, then record more if the visit is not finished." } }
     }
     // Keep the screen on while recording, and stop safely if the app is left (the phone silences the microphone for apps in the background).
     DisposableEffect(recording) {
@@ -193,21 +193,21 @@ fun LiteVoiceScreen(s: AppState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Amilya Voice", style = MaterialTheme.typography.headlineMedium)
-        Text("Record your voice. Get the text. Share it.", style = MaterialTheme.typography.bodyLarge)
+        Text("Record the visit: you and the client. Get the text. Share it. No report is made.", style = MaterialTheme.typography.bodyLarge)
         if (s.demo) Text("Sample mode: nothing is sent and no real text is made.", color = MaterialTheme.colorScheme.error)
 
         if (recording) {
             Text("Recording  %d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
-            Text("Keep this screen open while you talk.", style = MaterialTheme.typography.bodyMedium)
+            Text("Keep this screen open. Put the phone where it can hear both of you.", style = MaterialTheme.typography.bodyMedium)
             WcpButton("Stop", { finishRecording() }, Modifier.fillMaxWidth())
         } else {
             WcpButton(if (text.isBlank() && pending == null) "Start recording" else "Record more", { startRecording() }, Modifier.fillMaxWidth(), enabled = !working)
-            Text("Press record only when everyone being recorded knows and agrees.", style = MaterialTheme.typography.bodySmall)
+            Text("Press record only when the client knows and agrees to be recorded.", style = MaterialTheme.typography.bodySmall)
         }
 
         pending?.let { file ->
             if (!recording) {
-                WcpButton(if (working) "Making text..." else "Turn into text", { turnIntoText(file) }, Modifier.fillMaxWidth(), enabled = !working)
+                WcpButton(if (working) "Making text... $stageLabel" else "Turn into text", { turnIntoText(file) }, Modifier.fillMaxWidth(), enabled = !working)
                 if (!working) WcpButton("Delete this recording", { file.delete(); pending = recorder.pendingFile() }, Modifier.fillMaxWidth(), secondary = true)
             }
         }
