@@ -123,7 +123,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                 }else Box(Modifier.weight(1f).padding(start=8.dp)){Wordmark(compact=true)}
                 // Owner's layout request (2026-10-28): no share, top microphone or refresh in the shared header.
                 // Owner's request (2026-10-30): one Voice button for spoken commands (not dictation), hidden while recording.
-                if(!BuildConfig.NOTES_ONLY && page !in listOf("welcome","login","signup","reconnect","record","shift_summary") && !rec.recording && s.user!=null)
+                if(!BuildConfig.NOTES_ONLY && !BuildConfig.LITE_VOICE && page !in listOf("welcome","login","signup","reconnect","record","shift_summary") && !rec.recording && s.user!=null)
                     Surface(onClick={if(!s.loading)s.voiceCommandsOpen=true},shape=RoundedCornerShape(50),color=c.surfaceVariant,modifier=Modifier.padding(end=4.dp).semantics{contentDescription="Voice commands"}){
                         Row(Modifier.padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
                             InstrumentIcon("voice",Modifier.size(18.dp),c.primary);Text("Voice",style=MaterialTheme.typography.labelLarge)
@@ -135,7 +135,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             if(s.loading){LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp));if(s.taskLabel.contains("aving"))Row(Modifier.padding(horizontal=20.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically){CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=3.dp);Spacer(Modifier.width(12.dp));Text(s.taskLabel,style=MaterialTheme.typography.titleSmall)} else Text(s.taskLabel,Modifier.padding(horizontal=20.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium,color=c.onSurfaceVariant)}
         }
     },bottomBar={
-        if(page in listOf("home","saved","account"))InstrumentDock(listOf(DockDestination("home","Home","cases"),DockDestination("saved",if(BuildConfig.NOTES_ONLY)"Saved reports" else "Saved work","document"),DockDestination("account","Account","account")),page,::navigate)
+        if(page in listOf("home","saved","account"))InstrumentDock(if(BuildConfig.LITE_VOICE)listOf(DockDestination("home","Voice","cases"),DockDestination("account","Account","account")) else listOf(DockDestination("home","Home","cases"),DockDestination("saved",if(BuildConfig.NOTES_ONLY)"Saved reports" else "Saved work","document"),DockDestination("account","Account","account")),page,::navigate)
         else if(s.quickMode==null&&inCase&&!showSidebar&&page in listOf("encounter","findings","documents","sources","review","history"))InstrumentDock(listOf(DockDestination("encounter","Capture","capture"),DockDestination("findings","Review","review",s.case?.items("facts")?.count{it.str("confirmation_state")=="unconfirmed"}?:0),DockDestination("documents","Documents","document")),phase(page),::navigate)
     }){padding->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()){
@@ -147,6 +147,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     if(showSidebar)TabletContext(s)
                     AnimatedContent(targetState=if(s.quickMode==null&&page in workspacePages)"workspace" else page,modifier=Modifier.weight(1f),transitionSpec={fadeIn(tween(180))+slideInVertically(tween(220)){it/35} togetherWith fadeOut(tween(100))},label="Workspace transition"){route->
                         when{
+                            BuildConfig.LITE_VOICE&&route=="home"->LiteVoiceScreen(s)
                             route=="workspace"->EncounterPager(s)
                             route=="welcome"->Welcome(s)
                             route=="reconnect"->Page{Text("Your account is still saved on this phone.");Text("Connect to the internet to reopen your workspace.");Button({s.resumeStoredSession()},enabled=!s.loading){Text("Reconnect")}}
@@ -176,7 +177,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
             }
         }
     }
-    if(!BuildConfig.NOTES_ONLY)VoiceCommandsDialog(s)
+    if(!BuildConfig.NOTES_ONLY && !BuildConfig.LITE_VOICE)VoiceCommandsDialog(s)
     WorkPrivacyDialogs(s)
     ActiveTransferDialog(s)
     AssessmentReviewDialog(s)
@@ -212,10 +213,10 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
     Page{
         Row(Modifier.padding(top=8.dp),verticalAlignment=Alignment.CenterVertically){Box(Modifier.weight(1f)){Wordmark(compact=true)};Text("ANDROID",style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)}
         Spacer(Modifier.height(10.dp))
-        Text(if(BuildConfig.NOTES_ONLY)"Your notes,\nmade simple." else "Care,\nin focus.",style=MaterialTheme.typography.displayLarge.copy(fontFamily=FontFamily.Serif,fontWeight=FontWeight.Normal,fontSize=60.sp,lineHeight=62.sp,letterSpacing=(-2).sp))
-        Text(if(BuildConfig.NOTES_ONLY)"Speak or type your visit notes. Review, save and share your nursing report." else "Documentation and wound support, when you need it.",style=MaterialTheme.typography.bodyMedium,color=c.onSurfaceVariant)
+        Text(if(BuildConfig.LITE_VOICE)"Speak.\nShare." else if(BuildConfig.NOTES_ONLY)"Your notes,\nmade simple." else "Care,\nin focus.",style=MaterialTheme.typography.displayLarge.copy(fontFamily=FontFamily.Serif,fontWeight=FontWeight.Normal,fontSize=60.sp,lineHeight=62.sp,letterSpacing=(-2).sp))
+        Text(if(BuildConfig.LITE_VOICE)"Record your voice, get the text, and share it with another app." else if(BuildConfig.NOTES_ONLY)"Speak or type your visit notes. Review, save and share your nursing report." else "Documentation and wound support, when you need it.",style=MaterialTheme.typography.bodyMedium,color=c.onSurfaceVariant)
         GlassPanel(Modifier.fillMaxWidth()){
-            (if(BuildConfig.NOTES_ONLY)listOf(Triple("record","New report","Speak or type your notes."),Triple("document","Saved reports","Review and share your work."),Triple("document","End-of-shift summary","Bring your selected reports together."))else listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Ask Consultant","Talk through a question."))).forEach{(icon,title,detail)->
+            (if(BuildConfig.LITE_VOICE)listOf(Triple("record","Record","Speak, then stop."),Triple("document","Read the text","Edit it if you need to."),Triple("document","Share","Send the text to another app."))else if(BuildConfig.NOTES_ONLY)listOf(Triple("record","New report","Speak or type your notes."),Triple("document","Saved reports","Review and share your work."),Triple("document","End-of-shift summary","Bring your selected reports together."))else listOf(Triple("record","Document","Speak or write your findings."),Triple("photo","Photo Assessment","See what is visible."),Triple("kosmo","Ask Consultant","Talk through a question."))).forEach{(icon,title,detail)->
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
                     InstrumentIcon(icon,Modifier.size(26.dp),c.primary)
                     Column{Text(title,style=MaterialTheme.typography.titleMedium);Text(detail,style=MaterialTheme.typography.bodySmall,color=c.onSurfaceVariant)}

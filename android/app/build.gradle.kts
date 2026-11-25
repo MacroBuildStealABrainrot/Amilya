@@ -16,6 +16,7 @@ android {
         buildConfigField("boolean", "ISOLATED_TEST", "false")
         buildConfigField("boolean", "OWNER_CLEAN_UI", "false")
         buildConfigField("boolean", "NOTES_ONLY", "false")
+        buildConfigField("boolean", "LITE_VOICE", "false")
         versionCode = 82
         versionName = "1.9.0-test46"
         manifestPlaceholders["appLabel"] = "WoundCoPilot"
@@ -137,6 +138,16 @@ android {
             versionNameSuffix = "-notes"
             manifestPlaceholders["appLabel"] = "Amilya Notes"
             buildConfigField("boolean", "NOTES_ONLY", "true")
+            buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", "false")
+            matchingFallbacks += listOf("live", "release", "debug")
+        }
+        // "Amilya Voice": the light app. One job: record, turn the speech into text, share the text. Own app id and name.
+        create("lite") {
+            initWith(getByName("live"))
+            applicationIdSuffix = ".lite"
+            versionNameSuffix = "-lite"
+            manifestPlaceholders["appLabel"] = "Amilya Voice"
+            buildConfigField("boolean", "LITE_VOICE", "true")
             buildConfigField("boolean", "ALLOW_SCREEN_CAPTURE", "false")
             matchingFallbacks += listOf("live", "release", "debug")
         }
