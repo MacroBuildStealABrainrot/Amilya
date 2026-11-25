@@ -25,6 +25,7 @@ check "$(ls $APKS/isolatedTest/*.apk | head -1)" com.woundcopilot.android.isolat
 check "$(ls $APKS/live/*.apk | head -1)" com.woundcopilot.android.live false
 check "$(ls $APKS/liveShots/*.apk | head -1)" com.woundcopilot.android.liveshots false
 check "$(ls $APKS/notes/*.apk | head -1)" com.woundcopilot.android.notes false
+check "$(ls $APKS/lite/*.apk | head -1)" com.woundcopilot.android.lite false
 # The live app must be compiled for the real service only, never as an isolated/test build, with the clean owner screens.
 LBC="$(find android/app/build/generated -path '*/live/*' -name BuildConfig.java | head -1)"
 [ -n "$LBC" ] || { echo "FAIL: live BuildConfig not found"; fail=1; }
@@ -45,7 +46,7 @@ APKSIGNER="${AAPT2%aapt2}apksigner"
 "$APKSIGNER" verify --verbose --print-certs "$(ls $APKS/renderTest/*.apk | head -1)"
 
 # Check screenshot policy and destination separately for all live variants.
-for variant in live liveShots notes; do
+for variant in live liveShots notes lite; do
   config=$(find android/app/build/generated -path "*/$variant/*" -name BuildConfig.java | head -1)
   [ -n "$config" ] || exit 1
   capture=false; [ "$variant" != liveShots ] || capture=true
@@ -59,10 +60,12 @@ for variant in live liveShots notes; do
 done
 
 # Only the reporting companion may remove the other workflows. Verify every built app.
-for variant in debug release pilot repair renderTest isolatedTest sandbox live liveShots notes; do
+for variant in debug release pilot repair renderTest isolatedTest sandbox live liveShots notes lite; do
   config=$(find android/app/build/generated -path "*/$variant/*" -name BuildConfig.java | head -1)
   [ -n "$config" ] || { echo "FAIL: $variant BuildConfig not found"; exit 1; }
   notes=false; [ "$variant" != notes ] || notes=true
+  lite=false; [ "$variant" != lite ] || lite=true
+  grep -q "LITE_VOICE = $lite" "$config" || { echo "FAIL: unexpected light-app flag in $variant"; exit 1; }
   grep -q "NOTES_ONLY = $notes" "$config" || { echo "FAIL: unexpected reporting-only flag in $variant"; exit 1; }
 done
 

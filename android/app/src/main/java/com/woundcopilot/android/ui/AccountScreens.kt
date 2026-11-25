@@ -241,7 +241,7 @@ fun AccountScreen(state: AppState) {
         TextButton(onClick = { signOut = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), enabled = !state.loading) {
             Text(if (state.demo) "Leave the sample" else "Sign out", color = MaterialTheme.colorScheme.error)
         }
-        Text(if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"Amilya Notes for Android" else "Amilya for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if(com.woundcopilot.android.BuildConfig.LITE_VOICE)"Amilya Voice for Android" else if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"Amilya Notes for Android" else "Amilya for Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
     }
     if (editProfile) ProfileDialog(state) { editProfile = false }
