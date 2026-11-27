@@ -109,6 +109,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         navigate(when(page){"login","signup"->"welcome";"account","saved","new","encounter"->"home";"admin"->"account";"editor"->"documents";"review"->"findings";else->"encounter"})
     }
     BackHandler(page!="welcome"&&page!="home"){back()}
+    val recordingScreen = if (BuildConfig.LITE_VOICE) "home" else "record"
     val c=MaterialTheme.colorScheme
     Scaffold(containerColor=c.background,topBar={
         if(page!="welcome")Column(Modifier.statusBarsPadding()){
@@ -131,7 +132,7 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
                     }
                 if(s.demo)Text("SAMPLE",Modifier.padding(horizontal=10.dp),style=MaterialTheme.typography.labelSmall,color=c.onSurfaceVariant)
             }
-            if(rec.recording&&page!="record")Surface(onClick={navigate("record")},color=c.errorContainer){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){InstrumentIcon("record",Modifier.size(18.dp),c.onErrorContainer);Text("${if(rec.paused)"Paused" else "Recording"} · ${rec.elapsedSeconds/60}:${(rec.elapsedSeconds%60).toString().padStart(2,'0')}",Modifier.weight(1f).padding(start=10.dp),style=MaterialTheme.typography.labelLarge);Text("Open",style=MaterialTheme.typography.labelLarge)}}
+            if(rec.recording&&page!=recordingScreen)Surface(onClick={navigate(recordingScreen)},color=c.errorContainer){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){InstrumentIcon("record",Modifier.size(18.dp),c.onErrorContainer);Text("${if(rec.paused)"Paused" else "Recording"} · ${rec.elapsedSeconds/60}:${(rec.elapsedSeconds%60).toString().padStart(2,'0')}",Modifier.weight(1f).padding(start=10.dp),style=MaterialTheme.typography.labelLarge);Text("Open",style=MaterialTheme.typography.labelLarge)}}
             if(s.loading){LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp));if(s.taskLabel.contains("aving"))Row(Modifier.padding(horizontal=20.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically){CircularProgressIndicator(Modifier.size(22.dp),strokeWidth=3.dp);Spacer(Modifier.width(12.dp));Text(s.taskLabel,style=MaterialTheme.typography.titleSmall)} else Text(s.taskLabel,Modifier.padding(horizontal=20.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium,color=c.onSurfaceVariant)}
         }
     },bottomBar={
@@ -178,9 +179,11 @@ private fun isCasePage(page:String)=page in listOf("encounter","sources","record
         }
     }
     if(!BuildConfig.NOTES_ONLY && !BuildConfig.LITE_VOICE)VoiceCommandsDialog(s)
-    WorkPrivacyDialogs(s)
-    ActiveTransferDialog(s)
-    AssessmentReviewDialog(s)
+    if (!BuildConfig.LITE_VOICE) {
+        WorkPrivacyDialogs(s)
+        ActiveTransferDialog(s)
+        AssessmentReviewDialog(s)
+    }
 }
 
 @Composable private fun EncounterPager(s:AppState){

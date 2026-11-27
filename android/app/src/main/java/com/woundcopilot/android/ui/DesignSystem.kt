@@ -182,7 +182,7 @@ fun Wordmark(compact: Boolean = false) {
         Spacer(Modifier.width(if (compact) 9.dp else 12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
-                if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"Amilya Notes" else "Amilya",
+                if(com.woundcopilot.android.BuildConfig.LITE_VOICE)"Amilya Voice" else if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"Amilya Notes" else "Amilya",
                 color = MaterialTheme.colorScheme.onBackground,
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontSize = if (compact) 20.sp else 23.sp,
@@ -192,7 +192,7 @@ fun Wordmark(compact: Boolean = false) {
             )
             if (!compact) {
                 Text(
-                    if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"NURSING REPORTS" else "CLINICAL WORKSPACE",
+                    if(com.woundcopilot.android.BuildConfig.LITE_VOICE)"TRANSCRIPTION" else if(com.woundcopilot.android.BuildConfig.NOTES_ONLY)"NURSING REPORTS" else "CLINICAL WORKSPACE",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 1.7.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -23,9 +23,9 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Emulator only. The runner supplies a synthetic tone to the virtual microphone. */
+/** Exercise the real Voice and Notes recorder on an offline emulator; a tone fixture is optional. */
 @RunWith(AndroidJUnit4::class)
-class NotesScreenOffRecordingTest {
+class ScreenOffRecordingTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context: Context get() = instrumentation.targetContext
 
@@ -34,8 +34,9 @@ class NotesScreenOffRecordingTest {
     @Test fun keepsRecordingSoundWhileTheDisplayIsOff() = recordWhileScreenOff(checkMicrophoneSignal = true)
 
     private fun recordWhileScreenOff(checkMicrophoneSignal: Boolean) {
+        assumeTrue("Only Voice and Notes hold the CPU during recording", BuildConfig.LITE_VOICE || BuildConfig.NOTES_ONLY)
         assertTrue("A disposable emulator is required", Build.HARDWARE in setOf("ranchu", "goldfish"))
-        assertTrue("Use the Notes production recorder", BuildConfig.NOTES_ONLY && !BuildConfig.CRASH_SAFE_RECORDING)
+        assertFalse("Use the production recorder", BuildConfig.CRASH_SAFE_RECORDING)
         assertFalse("A recording was already in progress", RecordingService.state.value.recording)
         val power = context.getSystemService(PowerManager::class.java)
         wakeScreen()
@@ -52,9 +53,9 @@ class NotesScreenOffRecordingTest {
                 val path = requireNotNull(RecordingService.state.value.filePath)
                 captured = path
                 await("The microphone service was not in the foreground") { isMicrophoneServiceForeground() }
-                assertTrue("Android did not register the Notes CPU hold", ownsRecordingWakeLock())
+                assertTrue("Android did not register the recorder CPU hold", ownsRecordingWakeLock())
                 val baselineUs = if (checkMicrophoneSignal) {
-                    Log.i("NotesLockTest", "Recorder ready for synthetic tone")
+                    Log.i("RecorderLockTest", "Recorder ready for synthetic tone")
                     var audibleSince = 0L
                     var lastAudible = 0L
                     val audible = waitFor {
@@ -111,9 +112,9 @@ class NotesScreenOffRecordingTest {
                 assertTrue("Screen-off measurement was too short", seconds >= 10)
                 checkRecording(File(path), baselineUs, fromUs, seconds)
                 if (checkMicrophoneSignal) {
-                    Log.i("NotesLockTest", "TONE_SCREEN_OFF_VERIFIED: 440 Hz captured in all $seconds measured screen-off seconds")
+                    Log.i("RecorderLockTest", "TONE_SCREEN_OFF_VERIFIED: 440 Hz captured in all $seconds measured screen-off seconds")
                 } else {
-                    Log.i("NotesLockTest", "SERVICE_TIMELINE_VERIFIED: one foreground recorder, Android CPU hold during screen off, pause/resume/stop power checks, finalized AAC decoded in all $seconds measured screen-off seconds")
+                    Log.i("RecorderLockTest", "SERVICE_TIMELINE_VERIFIED: one foreground recorder, Android CPU hold during screen off, pause/resume/stop power checks, finalized AAC decoded in all $seconds measured screen-off seconds")
                 }
             } finally {
                 wakeScreen()
@@ -133,11 +134,11 @@ class NotesScreenOffRecordingTest {
         }
 
     private fun ownsRecordingWakeLock(): Boolean = shell("dumpsys power").lineSequence().any {
-        it.trimStart().startsWith("PARTIAL_WAKE_LOCK") && it.contains("AmilyaNotes:Microphone")
+        it.trimStart().startsWith("PARTIAL_WAKE_LOCK") && it.contains("${context.packageName}:Microphone")
     }
 
     private fun requireAwakeTone(available: Boolean, reason: String) {
-        if (!available) Log.i("NotesLockTest", "TONE_FIXTURE_UNAVAILABLE: $reason")
+        if (!available) Log.i("RecorderLockTest", "TONE_FIXTURE_UNAVAILABLE: $reason")
         assumeTrue(reason, available)
     }
 
@@ -222,7 +223,7 @@ class NotesScreenOffRecordingTest {
                 if (awake != null) {
                     awake.verifyFrames()
                     requireAwakeTone(awake.hasToneInEverySecond(), "440 Hz did not reach all three awake baseline seconds")
-                    Log.i("NotesLockTest", "TONE_BASELINE_VERIFIED: 440 Hz captured throughout the three awake baseline seconds")
+                    Log.i("RecorderLockTest", "TONE_BASELINE_VERIFIED: 440 Hz captured throughout the three awake baseline seconds")
                 }
                 asleep.verifyFrames()
                 if (awake != null) assertTrue("The verified awake 440 Hz tone disappeared while locked", asleep.hasToneInEverySecond())
@@ -262,7 +263,7 @@ class NotesScreenOffRecordingTest {
         }
 
         fun logMeasurements() {
-            Log.i("NotesLockTest", "$label: $rate Hz PCM, samples ${frames.toList()}, peaks ${peak.toList()}, 440 Hz crossings ${toneCycles.toList()}")
+            Log.i("RecorderLockTest", "$label: $rate Hz PCM, samples ${frames.toList()}, peaks ${peak.toList()}, 440 Hz crossings ${toneCycles.toList()}")
         }
 
         fun verifyFrames() {

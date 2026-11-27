@@ -99,9 +99,9 @@ class RecordingService : Service() {
     private var finishing = false
     private var micInterruption = MicInterruption()
     private var powerNotice: String? = null
-    private val recordingPower = if (BuildConfig.NOTES_ONLY) NotesRecordingPower { timeoutMillis ->
+    private val recordingPower = if (BuildConfig.NOTES_ONLY || BuildConfig.LITE_VOICE) NotesRecordingPower { timeoutMillis ->
         val lock = getSystemService(PowerManager::class.java)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AmilyaNotes:Microphone")
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "${BuildConfig.APPLICATION_ID}:Microphone")
         lock.setReferenceCounted(false)
         lock.acquire(timeoutMillis)
         val releaseLock = { if (lock.isHeld) lock.release() }
