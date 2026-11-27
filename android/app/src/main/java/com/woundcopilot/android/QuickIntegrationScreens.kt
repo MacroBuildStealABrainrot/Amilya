@@ -64,8 +64,13 @@ import java.time.format.DateTimeFormatter
 @Composable private fun NotesHomeScreen(s:AppState){
     val recorder by RecordingService.state.collectAsState()
     val ready=!s.loading&&!recorder.recording
+    LaunchedEffect(recorder.recording, recorder.filePath, s.user?.str("id"), s.loading) {
+        if (recorder.recording) s.returnToActiveNotesRecording()
+    }
     Page{
         InstrumentTitle("Nursing reports")
+        if (recorder.recording) Text(if (recorder.paused) "Recording is paused. Controls are in the recording notification."
+            else "Recording is in progress. Controls are in the recording notification.")
         Text("Speak or type your notes, then review your report.",color=MaterialTheme.colorScheme.onSurfaceVariant)
         WcpButton("New report",{s.startQuick("document")},Modifier.fillMaxWidth(),enabled=ready)
         WcpButton("Saved reports",{s.screen="saved"},Modifier.fillMaxWidth(),enabled=ready,secondary=true)

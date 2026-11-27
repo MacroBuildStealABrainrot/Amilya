@@ -181,8 +181,8 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("notes")) { variant ->
         variant.outputs.forEach { output ->
-            output.versionCode.set(85)
-            output.versionName.set("1.9.3-notes")
+            output.versionCode.set(86)
+            output.versionName.set("1.9.4-notes")
         }
     }
 }

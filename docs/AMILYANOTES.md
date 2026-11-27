@@ -4,6 +4,8 @@ Separate Android reporting companion, package `com.woundcopilot.android.notes`. 
 
 Home has New report, Saved reports and End-of-shift summary. New reports use the existing community nursing format: concise clinician facts, no inferred diagnoses. Voice capture, typed notes, editing, saved versions, voice corrections and sharing reuse the existing workflow. The summary copies selected reports exactly, preserves warnings and uses the phone's local date. Account/PIN controls and recording recovery remain available.
 
+Start recording with Notes open and wait for the recording indicator. You can then turn the screen off. Pause or stop from Notes or the recording notification. Unlocking the phone lets you return to the active recording.
+
 If report writing stops, **Review my notes** lets the clinician review their typed words or a completed transcript and edit a draft on the phone. **Saved reports → Drafts on this device** can reopen available local work for the same account. If the service declines AI writing, Notes can open the original words for review. Finish report reopens an existing edited draft. A completed report retained in recording recovery can reopen even if its audio file is gone. An unfinished recording without a transcript stays in recording recovery. **Save report** saves the reviewed text to the workspace when connected.
 
 Photo assessment, file upload, consultant, diagnostics, order creation, advanced format selection and voice navigation are not available in Notes. Route guards prevent opening those screens through restored navigation. Existing reports with other formats can be viewed unchanged; editing requires the full app. Bulk server deletion is unavailable in Notes because the same account can have work in the full app.

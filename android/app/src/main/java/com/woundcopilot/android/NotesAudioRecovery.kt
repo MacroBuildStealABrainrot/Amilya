@@ -42,3 +42,15 @@ internal fun readyNotesRecordingVisit(job: JSONObject, owner: String): String? {
     val encounter = job.optJSONObject("case")?.optJSONObject("encounter") ?: return null
     return encounter.str("id").takeIf { it.isNotBlank() && job.str("file").isNotBlank() }
 }
+
+/** The vault's service-owned checkpoint and file ownership entry must agree before restoring a visit. */
+internal fun activeNotesVisit(owner: String, path: String, fileOwner: String?, job: JSONObject?): JSONObject? {
+    if (owner.isBlank() || path.isBlank() || job == null || job.str("owner") != owner ||
+        job.str("file") != path || job.str("phase") != "RECORDING" || job.str("template") != "nursing") return null
+    val snapshot = job.optJSONObject("case") ?: return null
+    val encounter = snapshot.optJSONObject("encounter") ?: return null
+    val visit = encounter.str("id")
+    if (visit.isBlank() || fileOwner != "$owner:$visit" || encounter.str("status") != "open" ||
+        snapshot.items("documents").any { it.str("status") == "signed" }) return null
+    return snapshot
+}

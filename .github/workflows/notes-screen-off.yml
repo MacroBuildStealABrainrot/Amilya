@@ -1,0 +1,75 @@
+name: Notes screen-off recording
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['fix/notes-screen-*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notes-screen-off-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare Android tools and emulator API
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -1)"
+          "$sdkmanager" --list > "$RUNNER_TEMP/sdk-packages.txt"
+          if grep -Eq '^[[:space:]]*system-images;android-37;google_apis;x86_64[[:space:]]*\|' "$RUNNER_TEMP/sdk-packages.txt"; then
+            echo 'api=37' >> "$GITHUB_OUTPUT"
+          else
+            echo 'api=35' >> "$GITHUB_OUTPUT"
+          fi
+          "$sdkmanager" --install 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+          sudo chmod a+rw /dev/kvm
+      - name: Build Notes and its test with a disposable emulator certificate
+        env:
+          WCP_SIGN_KEYSTORE: ${{ runner.temp }}/notes-emulator.p12
+          WCP_SIGN_STORE_PASSWORD: android
+          WCP_SIGN_KEY_ALIAS: androiddebugkey
+          WCP_SIGN_KEY_PASSWORD: android
+        run: |
+          keytool -genkeypair -storetype PKCS12 -keystore "$WCP_SIGN_KEYSTORE" -storepass android \
+            -keypass android -alias androiddebugkey -dname 'CN=Disposable emulator test' -keyalg RSA -validity 1
+          # Android signs test APKs with the debug key by default. Use this same ephemeral key for both.
+          mkdir -p "$HOME/.android"
+          cp "$WCP_SIGN_KEYSTORE" "$HOME/.android/debug.keystore"
+          cd android
+          bash gradlew --no-daemon -PwcpTestBuildType=notes :app:assembleNotes :app:assembleNotesAndroidTest
+      - name: Prepare a synthetic microphone
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils
+          pulseaudio --check || pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=notes_fixture rate=48000
+          pactl set-default-source notes_fixture.monitor
+      - name: Record the synthetic tone while the display is off
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          PULSE_SOURCE: notes_fixture.monitor
+          QEMU_AUDIO_DRV: pa
+        with:
+          api-level: ${{ steps.sdk.outputs.api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-boot-timeout: 420
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -http-proxy http://127.0.0.1:1
+          script: bash ci/run-notes-screen-off.sh
