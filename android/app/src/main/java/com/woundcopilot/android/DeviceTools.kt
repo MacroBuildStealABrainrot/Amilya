@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.text.Layout
 import android.text.StaticLayout
@@ -97,6 +98,21 @@ class RecordingService : Service() {
     private var lastPersistedSecond = -1
     private var finishing = false
     private var micInterruption = MicInterruption()
+    private var powerNotice: String? = null
+    private val recordingPower = if (BuildConfig.NOTES_ONLY) NotesRecordingPower { timeoutMillis ->
+        val lock = getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AmilyaNotes:Microphone")
+        lock.setReferenceCounted(false)
+        lock.acquire(timeoutMillis)
+        val releaseLock = { if (lock.isHeld) lock.release() }
+        releaseLock
+    } else null
+
+    private fun holdForCapture() {
+        powerNotice = if (recordingPower?.hold(completedMillis) == false)
+            "This phone could not keep the recorder awake. Keep the screen on for this recording."
+        else null
+    }
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -113,7 +129,7 @@ class RecordingService : Service() {
                 // Android 10+: a phone call or another app can silence this recording without any error. Say so on screen.
                 val silenced = !current.paused && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
                     runCatching { recorder?.activeRecordingConfiguration?.isClientSilenced == true }.getOrDefault(false)
-                val micNotice = micInterruption.update(silenced, elapsed)
+                val micNotice = micInterruption.update(silenced, elapsed) ?: powerNotice
                 if (micNotice != state.value.notice) state.value = state.value.copy(notice = micNotice)
                 persist(if (current.paused) "paused" else "recording", elapsed)
                 updateNotification()
@@ -205,7 +221,7 @@ class RecordingService : Service() {
                 }
                 // The current backend accepts 25 MiB and 3,600 seconds; leave room for MP4 finalization.
                 setMaxFileSize(24L * 1024L * 1024L)
-                setMaxDuration(3_600_000)
+                setMaxDuration(RECORDING_LIMIT_MILLIS)
                 setOnInfoListener { _, what, _ ->
                     if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED ||
                         what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED
@@ -215,10 +231,11 @@ class RecordingService : Service() {
                 }
                 prepare()
                 persist("starting", 0L)
+                holdForCapture()
                 start()
             }
             activeSince = SystemClock.elapsedRealtime()
-            state.value = state.value.copy(recording = true, paused = false, error = null)
+            state.value = state.value.copy(recording = true, paused = false, error = null, notice = powerNotice)
             DeveloperDiagnostics.emit("recording_captured")
             persist("recording", 0L)
             handler.post(ticker)
@@ -236,6 +253,7 @@ class RecordingService : Service() {
         if (state.value.paused || finishing) return
         try {
             active.pause()
+            recordingPower?.release()
             completedMillis += SystemClock.elapsedRealtime() - activeSince
             activeSince = 0L
             state.value = state.value.copy(paused = true, amplitude = 0f, elapsedSeconds = (completedMillis / 1000).toInt())
@@ -250,9 +268,12 @@ class RecordingService : Service() {
         val active = recorder ?: return stopSelf()
         if (!state.value.paused || finishing) return
         try {
+            val previousPowerNotice = powerNotice
+            holdForCapture()
             active.resume()
             activeSince = SystemClock.elapsedRealtime()
-            state.value = state.value.copy(paused = false, error = null)
+            state.value = state.value.copy(paused = false, error = null,
+                notice = powerNotice ?: state.value.notice?.takeUnless { it == previousPowerNotice })
             persist("recording", completedMillis)
             updateNotification()
         } catch (_: Exception) {
@@ -265,10 +286,20 @@ class RecordingService : Service() {
 
     private fun finishRecording(message: String? = null) {
         if (finishing) return
+        finishing = true
+        try {
+            saveRecording(message)
+        } finally {
+            recordingPower?.release()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
+    private fun saveRecording(message: String?) {
         val finalizationStarted=Performance.now()
         DeveloperDiagnostics.emit("recording_stopped")
         Performance.start("stop_to_report")
-        finishing = true
         handler.removeCallbacks(ticker)
         val elapsed = elapsedMillis()
         val active = recorder
@@ -305,19 +336,21 @@ class RecordingService : Service() {
         DeveloperDiagnostics.emit(if(valid)"upload_pending"else "recording_unavailable",status=if(valid)"pending"else "failed")
         activeSince = 0L
         completedMillis = elapsed
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     override fun onDestroy() {
         // Android does not promise onDestroy after a kill. Sidecars provide honest recovery in that case.
-        if (recorder != null && !finishing) finishRecording("Recording stopped when the service closed. Review the saved audio before uploading.")
-        handler.removeCallbacksAndMessages(null)
-        if (liveService === this) {
-            liveService = null
-            startRequested = false
+        try {
+            if (recorder != null && !finishing) finishRecording("Recording stopped when the service closed. Review the saved audio before uploading.")
+        } finally {
+            recordingPower?.release()
+            handler.removeCallbacksAndMessages(null)
+            if (liveService === this) {
+                liveService = null
+                startRequested = false
+            }
+            super.onDestroy()
         }
-        super.onDestroy()
     }
 
     private fun persist(status: String, elapsed: Long, error: String? = null) {

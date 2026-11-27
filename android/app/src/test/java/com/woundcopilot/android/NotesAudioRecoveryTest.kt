@@ -64,4 +64,25 @@ class NotesAudioRecoveryTest {
         }
         assertNull(readyNotesRecordingVisit(JSONObject(done.toString()).put("case", obj()), "practice-owner"))
     }
+
+    @Test fun activeControlsRequireTheServiceFileAndItsOpenVisitToMatchTheSignedInOwner() {
+        val path = "/practice/recording.m4a"
+        val snapshot = obj("encounter" to obj("id" to "visit", "status" to "open"))
+        val job = obj("owner" to "owner", "file" to path, "phase" to "RECORDING",
+            "template" to "nursing", "case" to snapshot)
+        assertSame(snapshot, activeNotesVisit("owner", path, "owner:visit", job))
+        assertNull(activeNotesVisit("other", path, "owner:visit", job))
+        assertNull(activeNotesVisit("owner", "/practice/other.m4a", "owner:visit", job))
+        assertNull(activeNotesVisit("owner", path, null, job))
+        assertNull(activeNotesVisit("owner", path, "owner:other", job))
+        assertNull(activeNotesVisit("owner", path, "owner:visit:correction", job))
+        assertNull(activeNotesVisit("owner", path, "owner:visit", null))
+        assertNull(activeNotesVisit("owner", path, "owner:visit", JSONObject(job.toString()).put("phase", "REPORT_READY")))
+        assertNull(activeNotesVisit("owner", path, "owner:visit", JSONObject(job.toString()).put("template", "SOAP")))
+        val signed = JSONObject(job.toString())
+        signed.getJSONObject("case").put("documents", org.json.JSONArray().put(obj("status" to "signed")))
+        assertNull(activeNotesVisit("owner", path, "owner:visit", signed))
+        snapshot.getJSONObject("encounter").put("status", "signed")
+        assertNull(activeNotesVisit("owner", path, "owner:visit", job))
+    }
 }

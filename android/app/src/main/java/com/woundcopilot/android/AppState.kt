@@ -93,6 +93,31 @@ class AppState(application:Application):AndroidViewModel(application) {
         bindDiagnostics()
         if(quickMode=="document" && !voiceCorrection && !voiceMessage)case?.let{vault.write("recording-context-$owner",obj("owner" to user?.str("id"),"case" to it,"template" to editorTemplate).toString())}
     }
+    /** Reconnect the controls to a running service when Android has recreated the unlocked Notes screen. */
+    internal fun returnToActiveNotesRecording() {
+        if (!BuildConfig.NOTES_ONLY || locked || legalRequired || loading || screen != "home") return
+        val owner = user?.str("id") ?: return
+        val capture = RecordingService.state.value
+        if (!capture.recording) return
+        val path = capture.filePath ?: return
+        val file = File(path)
+        val snapshot = activeNotesVisit(owner, file.canonicalPath, vault.read("recording-owner-${file.name}"), recordingRecovery.read(file)) ?: return
+        val visit = snapshot.getJSONObject("encounter").str("id")
+        if (case != null && (encounterId != visit || case?.optJSONObject("encounter")?.str("status") != "open" ||
+                case?.items("documents").orEmpty().any { it.str("status") == "signed" })) return
+        if (case == null) {
+            case = snapshot
+            restoreDraft()
+        }
+        restoreQuick()
+        val consent = vault.read("consent-record-$visit")?.let { runCatching { JSONObject(it) }.getOrNull() }
+        recordingConsent = consent != null && consent.str("method") in CONSENT_METHODS &&
+            consent.str("wording") == CONSENT_WORDING && storedInstant(consent.str("confirmed_at")) != null
+        autoStartRecording = false
+        voiceCorrection = false
+        voiceMessage = false
+        screen = "record"
+    }
     fun refreshRecordingJobs(){recordingJobs=recordingRecovery.list(user?.str("id")?:"sample")}
     var recoveryActionId by mutableStateOf<String?>(null); private set
     fun discardRecovery(job:JSONObject){
