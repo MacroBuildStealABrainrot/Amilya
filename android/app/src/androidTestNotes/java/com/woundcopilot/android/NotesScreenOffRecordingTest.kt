@@ -47,8 +47,15 @@ class NotesScreenOffRecordingTest {
                 captured = path
                 // Establish that the fixture reaches this exact recorder before putting Android to sleep.
                 Log.i("NotesLockTest", "Recorder ready for synthetic tone")
-                await("No synthetic microphone signal reached the awake foreground recorder") {
-                    RecordingService.state.value.amplitude > 0.05f
+                var audibleSince = 0L
+                var lastAudible = 0L
+                await("No sustained synthetic microphone signal reached the awake foreground recorder") {
+                    val now = SystemClock.elapsedRealtime()
+                    if (RecordingService.state.value.amplitude > 0.08f) {
+                        if (now - lastAudible > 250 || audibleSince == 0L) audibleSince = now
+                        lastAudible = now
+                    }
+                    audibleSince > 0L && now - lastAudible <= 250 && now - audibleSince >= 1_500
                 }
                 val baselineUs = (SystemClock.elapsedRealtime() - start + 1_000) * 1_000
                 SystemClock.sleep(5_000)
@@ -156,6 +163,8 @@ class NotesScreenOffRecordingTest {
                     }
                 }
                 assertTrue("AAC decoding did not complete", outputFinished)
+                awake.logMeasurements()
+                asleep.logMeasurements()
                 awake.verify()
                 Log.i("NotesLockTest", "Decoded the synthetic tone in all 3 screen-on baseline seconds.")
                 asleep.verify()
@@ -171,6 +180,7 @@ class NotesScreenOffRecordingTest {
         private var firstPts: Long? = null
         private var rate = 0
         private val frames = IntArray(seconds)
+        private val peak = IntArray(seconds)
         private val toneCycles = IntArray(seconds)
         private var belowThreshold = false
 
@@ -184,12 +194,17 @@ class NotesScreenOffRecordingTest {
                 val second = (relative / 1_000_000).toInt()
                 val value = pcm.get(index).toInt()
                 frames[second]++
+                peak[second] = maxOf(peak[second], kotlin.math.abs(value))
                 if (value < -64) belowThreshold = true
                 if (value > 64 && belowThreshold) {
                     toneCycles[second]++
                     belowThreshold = false
                 }
             }
+        }
+
+        fun logMeasurements() {
+            Log.i("NotesLockTest", "$label: $rate Hz PCM, samples ${frames.toList()}, peaks ${peak.toList()}, 440 Hz crossings ${toneCycles.toList()}")
         }
 
         fun verify() {

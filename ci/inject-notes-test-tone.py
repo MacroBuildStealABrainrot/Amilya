@@ -21,13 +21,13 @@ def tone_packets():
     )).tobytes()
     blocks = [tone[i:i + 2 * samples] for i in range(0, len(tone), 2 * samples)]
     audio_format = messages.AudioFormat(samplingRate=sample_rate, format=messages.AudioFormat.AUD_FMT_S16,
-                                        channels=messages.AudioFormat.Mono, mode=messages.AudioFormat.MODE_REAL_TIME)
-    started = time.monotonic()
-    for i in range(3000):
-        delay = started + i * period_ms / 1000 - time.monotonic()
-        if delay > 0:
-            time.sleep(delay)
-        yield messages.AudioPacket(format=audio_format, timestamp=time.time_ns() // 1000, audio=blocks[i % len(blocks)])
+                                        channels=messages.AudioFormat.Mono, mode=messages.AudioFormat.MODE_UNSPECIFIED)
+    # Let the guest pull PCM at its capture rate. Only the first packet declares the format.
+    for i in range(4500):
+        packet = messages.AudioPacket(timestamp=time.time_ns() // 1000, audio=blocks[i % len(blocks)])
+        if i == 0:
+            packet.format.CopyFrom(audio_format)
+        yield packet
 
 
 def emulator_credentials():

@@ -21,23 +21,28 @@ test "${#tests[@]}" -eq 1
 adb install -r -g "${apps[0]}"
 adb install -r -g "${tests[0]}"
 
-# Android Emulator ships the RPC schema for its virtual microphone. Generate the client
-# from the running emulator's version, and refuse a controller exposed beyond loopback.
-bindings="$RUNNER_TEMP/notes-grpc-bindings"
-python="$RUNNER_TEMP/notes-grpc/bin/python"
-mkdir -p "$bindings"
-proto="$ANDROID_HOME/emulator/lib/emulator_controller.proto"
-"$python" -m grpc_tools.protoc -I "$(dirname "$proto")" --python_out="$bindings" --grpc_python_out="$bindings" "$proto"
-# Some Linux builds report the same loopback endpoint as an IPv4-mapped IPv6 address.
-listeners=$(ss -H -ltn 'sport = :8554' | awk '{print $4}')
-test -n "$listeners"
-while IFS= read -r socket; do
-    case "$socket" in
-        127.0.0.1:8554|'[::1]:8554'|'[::ffff:127.0.0.1]:8554') ;;
-        *) echo 'Expected a loopback-only emulator controller'; exit 1 ;;
-    esac
-done <<< "$listeners"
+fixture=${1:?Specify the virtual microphone fixture}
+if [[ "$fixture" == alsa ]]; then
+    adb emu avd hostmicon | grep -q '^OK'
+else
+    # Android Emulator ships the RPC schema for its virtual microphone. Generate the client
+    # from the running emulator's version, and refuse a controller exposed beyond loopback.
+    bindings="$RUNNER_TEMP/notes-grpc-bindings"
+    python="$RUNNER_TEMP/notes-grpc/bin/python"
+    mkdir -p "$bindings"
+    proto="$ANDROID_HOME/emulator/lib/emulator_controller.proto"
+    "$python" -m grpc_tools.protoc -I "$(dirname "$proto")" --python_out="$bindings" --grpc_python_out="$bindings" "$proto"
+    # Some Linux builds report the same loopback endpoint as an IPv4-mapped IPv6 address.
+    listeners=$(ss -H -ltn 'sport = :8554' | awk '{print $4}')
+    test -n "$listeners"
+    while IFS= read -r socket; do
+        case "$socket" in
+            127.0.0.1:8554|'[::1]:8554'|'[::ffff:127.0.0.1]:8554') ;;
+            *) echo 'Expected a loopback-only emulator controller'; exit 1 ;;
+        esac
+    done <<< "$listeners"
 
+fi
 log="$RUNNER_TEMP/notes-screen-off-result.txt"
 adb logcat -c
 timeout 110s adb shell am instrument -w -e class "$test_class" \
@@ -51,13 +56,15 @@ cleanup() {
     adb logcat -d -s "NotesLockTest:I" "*:S"
 }
 trap cleanup EXIT
-for attempt in {1..100}; do
-    if adb logcat -d -s "NotesLockTest:I" "*:S" | grep -q 'Recorder ready for synthetic tone'; then break; fi
-    kill -0 "$test_pid"
-    sleep 0.2
-done
-adb logcat -d -s "NotesLockTest:I" "*:S" | grep -q 'Recorder ready for synthetic tone'
-PYTHONPATH="$bindings" "$python" -u ci/inject-notes-test-tone.py &
-injector=$!
+if [[ "$fixture" == grpc ]]; then
+    for attempt in {1..100}; do
+        if adb logcat -d -s "NotesLockTest:I" "*:S" | grep -q 'Recorder ready for synthetic tone'; then break; fi
+        kill -0 "$test_pid"
+        sleep 0.2
+    done
+    adb logcat -d -s "NotesLockTest:I" "*:S" | grep -q 'Recorder ready for synthetic tone'
+    PYTHONPATH="$bindings" "$python" -u ci/inject-notes-test-tone.py &
+    injector=$!
+fi
 wait "$test_pid"
 grep -Eq '^OK \(1 test\)' "$log"
