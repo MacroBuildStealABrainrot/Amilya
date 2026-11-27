@@ -53,23 +53,19 @@ jobs:
           cp "$WCP_SIGN_KEYSTORE" "$HOME/.android/debug.keystore"
           cd android
           bash gradlew --no-daemon -PwcpTestBuildType=notes :app:assembleNotes :app:assembleNotesAndroidTest
-      - name: Prepare a synthetic microphone
+      - name: Install the emulator’s local audio client
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils
-          pulseaudio --check || pulseaudio --start --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=notes_fixture rate=48000
-          pactl set-default-source notes_fixture.monitor
+          python3 -m venv "$RUNNER_TEMP/notes-grpc"
+          "$RUNNER_TEMP/notes-grpc/bin/pip" install --quiet grpcio-tools==1.71.0
       - name: Record the synthetic tone while the display is off
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
-          PULSE_SOURCE: notes_fixture.monitor
-          QEMU_AUDIO_DRV: pa
+          QEMU_AUDIO_DRV: none
         with:
           api-level: ${{ steps.sdk.outputs.api }}
           arch: x86_64
           target: google_apis
           profile: pixel_6
           emulator-boot-timeout: 420
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -http-proxy http://127.0.0.1:1
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -grpc 8554 -http-proxy http://127.0.0.1:1
           script: bash ci/run-notes-screen-off.sh

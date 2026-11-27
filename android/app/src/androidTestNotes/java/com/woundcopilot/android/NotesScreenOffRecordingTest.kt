@@ -45,7 +45,13 @@ class NotesScreenOffRecordingTest {
                 val start = SystemClock.elapsedRealtime()
                 val path = requireNotNull(RecordingService.state.value.filePath)
                 captured = path
-                SystemClock.sleep(1_500)
+                // Establish that the fixture reaches this exact recorder before putting Android to sleep.
+                Log.i("NotesLockTest", "Recorder ready for synthetic tone")
+                await("No synthetic microphone signal reached the awake foreground recorder") {
+                    RecordingService.state.value.amplitude > 0.05f
+                }
+                val baselineUs = (SystemClock.elapsedRealtime() - start + 1_000) * 1_000
+                SystemClock.sleep(5_000)
                 shell("input keyevent KEYCODE_SLEEP")
                 await("Emulator display never turned off") { !power.isInteractive }
                 val offAt = SystemClock.elapsedRealtime()
@@ -67,7 +73,7 @@ class NotesScreenOffRecordingTest {
                 val fromUs = (offAt - start + 1_000) * 1_000
                 val seconds = ((offUntil - offAt - 2_000) / 1_000).toInt()
                 assertTrue("Screen-off measurement was too short", seconds >= 10)
-                checkRecordedSound(File(path), fromUs, seconds)
+                checkRecordedSound(File(path), baselineUs, fromUs, seconds)
                 Log.i("NotesLockTest", "Decoded the synthetic microphone tone in all $seconds measured screen-off seconds.")
             } finally {
                 wakeScreen()
@@ -96,7 +102,7 @@ class NotesScreenOffRecordingTest {
         assertTrue(message, condition())
     }
 
-    private fun checkRecordedSound(file: File, fromUs: Long, seconds: Int) {
+    private fun checkRecordedSound(file: File, baselineUs: Long, fromUs: Long, seconds: Int) {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(file.absolutePath)
@@ -107,7 +113,8 @@ class NotesScreenOffRecordingTest {
             try {
                 decoder.configure(format, null, null, 0)
                 decoder.start()
-                val pcm = ScreenOffSamples(fromUs, seconds)
+                val awake = ToneWindow("screen-on baseline", baselineUs, 3)
+                val asleep = ToneWindow("screen-off", fromUs, seconds)
                 val info = MediaCodec.BufferInfo()
                 var inputFinished = false
                 var outputFinished = false
@@ -140,14 +147,18 @@ class NotesScreenOffRecordingTest {
                             buffer.position(info.offset)
                             buffer.limit(info.offset + info.size)
                             val samples = buffer.slice().order(ByteOrder.nativeOrder()).asShortBuffer()
-                            pcm.add(info.presentationTimeUs, outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE), samples)
+                            val sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                            awake.add(info.presentationTimeUs, sampleRate, samples)
+                            asleep.add(info.presentationTimeUs, sampleRate, samples)
                         }
                         outputFinished = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         decoder.releaseOutputBuffer(index, false)
                     }
                 }
                 assertTrue("AAC decoding did not complete", outputFinished)
-                pcm.verify()
+                awake.verify()
+                Log.i("NotesLockTest", "Decoded the synthetic tone in all 3 screen-on baseline seconds.")
+                asleep.verify()
             } finally {
                 decoder.release()
             }
@@ -156,7 +167,7 @@ class NotesScreenOffRecordingTest {
         }
     }
 
-    private class ScreenOffSamples(private val startUs: Long, seconds: Int) {
+    private class ToneWindow(private val label: String, private val startUs: Long, seconds: Int) {
         private var firstPts: Long? = null
         private var rate = 0
         private val frames = IntArray(seconds)
@@ -184,9 +195,9 @@ class NotesScreenOffRecordingTest {
         fun verify() {
             assertTrue("No decoded audio", rate > 0)
             for (second in frames.indices) {
-                assertTrue("Audio was missing in screen-off second $second (${frames[second]} samples)", frames[second] >= rate * 8 / 10)
+                assertTrue("Audio was missing in $label second $second (${frames[second]} samples)", frames[second] >= rate * 8 / 10)
                 // A 440 Hz fixture crosses the positive threshold about 440 times per second.
-                assertTrue("The 440 Hz signal was missing in screen-off second $second (${toneCycles[second]} cycles)",
+                assertTrue("The 440 Hz signal was missing in $label second $second (${toneCycles[second]} cycles)",
                     toneCycles[second] in 350..530)
             }
         }
