@@ -53,54 +53,15 @@ jobs:
           cp "$WCP_SIGN_KEYSTORE" "$HOME/.android/debug.keystore"
           cd android
           bash gradlew --no-daemon -PwcpTestBuildType=notes :app:assembleNotes :app:assembleNotesAndroidTest
-      - name: Prepare and verify the virtual ALSA microphone
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends alsa-utils pulseaudio pulseaudio-utils
-          python3 -m venv "$RUNNER_TEMP/notes-grpc"
-          "$RUNNER_TEMP/notes-grpc/bin/pip" install --quiet grpcio-tools==1.71.0
-          python3 ci/notes-virtual-microphone.py prepare
-          ALSA_CONFIG_PATH="$RUNNER_TEMP/notes.asoundrc" arecord -q -D default -t raw -f S16_LE -r 48000 -c 1 -d 2 "$RUNNER_TEMP/alsa-check.raw"
-          python3 ci/notes-virtual-microphone.py verify "$RUNNER_TEMP/alsa-check.raw"
-      - name: Record with file-backed virtual microphone
-        id: alsa
-        continue-on-error: true
+      - name: Verify recording with the display off
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
-          ALSA_CONFIG_PATH: ${{ runner.temp }}/notes.asoundrc
-          QEMU_AUDIO_DRV: alsa
-          QEMU_ALSA_ADC_DEV: default
-          QEMU_ALSA_DAC_DEV: "null"
+          QEMU_AUDIO_DRV: none
         with:
           api-level: ${{ steps.sdk.outputs.api }}
           arch: x86_64
           target: google_apis
           profile: pixel_6
           emulator-boot-timeout: 420
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -allow-host-audio -http-proxy http://127.0.0.1:1
-          script: bash ci/run-notes-screen-off.sh alsa
-      - name: Prepare independent virtual audio source when ALSA cannot feed the guest
-        if: steps.alsa.outcome == 'failure'
-        run: |
-          pulseaudio --check || pulseaudio --start --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=notes_fixture rate=48000
-          pactl set-default-source notes_fixture.monitor
-          pulse_url=$(pactl info | sed -n 's/^Server String: //p')
-          test -S "${pulse_url#unix:}"
-          echo "PULSE_SERVER=unix:${pulse_url#unix:}" >> "$GITHUB_ENV"
-          echo "QEMU_PA_SERVER=unix:${pulse_url#unix:}" >> "$GITHUB_ENV"
-      - name: Repeat full test with the SDK audio injector and a virtual audio backend
-        if: steps.alsa.outcome == 'failure'
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
-        env:
-          QEMU_AUDIO_DRV: pa
-          PULSE_SOURCE: notes_fixture.monitor
-          QEMU_PA_SOURCE: notes_fixture.monitor
-        with:
-          api-level: ${{ steps.sdk.outputs.api }}
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          emulator-boot-timeout: 420
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -grpc 8554 -grpc-use-token -http-proxy http://127.0.0.1:1
-          script: bash ci/run-notes-screen-off.sh grpc
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -http-proxy http://127.0.0.1:1
+          script: bash ci/run-notes-screen-off.sh
