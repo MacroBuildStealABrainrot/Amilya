@@ -67,5 +67,5 @@ jobs:
           target: google_apis
           profile: pixel_6
           emulator-boot-timeout: 420
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -grpc 8554 -http-proxy http://127.0.0.1:1
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -grpc 8554 -grpc-use-token -http-proxy http://127.0.0.1:1
           script: bash ci/run-notes-screen-off.sh

@@ -28,8 +28,15 @@ python="$RUNNER_TEMP/notes-grpc/bin/python"
 mkdir -p "$bindings"
 proto="$ANDROID_HOME/emulator/lib/emulator_controller.proto"
 "$python" -m grpc_tools.protoc -I "$(dirname "$proto")" --python_out="$bindings" --grpc_python_out="$bindings" "$proto"
-socket=$(ss -H -ltn 'sport = :8554' | awk '{print $4}')
-case "$socket" in 127.0.0.1:8554|'[::1]:8554') ;; *) echo 'Expected an emulator loopback listener'; exit 1 ;; esac
+# Some Linux builds report the same loopback endpoint as an IPv4-mapped IPv6 address.
+listeners=$(ss -H -ltn 'sport = :8554' | awk '{print $4}')
+test -n "$listeners"
+while IFS= read -r socket; do
+    case "$socket" in
+        127.0.0.1:8554|'[::1]:8554'|'[::ffff:127.0.0.1]:8554') ;;
+        *) echo 'Expected a loopback-only emulator controller'; exit 1 ;;
+    esac
+done <<< "$listeners"
 
 log="$RUNNER_TEMP/notes-screen-off-result.txt"
 adb logcat -c
