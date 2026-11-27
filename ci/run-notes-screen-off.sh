@@ -60,4 +60,9 @@ if [[ "$variant" == lite ]]; then
     grep -Eq '^OK \(1 test\)' "$log"
     run_method transcriptStaysAvailableWhenReportOrCaptureRoutesAreRequested
     grep -Eq '^OK \(1 test\)' "$log"
+    test_class=com.woundcopilot.android.VoiceSavedRecordingRecoveryTest
+    run_method savedRecordingAutomaticallyRecoversWhenTheLegacyServerFinishes
+    grep -Eq '^OK \(1 test\)' "$log"
+    run_method unconfirmedRecordingStaysPlayableAfterTheLastAutomaticCheck
+    grep -Eq '^OK \(1 test\)' "$log"
 fi
