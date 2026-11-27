@@ -56,6 +56,8 @@ fi
 
 if [[ "$variant" == lite ]]; then
     test_class=com.woundcopilot.android.VoiceTranscriptScreenTest
+    run_method tappingStopOpensTheEditableTranscript
+    grep -Eq '^OK \(1 test\)' "$log"
     run_method transcriptStaysAvailableWhenReportOrCaptureRoutesAreRequested
     grep -Eq '^OK \(1 test\)' "$log"
 fi

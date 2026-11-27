@@ -3,6 +3,8 @@ package com.woundcopilot.android
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiteVoiceTest {
@@ -34,6 +36,24 @@ class LiteVoiceTest {
     @Test fun unlabelledWordsStaySeparateFromAttributedSpeech() {
         val segments = JSONArray(listOf(piece("", 0), piece("One.", 0), piece("Two.", null), piece("Three.", 0)))
         assertEquals("Speaker 1: One.\n\nTwo.\n\nSpeaker 1: Three.", liteSpeakerText(segments, "One. Two. Three."))
+    }
+
+    @Test fun changedSpeechKeepsOriginalWordsAndAudioForPlaybackAcrossRestart() {
+        val guessed = obj("text" to "Hello.", "metadata" to obj("original_transcript" to "Hello. Thank you."))
+        val otherLanguage = obj("text" to "", "metadata" to obj("original_transcript" to "أهلاً بك."))
+        for (evidence in listOf(guessed, otherLanguage)) {
+            assertTrue(liteKeepAudio(evidence))
+            val raw = liteTranscript(evidence, false)
+            val draft = LiteVoiceDraft("").append("capture.m4a", raw, keepAudio = liteKeepAudio(evidence))
+            val restored = LiteVoiceDraft.restore(draft.encode(), null)
+            assertEquals(evidence.getJSONObject("metadata").getString("original_transcript"), restored.text)
+            assertTrue("capture.m4a" in restored.kept)
+            assertEquals(restored, restored.append("capture.m4a", raw))
+        }
+        assertFalse(liteKeepAudio(obj("text" to "Hello. صباح الخير.", "warnings" to JSONArray(listOf("Review before saving.")))))
+        val repeated = obj("text" to "No. No. No.", "warnings" to JSONArray(listOf(
+            "A sentence with a number, dose, negation or side was repeated 3 or more times in a row.")))
+        assertTrue(liteKeepAudio(repeated))
     }
 
     @Test fun retriedRecordingKeepsEditedTextAndOtherVoicesOnce() {
