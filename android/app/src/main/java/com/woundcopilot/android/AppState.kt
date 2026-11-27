@@ -241,10 +241,17 @@ class AppState(application:Application):AndroidViewModel(application) {
         get() = noticeFeedback.text
         set(value) { noticeFeedback = noticeFeedback.replace(value) }
     val noticeMessageSequence get() = noticeFeedback.sequence
+    private val voiceScreens = setOf("welcome", "login", "signup", "reconnect", "home", "account")
     private var screenValue by mutableStateOf("welcome")
     var screen: String
         get() = screenValue
-        set(value) { screenValue = if (BuildConfig.NOTES_ONLY && !notesRouteAllowed(value)) "home" else value }
+        set(value) {
+            screenValue = when {
+                BuildConfig.LITE_VOICE && value !in voiceScreens -> "home"
+                BuildConfig.NOTES_ONLY && !notesRouteAllowed(value) -> "home"
+                else -> value
+            }
+        }
     var dark by mutableStateOf(vault.read("theme") != "light")
     var patients by mutableStateOf<List<JSONObject>>(emptyList()); private set
     var encounters by mutableStateOf<List<JSONObject>>(emptyList()); private set
@@ -428,6 +435,7 @@ class AppState(application:Application):AndroidViewModel(application) {
     fun signup(email:String,password:String,name:String,workspace:String)=runTask {persistEditor();clearClinical();demo=false;user=null;api.clear();val version=config.str("legal_version");setSession(api.call("/auth/signup","POST",obj("email" to email.trim(),"password" to password,"display_name" to name,"workspace_name" to workspace,"accept_terms" to true,"terms_version" to version,"privacy_version" to version)) as JSONObject);refreshHome();screen="home"}
     fun acceptLegal()=runTask {api.call("/auth/accept-legal","POST",obj("accept_terms" to true,"terms_version" to config.str("legal_version"),"privacy_version" to config.str("legal_version")));legalRequired=false;refreshHome();screen="home"}
     suspend fun refreshHome(){
+        if (BuildConfig.LITE_VOICE) return
         if(demo){publishDemo();return}
         val owner=user?.str("id")?:return
         coroutineScope{

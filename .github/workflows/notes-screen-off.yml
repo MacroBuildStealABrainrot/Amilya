@@ -1,9 +1,9 @@
-name: Notes screen-off recording
+name: Screen-off recording
 
 on:
   workflow_dispatch:
   push:
-    branches: ['fix/notes-screen-*']
+    branches: ['fix/notes-screen-*', 'fix/voice-transcript-*']
 
 permissions:
   contents: read
@@ -16,6 +16,8 @@ jobs:
   record:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      RECORDER_VARIANT: ${{ startsWith(github.ref_name, 'fix/voice-transcript-') && 'lite' || 'notes' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +41,7 @@ jobs:
           fi
           "$sdkmanager" --install 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
           sudo chmod a+rw /dev/kvm
-      - name: Build Notes and its test with a disposable emulator certificate
+      - name: Build the recorder and its test with a disposable emulator certificate
         env:
           WCP_SIGN_KEYSTORE: ${{ runner.temp }}/notes-emulator.p12
           WCP_SIGN_STORE_PASSWORD: android
@@ -52,7 +54,7 @@ jobs:
           mkdir -p "$HOME/.android"
           cp "$WCP_SIGN_KEYSTORE" "$HOME/.android/debug.keystore"
           cd android
-          bash gradlew --no-daemon -PwcpTestBuildType=notes :app:assembleNotes :app:assembleNotesAndroidTest
+          bash gradlew --no-daemon "-PwcpTestBuildType=$RECORDER_VARIANT" ":app:assemble${RECORDER_VARIANT^}" ":app:assemble${RECORDER_VARIANT^}AndroidTest"
       - name: Verify recording with the display off
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:

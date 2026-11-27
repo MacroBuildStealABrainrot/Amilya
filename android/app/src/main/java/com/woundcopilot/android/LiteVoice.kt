@@ -27,63 +27,86 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/**
- * "Amilya Voice": the full-strength voice-to-text app. It does one job: record the whole visit (nurse and client), turn it
- * into text, and let you share that text. No patient charts, photos, reports or consultant.
- *
- * Recording uses the main app's own recorder service: it keeps recording with the screen locked or while another app is
- * open, can be paused, warns if the phone silences the microphone, and keeps the recording if the app is closed.
- * Transcription uses the server's existing full-visit steps (medical speech model, speaker detection, 2-minute pieces
- * that can be retried without paying twice). No new server code and no report step.
- */
 private const val LITE_MAX_SECONDS = 58 * 60
 
-/**
- * Turns the transcript's pieces into "Speaker 1: ... Speaker 2: ..." paragraphs. Speaker numbers come from the speech
- * service and are only reliable inside each 2-minute piece, so the app says so next to the switch. Returns [plain]
- * unchanged when the pieces carry no speaker information.
- */
+private val transcriptWhitespace = Regex("\\s+")
+
+/** Label only complete, word-for-word segments. Providers can return partial or filtered segments. */
 internal fun liteSpeakerText(segments: JSONArray?, plain: String): String {
-    if (segments == null || segments.length() == 0) return plain
-    val out = StringBuilder()
-    var last = Int.MIN_VALUE
-    var any = false
+    if (segments == null || plain.isBlank()) return plain
+    val words = mutableListOf<String>()
+    val formatted = StringBuilder()
+    var previousSpeaker: Int? = null
+    var hasLabel = false
     for (i in 0 until segments.length()) {
         val item = segments.optJSONObject(i) ?: continue
-        val words = item.optString("text").trim()
-        if (words.isEmpty()) continue
-        val speaker = if (item.has("speaker") && !item.isNull("speaker")) item.optInt("speaker", -1) else -1
-        if (speaker < 0) { if (out.isNotEmpty()) out.append(' '); out.append(words); continue }
-        any = true
-        if (speaker != last) { if (out.isNotEmpty()) out.append("\n\n"); out.append("Speaker ").append(speaker + 1).append(": "); last = speaker }
-        else out.append(' ')
-        out.append(words)
+        val phrase = item.str("text").trim()
+        if (phrase.isEmpty()) continue
+        words += phrase
+        val speaker = item.optInt("speaker", -1).takeIf { it >= 0 }
+        if (formatted.isNotEmpty()) formatted.append(if (speaker == previousSpeaker) " " else "\n\n")
+        if (speaker != null && speaker != previousSpeaker) {
+            formatted.append("Speaker ").append(speaker + 1).append(": ")
+            hasLabel = true
+        }
+        formatted.append(phrase)
+        previousSpeaker = speaker
     }
-    return if (any) out.toString().trim() else plain
+    val complete = words.joinToString(" ").replace(transcriptWhitespace, " ") == plain.trim().replace(transcriptWhitespace, " ")
+    return if (hasLabel && complete) formatted.toString() else plain
 }
 
-private suspend fun liteVisit(s: AppState, owner: String): String {
+internal fun liteTranscript(evidence: JSONObject, labels: Boolean): String {
+    val metadata = evidence.optJSONObject("metadata")
+    val plain = (metadata?.str("original_transcript")?.takeIf { it.isNotBlank() } ?: evidence.str("text")).trim()
+    return if (labels) liteSpeakerText(metadata?.optJSONArray("segments"), plain) else plain
+}
+
+/** Text and applied recording names are saved in one atomic write before a recording is removed. */
+internal data class LiteVoiceDraft(val text: String, val applied: Set<String> = emptySet()) {
+    fun append(fileName: String, words: String): LiteVoiceDraft {
+        if (words.isBlank() || fileName in applied) return this
+        val joined = if (text.isBlank()) words else text.trimEnd() + "\n\n" + words
+        return LiteVoiceDraft(joined, applied + fileName)
+    }
+
+    fun encode() = obj("text" to text, "applied" to JSONArray(applied.toList())).toString()
+
+    companion object {
+        fun restore(saved: String?, legacyText: String?): LiteVoiceDraft {
+            if (saved == null) return LiteVoiceDraft(legacyText.orEmpty())
+            val data = JSONObject(saved)
+            val files = data.getJSONArray("applied")
+            return LiteVoiceDraft(data.getString("text"), (0 until files.length()).map { files.getString(it) }.toSet())
+        }
+    }
+}
+
+private suspend fun liteVisit(s: AppState, owner: String, checkSession: () -> Unit): String {
+    checkSession()
     val cache = "lite-visit-$owner"
     s.vault.read(cache)?.takeIf { it.isNotBlank() }?.let { return it }
     val request = UUID.randomUUID().toString()
     val response = s.api.call("/quick/start", "POST", obj("mode" to "document", "request_id" to request), request) as JSONObject
-    val id = response.getJSONObject("encounter").str("id")
+    checkSession()
+    val id = response.getJSONObject("encounter").getString("id")
     s.vault.write(cache, id)
     return id
 }
 
 /** Sends the whole recording (you and the client) in short pieces and returns the finished transcript. No report is made. */
-private suspend fun liteTranscribe(s: AppState, owner: String, file: File, stage: (String) -> Unit): JSONObject {
+private suspend fun liteTranscribe(s: AppState, owner: String, file: File, checkSession: () -> Unit, stage: (String) -> Unit): JSONObject {
     if (s.demo) return obj("text" to "Sample only. No transcription was performed.")
     val key = "lite-$owner-${file.name}"
     suspend fun once(): JSONObject {
-        val visit = liteVisit(s, owner)
+        val visit = liteVisit(s, owner, checkSession)
         val result = AudioChunks(s.api, s.vault).transcribe(visit, file, key, null) { stage(it) }
-        return result.optJSONObject("evidence") ?: JSONObject()
+        return result.getJSONObject("evidence")
     }
-    return try { once() } catch (e: CancellationException) { throw e } catch (e: Exception) {
+    return try { once() } catch (e: CancellationException) { throw e } catch (e: ApiException) {
         // The temporary holder visit can expire on the server. Make a fresh one once and start this recording again.
-        if (e.message.orEmpty().contains("not found", ignoreCase = true)) {
+        if (e.status == 404) {
+            checkSession()
             s.vault.remove("lite-visit-$owner"); s.vault.remove("audio-batch-$key"); once()
         } else throw e
     }
@@ -91,68 +114,118 @@ private suspend fun liteTranscribe(s: AppState, owner: String, file: File, stage
 
 @Composable
 fun LiteVoiceScreen(s: AppState) {
+    val owner = s.user?.str("id") ?: if (s.demo) "sample" else return
+    key(owner) { VoiceRecordingScreen(s, owner) }
+}
+
+@Composable
+private fun VoiceRecordingScreen(s: AppState, owner: String) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val owner = s.user?.str("id") ?: "sample"
     val rec by RecordingService.state.collectAsState()
+    val ownerKey = "$owner:lite"
+    val activeOwner = remember(rec.filePath) { rec.filePath?.let { s.vault.read("recording-owner-${File(it).name}") } }
+    val draftKey = "lite-draft-$owner"
+    val legacyKey = "lite-text-$owner"
+    var draft by remember { mutableStateOf(LiteVoiceDraft.restore(s.vault.read(draftKey), s.vault.read(legacyKey))) }
+    val text = draft.text
     var working by remember { mutableStateOf(false) }
     var stageLabel by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
-    var text by remember { mutableStateOf(s.vault.read("lite-text-$owner").orEmpty()) }
-    var labels by remember { mutableStateOf(s.vault.read("lite-labels-$owner") != "off") }
+    var labels by remember { mutableStateOf(s.vault.read("lite-labels-$owner") == "on") }
     var pending by remember { mutableStateOf<File?>(null) }
-    var watched by remember { mutableStateOf<String?>(null) }
+    var emptyCapture by remember { mutableStateOf<String?>(null) }
+    var stopToTranscribe by remember { mutableStateOf<String?>(null) }
 
-    fun saveText(value: String) { text = value; if (value.isBlank()) s.vault.remove("lite-text-$owner") else s.vault.write("lite-text-$owner", value) }
+    fun sessionActive() = (s.user?.str("id") ?: if (s.demo) "sample" else null) == owner && !s.locked && !s.legalRequired
+    fun checkSession() {
+        if (!sessionActive()) throw CancellationException("Voice session changed")
+    }
+    fun owns(file: File) = s.vault.read("recording-owner-${file.name}") == ownerKey
+    fun saveDraft(value: LiteVoiceDraft) {
+        s.vault.write(draftKey, value.encode())
+        draft = value
+        s.vault.remove(legacyKey)
+    }
+    fun saveText(value: String) = saveDraft(draft.copy(text = value))
 
     suspend fun refreshPending() {
-        pending = withContext(Dispatchers.IO) {
-            runCatching { RecordingService.pendingRecordings(context).firstNotNullOfOrNull { it.filePath }?.let { File(it) } }.getOrNull()
+        val file = withContext(Dispatchers.IO) {
+            RecordingService.pendingRecordings(context).asSequence().mapNotNull { it.filePath?.let(::File) }.firstOrNull(::owns)
         }
+        emptyCapture = file?.takeIf { s.vault.read("lite-empty-$owner-${it.name}") != null }?.name
+        pending = file
     }
-    // Saved recordings that were never turned into text (an error, or the app was closed) are offered again here.
-    LaunchedEffect(Unit) { refreshPending() }
-    LaunchedEffect(rec.recording, rec.filePath) {
-        if (rec.recording) watched = rec.filePath
-        else if (watched != null && rec.filePath == watched) { watched = null; refreshPending() }
-    }
-    LaunchedEffect(rec.elapsedSeconds, rec.recording) {
-        if (rec.recording && rec.elapsedSeconds >= LITE_MAX_SECONDS) {
-            RecordingService.stop(context)
-            message = "Recording stopped after about an hour, which is the longest one recording can be. Tap Turn into text, then record more if the visit is not finished."
-        }
+
+    fun removeRecording(file: File) {
+        RecordingService.clearPending(context, file.absolutePath, deleteFile = true)
+        s.vault.remove("audio-batch-lite-$owner-${file.name}")
+        s.vault.remove("lite-empty-$owner-${file.name}")
+        s.vault.remove("recording-owner-${file.name}")
+        if (file.name in draft.applied) saveDraft(draft.copy(applied = draft.applied - file.name))
     }
 
     fun turnIntoText(file: File) {
-        if (working || rec.recording) return
+        if (working || rec.recording || !sessionActive() || !owns(file)) return
+        working = true
         scope.launch {
-            working = true; message = null; stageLabel = "Starting"
+            message = null
+            stageLabel = "Starting"
             try {
-                val evidence = liteTranscribe(s, owner, file) { stageLabel = it }
-                val plain = evidence.str("text").trim()
-                val heard = if (labels) liteSpeakerText(evidence.optJSONObject("metadata")?.optJSONArray("segments"), plain).trim() else plain
-                if (heard.isBlank()) message = "No speech was found in this recording. Move the phone closer to both people and record again."
-                else saveText(if (text.isBlank()) heard else text.trimEnd() + "\n\n" + heard)
-                s.vault.remove("audio-batch-lite-$owner-${file.name}")
-                runCatching { RecordingService.clearPending(context, file.absolutePath, deleteFile = true) }
+                if (file.name !in draft.applied) {
+                    val evidence = liteTranscribe(s, owner, file, ::checkSession) {
+                        checkSession()
+                        stageLabel = it
+                    }
+                    if (!sessionActive()) return@launch
+                    val heard = liteTranscript(evidence, labels)
+                    if (heard.isBlank()) {
+                        s.vault.write("lite-empty-$owner-${file.name}", "1")
+                        emptyCapture = file.name
+                        return@launch
+                    }
+                    saveDraft(draft.append(file.name, heard))
+                }
+                removeRecording(file)
                 refreshPending()
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                message = (e.message?.takeIf { it.isNotBlank() } ?: "The text could not be made.") + " Your recording is saved on this phone. Tap Turn into text to try again."
+                message = if (file.name in draft.applied) "Your text is saved. Tap Finish to clear the recording."
+                    else (e.message?.takeIf { it.isNotBlank() } ?: "The recording could not be transcribed.") + " Your recording is saved on this phone."
             } finally { working = false }
+        }
+    }
+
+    // Only an explicit Stop on this screen initiates transcription. Recovered captures await a tap.
+    LaunchedEffect(rec.recording, rec.filePath) {
+        if (!rec.recording) {
+            val requested = stopToTranscribe
+            stopToTranscribe = null
+            refreshPending()
+            if (requested != null && requested == rec.filePath && rec.error == null) turnIntoText(File(requested))
+        }
+    }
+    LaunchedEffect(rec.elapsedSeconds, rec.recording) {
+        if (rec.recording && activeOwner == ownerKey && rec.elapsedSeconds >= LITE_MAX_SECONDS) {
+            RecordingService.stop(context)
+            message = "Recording reached the time limit. Tap Turn into text."
         }
     }
 
     fun micGranted() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     fun notificationsGranted() = android.os.Build.VERSION.SDK_INT < 33 ||
         ContextCompat.checkSelfPermission(context, RecordingPermissions.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-    fun begin() { message = null; RecordingService.start(context, "$owner:lite") }
+    fun begin() {
+        if (!sessionActive() || working || RecordingService.state.value.recording) return
+        message = null
+        RecordingService.start(context, ownerKey)
+    }
 
     // Microphone (required) and, once, notifications on Android 13+ so Stop is in the notification shade. Refusing notifications never blocks recording.
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
         if (RecordingPermissions.mayRecord(micGranted())) begin() else message = "Amilya Voice needs the microphone. Allow it in your phone's Settings."
     }
     fun startRecording() {
-        if (working) return
+        if (working || !sessionActive()) return
         val needed = RecordingPermissions.toRequest(android.os.Build.VERSION.SDK_INT, micGranted(), notificationsGranted(),
             s.vault.read(RecordingPermissions.NOTIFICATIONS_ASKED_KEY) != null)
         if (needed.isEmpty()) begin()
@@ -162,17 +235,19 @@ fun LiteVoiceScreen(s: AppState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Amilya Voice", style = MaterialTheme.typography.headlineMedium)
-        Text("Record the visit: you and the client. Get the text. Share it. No report is made.", style = MaterialTheme.typography.bodyLarge)
+        Text("Record the conversation. Tap Stop to turn speech into text.", style = MaterialTheme.typography.bodyLarge)
         if (s.demo) Text("Sample mode: nothing is sent and no real text is made.", color = MaterialTheme.colorScheme.error)
 
-        if (rec.recording) {
+        if (rec.recording && activeOwner != ownerKey) {
+            Text("Another account has an active recording.")
+        } else if (rec.recording) {
             val label = if (rec.paused) "Paused" else "Recording"
             Text("$label  %d:%02d".format(rec.elapsedSeconds / 60, rec.elapsedSeconds % 60), style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.error)
             Text("It keeps recording with the screen locked or while you use other apps. Stop it here or in the notification.",
                 style = MaterialTheme.typography.bodyMedium)
             rec.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            WcpButton("Stop", { RecordingService.stop(context) }, Modifier.fillMaxWidth())
+            WcpButton("Stop", { stopToTranscribe = rec.filePath; RecordingService.stop(context) }, Modifier.fillMaxWidth())
             WcpButton(if (rec.paused) "Resume" else "Pause", { if (rec.paused) RecordingService.resume(context) else RecordingService.pause(context) },
                 Modifier.fillMaxWidth(), secondary = true)
         } else {
@@ -185,7 +260,7 @@ fun LiteVoiceScreen(s: AppState) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Speaker labels", style = MaterialTheme.typography.titleSmall)
-                    Text("Marks who is talking. Check them: the numbers can swap every 2 minutes.", style = MaterialTheme.typography.bodySmall)
+                    Text("Adds speaker numbers when available. The numbers can change between sections.", style = MaterialTheme.typography.bodySmall)
                 }
                 Switch(checked = labels, onCheckedChange = { labels = it; s.vault.write("lite-labels-$owner", if (it) "on" else "off") }, enabled = !working)
             }
@@ -193,10 +268,22 @@ fun LiteVoiceScreen(s: AppState) {
 
         pending?.let { file ->
             if (!rec.recording) {
-                WcpButton(if (working) "Making text... $stageLabel" else "Turn into text", { turnIntoText(file) }, Modifier.fillMaxWidth(), enabled = !working)
+                if (emptyCapture == file.name) {
+                    Text("The speech service returned no text. Your recording is still on this phone.")
+                    LocalMediaPreview(file, "audio")
+                } else {
+                    val action = when {
+                        working -> "Transcribing… $stageLabel"
+                        file.name in draft.applied -> "Finish"
+                        else -> "Turn into text"
+                    }
+                    WcpButton(action, { turnIntoText(file) }, Modifier.fillMaxWidth(), enabled = !working)
+                }
                 if (!working) WcpButton("Delete this recording", {
-                    runCatching { RecordingService.clearPending(context, file.absolutePath, deleteFile = true) }
-                    scope.launch { refreshPending() }
+                    if (sessionActive() && owns(file)) {
+                        runCatching { removeRecording(file) }.onFailure { message = "Could not delete the recording." }
+                        scope.launch { refreshPending() }
+                    }
                 }, Modifier.fillMaxWidth(), secondary = true)
             }
         }

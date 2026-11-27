@@ -229,11 +229,11 @@ fun AccountScreen(state: AppState) {
             Text("Offer biometrics on return",Modifier.weight(1f))
             Switch(automaticBiometrics,{automaticBiometrics=it;state.vault.write("biometric-auto",it.toString())})
         }
-        if (!com.woundcopilot.android.BuildConfig.NOTES_ONLY && !state.demo && user.optBoolean("is_platform_admin")) {
+        if (!com.woundcopilot.android.BuildConfig.NOTES_ONLY && !com.woundcopilot.android.BuildConfig.LITE_VOICE && !state.demo && user.optBoolean("is_platform_admin")) {
             WcpButton("Open administration", { state.screen = "admin" }, Modifier.fillMaxWidth(), secondary = true)
         }
         WcpButton("Contact support", { support = true }, Modifier.fillMaxWidth(), secondary = true)
-        if(!com.woundcopilot.android.BuildConfig.NOTES_ONLY && !state.demo && user.optBoolean("is_platform_admin"))com.woundcopilot.android.SharePerformanceDiagnostics(state)
+        if(!com.woundcopilot.android.BuildConfig.NOTES_ONLY && !com.woundcopilot.android.BuildConfig.LITE_VOICE && !state.demo && user.optBoolean("is_platform_admin"))com.woundcopilot.android.SharePerformanceDiagnostics(state)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { legal = "terms" }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Terms of Use") }
             TextButton(onClick = { legal = "privacy" }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Privacy Policy") }
