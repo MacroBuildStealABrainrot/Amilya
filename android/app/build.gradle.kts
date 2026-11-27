@@ -181,8 +181,8 @@ android {
 androidComponents {
     onVariants(selector().withBuildType("lite")) { variant ->
         variant.outputs.forEach { output ->
-            output.versionCode.set(87)
-            output.versionName.set("1.9.5-lite")
+            output.versionCode.set(88)
+            output.versionName.set("1.9.6-lite")
         }
     }
     onVariants(selector().withBuildType("notes")) { variant ->

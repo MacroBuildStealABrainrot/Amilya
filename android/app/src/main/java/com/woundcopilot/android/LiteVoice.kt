@@ -109,21 +109,99 @@ private suspend fun liteVisit(s: AppState, owner: String, checkSession: () -> Un
     return id
 }
 
-/** Sends the whole recording (you and the client) in short pieces and returns the finished transcript. No report is made. */
-private suspend fun liteTranscribe(s: AppState, owner: String, file: File, checkSession: () -> Unit, stage: (String) -> Unit): JSONObject {
+/** Keep one recording on its original visit and job while any section has an uncertain outcome. */
+private suspend fun liteTranscribe(
+    s: AppState, owner: String, file: File, manual: Boolean, checkSession: () -> Unit,
+    onPending: (VoicePendingPart) -> Unit, stage: (String) -> Unit,
+): JSONObject {
     if (s.demo) return obj("text" to "Sample only. No transcription was performed.")
     val key = "lite-$owner-${file.name}"
-    suspend fun once(): JSONObject {
-        val visit = liteVisit(s, owner, checkSession)
-        val result = AudioChunks(s.api, s.vault).transcribe(visit, file, key, null) { stage(it) }
-        return result.getJSONObject("evidence")
-    }
-    return try { once() } catch (e: CancellationException) { throw e } catch (e: ApiException) {
-        // The temporary holder visit can expire on the server. Make a fresh one once and start this recording again.
-        if (e.status == 404) {
+    val checkpoint = "audio-batch-$key"
+    val pendingKey = "lite-pending-$owner-${file.name}"
+    var pending = s.vault.read(pendingKey)?.let(VoicePendingPart::read)
+    var allowManualReplay = manual && pending != null
+    val visitKey = "lite-recording-visit-$owner-${file.name}"
+    val newBatch = s.vault.read(checkpoint) == null
+    // Older builds stored the visit per account. Bind that value to the existing recording on upgrade.
+    val recordingVisit = s.vault.read(visitKey)
+    val cachedVisit = voiceRecordingVisit(pending?.visit, recordingVisit, s.vault.read("lite-visit-$owner"), newBatch)
+    var visit = cachedVisit ?: liteVisit(s, owner, checkSession)
+    s.vault.write(visitKey, visit)
+    var mayReplaceExpiredVisit = newBatch && pending == null
+    while (true) {
+        checkSession()
+        val part = pending
+        if (part != null) {
+            val batch = s.vault.read(checkpoint)?.let(::JSONObject)
+            check(batch != null && batch.str("job_id") == part.job &&
+                batch.optJSONArray("files")?.length() == part.count) { "Could not find the original transcription request." }
+            batch.optJSONObject("result")?.let { return it.getJSONObject("evidence") }
+            if (batch.optInt("completed", -1) == part.index) {
+                stage("Checking the saved transcription")
+                val outcome = waitForVoicePart(part, allowManualReplay) {
+                    checkSession()
+                    checkVoicePart(part) { path, method, body, requestKey ->
+                        checkSession()
+                        s.api.call(path, method, body, requestKey) as JSONObject
+                    }
+                }
+                checkSession()
+                when (outcome) {
+                    VoicePartCheck.Ready -> {
+                        // The server has durably accepted these bytes; finish any remaining sections.
+                        check(part.matches(batch))
+                        batch.put("completed", part.index + 1)
+                    }
+                    is VoicePartCheck.Complete -> batch.put("result", outcome.result)
+                    VoicePartCheck.LegacyIncomplete -> {
+                        // A deliberate retry on a legacy server reuses the same visit, job, index and bytes.
+                        // If the service still cannot confirm that section, display the saved status again.
+                        allowManualReplay = false
+                        mayReplaceExpiredVisit = false
+                    }
+                    VoicePartCheck.Waiting -> throw VoiceStillPending()
+                }
+                s.vault.write(checkpoint, batch.toString())
+            } else {
+                // The app may have closed between advancing the checkpoint and clearing its pending marker.
+                check(batch.getInt("completed") in part.index + 1..part.count)
+            }
+            // Keep the receipt until the next section is acknowledged or a full result is durably saved.
+            // A network failure during a manual replay must not erase the original request identity.
+            pending = null
+            batch.optJSONObject("result")?.let { result ->
+                // Partial M4A copies created by AudioChunks normally disappear after assembly.
+                val segments = File(file.parentFile, "segments").canonicalFile
+                val files = batch.getJSONArray("files")
+                for (index in 0 until files.length()) {
+                    val segment = File(files.getString(index)).canonicalFile
+                    if (segment.parentFile == segments) segment.delete()
+                }
+                return result.getJSONObject("evidence")
+            }
+        }
+        try {
+            val result = AudioChunks(s.api, s.vault).transcribe(visit, file, key, null, stage)
+            return result.getJSONObject("evidence")
+        } catch (e: ApiException) {
             checkSession()
-            s.vault.remove("lite-visit-$owner"); s.vault.remove("audio-batch-$key"); once()
-        } else throw e
+            if (e.voicePending()) {
+                val batch = JSONObject(checkNotNull(s.vault.read(checkpoint)))
+                val saved = VoicePendingPart.from(visit, batch, e)
+                s.vault.write(pendingKey, saved.encode())
+                pending = saved
+                onPending(saved)
+                mayReplaceExpiredVisit = false
+            } else if (e.status == 404 && mayReplaceExpiredVisit) {
+                mayReplaceExpiredVisit = false
+                val batch = s.vault.read(checkpoint)?.let(::JSONObject)
+                if (batch != null && batch.optInt("completed", -1) != 0) throw e
+                s.vault.remove("lite-visit-$owner")
+                s.vault.remove(checkpoint)
+                visit = liteVisit(s, owner, checkSession)
+                s.vault.write(visitKey, visit)
+            } else throw e
+        }
     }
 }
 
@@ -152,6 +230,8 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
     var selectedName by remember { mutableStateOf<String?>(null) }
     val pending = pendingFiles.firstOrNull { it.name == selectedName } ?: pendingFiles.firstOrNull()
     var emptyFiles by remember { mutableStateOf(emptySet<String>()) }
+    var awaiting by remember { mutableStateOf(emptyMap<String, VoicePendingPart>()) }
+    fun pendingKey(file: File) = "lite-pending-$owner-${file.name}"
     fun stopKey(file: File) = "lite-transcribe-$owner-${file.name}"
 
     fun sessionActive() = (s.user?.str("id") ?: if (s.demo) "sample" else null) == owner && !s.locked && !s.legalRequired
@@ -171,6 +251,9 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
             val files = RecordingService.pendingRecordings(context).mapNotNull { it.filePath?.let(::File) }.filter(::owns)
             files to files.map { it.name }.filter { s.vault.read("lite-empty-$owner-$it") != null }.toSet()
         }
+        awaiting = files.mapNotNull { file ->
+            s.vault.read(pendingKey(file))?.let { file.name to VoicePendingPart.read(it) }
+        }.toMap()
         pendingFiles = files
         emptyFiles = empty
     }
@@ -179,12 +262,14 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
         RecordingService.clearPending(context, file.absolutePath, deleteFile = true)
         s.vault.remove("audio-batch-lite-$owner-${file.name}")
         s.vault.remove(stopKey(file))
+        s.vault.remove(pendingKey(file))
+        s.vault.remove("lite-recording-visit-$owner-${file.name}")
         s.vault.remove("lite-empty-$owner-${file.name}")
         s.vault.remove("recording-owner-${file.name}")
         if (file.name in draft.applied) saveDraft(draft.copy(applied = draft.applied - file.name, kept = draft.kept - file.name))
     }
 
-    fun turnIntoText(file: File) {
+    fun turnIntoText(file: File, manual: Boolean = false) {
         if (working || rec.recording || !sessionActive() || !owns(file)) return
         working = true
         selectedName = file.name
@@ -193,11 +278,15 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
             stageLabel = "Starting"
             try {
                 if (file.name !in draft.applied) {
-                    val evidence = liteTranscribe(s, owner, file, ::checkSession) {
+                    val evidence = liteTranscribe(s, owner, file, manual, ::checkSession, { part ->
+                        awaiting = awaiting + (file.name to part)
+                    }) {
                         checkSession()
                         stageLabel = it
                     }
                     if (!sessionActive()) return@launch
+                    s.vault.remove(pendingKey(file))
+                    awaiting = awaiting - file.name
                     val heard = liteTranscript(evidence, labels)
                     if (heard.isBlank()) {
                         s.vault.write("lite-empty-$owner-${file.name}", "1")
@@ -214,9 +303,12 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
                     removeRecording(file)
                     refreshPending()
                 }
+            } catch (e: VoiceStillPending) {
+                s.vault.remove(stopKey(file))
             } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 s.vault.remove(stopKey(file))
-                message = if (file.name in draft.applied) "Your text is saved. Tap Finish to clear the recording."
+                message = if (awaiting.containsKey(file.name)) "Couldn’t check the transcript. Try Check again when you’re connected."
+                    else if (file.name in draft.applied) "Your text is saved. Tap Finish to clear the recording."
                     else (e.message?.takeIf { it.isNotBlank() } ?: "The recording could not be transcribed.") + " Your recording is saved on this phone."
             } finally { working = false }
         }
@@ -229,7 +321,7 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
     LaunchedEffect(pendingFiles, working, rec.recording, s.locked, s.legalRequired) {
         if (!working && !rec.recording && sessionActive()) {
             rec.filePath?.takeIf { rec.error != null }?.let { s.vault.remove(stopKey(File(it))) }
-            pendingFiles.firstOrNull { s.vault.read(stopKey(it)) != null }?.let(::turnIntoText)
+            pendingFiles.firstOrNull { s.vault.read(stopKey(it)) != null }?.let { turnIntoText(it) }
         }
     }
     LaunchedEffect(rec.elapsedSeconds, rec.recording) {
@@ -317,16 +409,25 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
                         }
                     }
                 }
+                val waiting = awaiting[file.name]
+                if (waiting != null && !working) {
+                    Text(if (waiting.review) "The service could not confirm the transcription. Your recording is saved on this phone."
+                        else "Your transcript isn’t ready yet. Your recording is saved on this phone.")
+                    waiting.reference?.let { Text("Support reference: $it", style = MaterialTheme.typography.bodySmall) }
+                    LocalMediaPreview(file, "audio")
+                }
                 if (file.name in emptyFiles || file.name in draft.kept) {
                     if (file.name in emptyFiles) Text("The speech service returned no text. Your recording is still on this phone.")
                     LocalMediaPreview(file, "audio")
                 } else {
                     val action = when {
+                        working && waiting != null -> "Checking the saved transcription…"
                         working -> "Transcribing… $stageLabel"
+                        waiting != null -> "Check again"
                         file.name in draft.applied -> "Finish"
                         else -> "Turn into text"
                     }
-                    WcpButton(action, { turnIntoText(file) }, Modifier.fillMaxWidth(), enabled = !working)
+                    WcpButton(action, { turnIntoText(file, manual = true) }, Modifier.fillMaxWidth(), enabled = !working)
                 }
                 if (!working) WcpButton("Delete this recording", {
                     if (sessionActive() && owns(file)) {
@@ -337,7 +438,7 @@ private fun VoiceRecordingScreen(s: AppState, owner: String) {
             }
         }
         if (working) LinearProgressIndicator(Modifier.fillMaxWidth())
-        message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        message?.let { Text(it, color = if (pending?.let { file -> awaiting.containsKey(file.name) } == true) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error) }
 
         if (!rec.recording && (text.isNotBlank() || pending == null)) {
             OutlinedTextField(value = text, onValueChange = { saveText(it) }, modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),

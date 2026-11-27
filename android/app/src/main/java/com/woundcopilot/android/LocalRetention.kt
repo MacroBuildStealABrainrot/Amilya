@@ -2,6 +2,7 @@ package com.woundcopilot.android
 import android.app.job.*
 import android.content.*
 import java.io.File
+import org.json.JSONObject
 import kotlinx.coroutines.*
 
 object LocalRetention{
@@ -12,10 +13,13 @@ object LocalRetention{
         // Sandbox only: recordings that are not finished with are never removed because of age (see UnresolvedRetention).
         val retain=BuildConfig.RETAIN_UNRESOLVED
         val pending=mutableSetOf<String>()
+        val voice = if (BuildConfig.LITE_VOICE) {
+            pendingVoiceRetention(File(context.filesDir, "recordings"), vault::read)
+        } else VoiceRetention()
         val protected=vault.names().filter{it.startsWith("recording-job-")}.mapNotNull{key->runCatching{
             val job=org.json.JSONObject(vault.read(key)?:return@runCatching null)
             if((retain || now-job.optLong("updated_at")<RECOVERY_AGE) && job.str("phase")!="COMPLETED")File(job.str("file")).canonicalPath else null
-        }.getOrNull()}.toSet()
+        }.getOrNull()}.toSet() + voice.paths
         vault.names().filter{it.startsWith("capture-") || it.startsWith("audio-batch-")}.forEach{key->
             val value=vault.read(key).orEmpty()
             if(value.startsWith(context.filesDir.path+File.separator))pending+=File(value).canonicalPath
@@ -43,7 +47,7 @@ object LocalRetention{
         }
         File(context.cacheDir,"exports").listFiles()?.filter{it.isFile && now-it.lastModified()>MEDIA_AGE}?.forEach{it.delete()}
         val keepNames: Set<String> = if(retain)unresolvedRecordNames(vault) else emptySet()
-        vault.expireRecovery(now-RECOVERY_AGE){name->UnresolvedRetention.keepRecord(name,retain,keepNames)}
+        vault.expireRecovery(now-RECOVERY_AGE){name->voice.keepsRequest(name) || UnresolvedRetention.keepRecord(name,retain,keepNames)}
         if(retain)runCatching{UnresolvedReminder.check(context,now)}
     }
     /** Names of stored records that belong to recordings still waiting to be recovered, uploaded or reported (sandbox only). */
@@ -65,6 +69,40 @@ object LocalRetention{
             .setPeriodic(60*60*1000L).setPersisted(true).build())
     }
 }
+
+internal data class VoiceRetention(val paths: Set<String> = emptySet(), val requests: Set<String> = emptySet()) {
+    fun keepsRequest(name: String): Boolean = name.removeSuffix(".bak").removeSuffix(".new") in requests
+}
+
+/** Voice 1.9.5 had an upload checkpoint but no separate pending receipt. That checkpoint contains its only job ID. */
+internal fun pendingVoiceRetention(recordings: File, read: (String) -> String?): VoiceRetention {
+    val paths = mutableSetOf<String>()
+    val requests = mutableSetOf<String>()
+    val root = recordings.canonicalFile
+    val segments = File(root, "segments")
+    for (source in root.listFiles().orEmpty()) {
+        if (!source.isFile || !source.name.startsWith("recording-") || source.extension != "m4a" || source.canonicalFile != source) continue
+        val tag = read("recording-owner-${source.name}") ?: continue
+        if (!tag.endsWith(":lite")) continue
+        val owner = tag.removeSuffix(":lite")
+        val suffix = "$owner-${source.name}"
+        val checkpoint = "audio-batch-lite-$suffix"
+        val stored = read(checkpoint)
+        val batch = stored?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val waiting = read("lite-pending-$suffix") != null
+        if (!waiting && (stored == null || batch?.has("result") == true)) continue
+
+        paths += source.path
+        requests += checkpoint.replace(Regex("[^a-zA-Z0-9_.-]"), "_")
+        val files = batch?.optJSONArray("files") ?: continue
+        for (index in 0 until files.length()) {
+            val file = File(files.optString(index)).canonicalFile
+            if (file.parentFile == segments && file.name.startsWith("segment-") && file.extension == "m4a") paths += file.path
+        }
+    }
+    return VoiceRetention(paths, requests)
+}
+
 class RetentionJob:JobService(){
     private var job:Job?=null
     override fun onStartJob(params:JobParameters):Boolean{

@@ -144,6 +144,12 @@ def report_request_ended(task, usage, resumed_attempt):
     return task in REPORT_STAGE_TASKS and (resumed_attempt >= MAX_REPORT_STAGE_RETRIES or usage.get('failure_reason') in PERMANENT_REPORT_FAILURES)
 
 
+def cancelled_before_speech_dispatch(operation, task):
+    return bool(task == 'transcription' and operation is not None and operation.task == task
+                and operation.status == 'released' and operation.charged_micros == 0
+                and operation.release_reason == 'speech_not_dispatched')
+
+
 def cancelled_report_stage(operation, task):
     """Only an explicitly released, uncharged report step is safe to resume.
 
@@ -541,7 +547,8 @@ async def rate_limit_backoff(seconds):
 
 
 async def metered_call(*, user: User, encounter_id: str, task: str, provider: str, model: str, payload_hash: str,
-                       estimate: int, perform, measure, validate, prior_attempts=None, replay_invalid_failure=False) -> dict:
+                       estimate: int, perform, measure, validate, prior_attempts=None, replay_invalid_failure=False,
+                       speech_dispatched=None) -> dict:
     diagnostics.bind(user)
     diagnostics.event({'source':'router','stage':'provider_preflight','selected_model':model,'provider':provider,'status':'selected','finished_at':diagnostics.timestamp()})
     privacy_guard(provider)
@@ -568,7 +575,7 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                     retry_db.expire_all()
                     previous=retry_db.scalar(select(UsageOperation).where(UsageOperation.workspace_id==user.workspace_id,UsageOperation.operation_id==operation))
                 interrupted=billing.is_lease_expired_release(previous)
-                cancelled=cancelled_report_stage(previous, task)
+                cancelled=cancelled_report_stage(previous, task) or cancelled_before_speech_dispatch(previous, task)
                 if cancelled and retry_db.scalar(select(ProviderResult.id).where(
                         ProviderResult.workspace_id == user.workspace_id, ProviderResult.operation_id == operation)):
                     break  # A saved result always wins; never generate past it.
@@ -648,7 +655,19 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
                         error_type = TerminalReportError if report_request_ended(task, previous.usage, resumed_attempt) else HTTPException
                         raise error_type(int(code), message,
                             headers=photo_error_headers(previous.usage, exhausted))
-            raise HTTPException(409, 'This AI request is already processing or awaiting reconciliation. Refresh the case before retrying.')
+            headers = None
+            if task == 'transcription':
+                # The legacy provider_cancelled marker may have been written after a paid request was sent.
+                # A missing transcript or a released app credit is not proof the vendor did no work.
+                active = previous is not None and previous.status == 'reserved' and not billing.lease_is_stale(
+                    previous, time.time(), getattr(settings, 'ai_lease_takeover_grace_seconds', 60))
+                eligible = cancelled_before_speech_dispatch(previous, task) and resumed_attempt < MAX_MEDIA_RETRIES
+                state = 'pending' if active or eligible else 'needs_review'
+                headers = {'X-Amilya-Transcription-State': state}
+                if state == 'pending':
+                    headers['Retry-After'] = '2'
+            raise HTTPException(409, 'This AI request is already processing or awaiting reconciliation. Refresh the case before retrying.',
+                                headers=headers)
     if document_operations.get() is not None:document_operations.get().append(operation)
     started = time.monotonic()
     usage, normalized, billed = {}, 0, None
@@ -663,7 +682,8 @@ async def metered_call(*, user: User, encounter_id: str, task: str, provider: st
         if heartbeat is not None:
             heartbeat.cancel()
         with SessionLocal() as cancelled_db:
-            billing.release(cancelled_db, user, operation, "provider_cancelled")
+            reason = 'speech_not_dispatched' if task == 'transcription' and speech_dispatched is not None and not speech_dispatched() else 'provider_cancelled'
+            billing.release(cancelled_db, user, operation, reason)
         raise
     except httpx.TimeoutException:
         usage['failure_reason'] = 'provider_timeout'
@@ -1401,9 +1421,13 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
     price = (OPENROUTER_WHISPER_MICROS_PER_MINUTE if provider == 'openrouter' else
              GROQ_FULL_WHISPER_MICROS_PER_MINUTE if model == 'whisper-large-v3' else SPEECH_PRICES[provider])
     normalized = math.ceil(Decimal(str(seconds)) / 60 * price)
+    dispatch_started = False
     async def perform():
         async with httpx.AsyncClient(timeout=settings.provider_timeout_seconds, follow_redirects=False) as client:
             async def send(url,**kwargs):
+                nonlocal dispatch_started
+                # Once the request is passed to the HTTP path, cancellation cannot prove the vendor never accepted it.
+                dispatch_started = True
                 return await diagnostics.post(client,url,provider=provider,model=model,stage=purpose,fallback=diagnostic_original is not None,original_provider=diagnostic_original[0] if diagnostic_original else provider,original_model=diagnostic_original[1] if diagnostic_original else model,**kwargs)
             if provider == 'cloudflare':
                 response = await send(f'https://api.cloudflare.com/client/v4/accounts/{settings.cloudflare_account_id}/ai/run/{model}',
@@ -1482,7 +1506,8 @@ async def speech_attempt(provider, data, mime, filename, seconds, *, user, encou
         return result
     return await metered_call(user=user, encounter_id=encounter_id, task=purpose, provider=provider, model=model,
         payload_hash=fingerprint([sha256(data).hexdigest(), mime, model, primer]), estimate=normalized,
-        perform=perform, measure=lambda raw: (normalized, {'audio_seconds': seconds, 'audio_minutes': seconds / 60},
+        perform=perform, speech_dispatched=lambda: dispatch_started,
+        measure=lambda raw: (normalized, {'audio_seconds': seconds, 'audio_minutes': seconds / 60},
             actual_cost(raw.get('usage', {})) if provider == 'openrouter' and isinstance(raw.get('usage'), dict) else None), validate=validate)
 
 

@@ -176,7 +176,7 @@ internal val AUTH_ENTRY_PATHS=setOf("/auth/login","/auth/signup","/auth/refresh"
 /** The server answers this before it does any work, so the same request can safely be sent again. */
 internal fun isCsrfRejection(status:Int,message:String)=status==403 && message.contains("request verification",ignoreCase=true)
 
-class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null,val reportState:String?=null):Exception(message)
+class ApiException(val status:Int,message:String,val requestId:String?=null,val retryAfterSeconds:Long?=null,val ambiguous:Boolean=false,val category:String?=null,val retryAllowed:Boolean?=null,val upstreamStatus:Int?=null,val reportState:String?=null,val transcriptionState:String?=null):Exception(message)
 
 internal const val PRODUCTION_API_ORIGIN="https://woundcopilot-1039151887397.us-central1.run.app/api/v1"
 internal const val REPAIR_API_ORIGIN="https://repair---woundcopilot-rhd7rrcqdq-uc.a.run.app/api/v1"
@@ -435,8 +435,9 @@ class Api(private val vault:Vault,baseUrl:String=BuildConfig.API_BASE_URL) {
                     if(csrf.isNotBlank()){perfStatus="CSRF_REFRESHED";return execute(path,method,data,type,key,true)}
                 }
 
-                val pending=status==409 && message.contains("already processing or awaiting reconciliation")
-                throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599},reportState=c.getHeaderField("X-Amilya-Report-State"))
+                val transcriptionState = if (status == 409 && path.endsWith("/audio-parts")) c.getHeaderField("X-Amilya-Transcription-State")?.takeIf { it in setOf("pending", "needs_review") } else null
+                val pending=status==409 && (transcriptionState != null || message.contains("already processing or awaiting reconciliation"))
+                throw ApiException(status,message,c.getHeaderField("X-Request-ID"),c.getHeaderField("Retry-After")?.toLongOrNull()?:if(pending)2L else null,ambiguous=pending,category=c.getHeaderField("X-WCP-Error")?.takeIf{it in PHOTO_ERROR_CATEGORIES},retryAllowed=c.getHeaderField("X-WCP-Retryable")?.let{when(it){"false"->false;"true"->true;else->null}},upstreamStatus=c.getHeaderField("X-WCP-Upstream-Status")?.toIntOrNull()?.takeIf{it in 100..599},reportState=c.getHeaderField("X-Amilya-Report-State"),transcriptionState=transcriptionState)
 
             }
 

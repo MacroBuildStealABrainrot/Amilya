@@ -48,6 +48,21 @@ async def upload_part(encounter_id:str,file:UploadFile=File(...),job_id:UUID=For
     db.add(row);clinical.finish(db)
     return {'index':index,'status':'transcribed','id':row.id}
 
+@router.get('/encounters/{encounter_id}/audio-parts/{job_id}/status')
+def audio_part_status(encounter_id: str, job_id: UUID, index: int, count: int,
+                      user: User = Depends(current_user), db: Session = Depends(get_db)):
+    clinical.owned(db, Encounter, encounter_id, user)
+    if not 1 <= count <= 32 or not 0 <= index < count:
+        raise HTTPException(422, 'Invalid audio segment.')
+    # The checkpoint exists only once a completed section is committed. Absence is inconclusive.
+    recorded_count = db.scalar(select(Evidence.metadata_json['count'].as_integer()).where(
+        Evidence.workspace_id == user.workspace_id, Evidence.encounter_id == encounter_id,
+        Evidence.created_by == user.id, Evidence.kind == 'audio_part',
+        Evidence.request_key == f'audio-part:{job_id}:{index}'))
+    ready = recorded_count == count
+    return {'index': index, 'status': 'ready' if ready else 'pending'}
+
+
 class CompleteAudio(BaseModel):
     job_id:UUID
     count:int=Field(ge=1,le=32)
